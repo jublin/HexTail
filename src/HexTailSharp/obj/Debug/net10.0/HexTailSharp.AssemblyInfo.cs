@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("HexTailSharp")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+76874b86d97f49a01041eee9ae3a631a0d99b2f6")]
 [assembly: System.Reflection.AssemblyProductAttribute("HexTailSharp")]
 [assembly: System.Reflection.AssemblyTitleAttribute("HexTailSharp")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

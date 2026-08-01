@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "3H6xVFyWS/c=",
+  "dgSpecHash": "qJKGHL9Hboc=",
   "success": true,
   "projectFilePath": "/home/jublin/Projects/HexTailSharp/src/HexTailSharp/HexTailSharp.csproj",
   "expectedPackageFiles": [
@@ -36,8 +36,25 @@
     "/home/jublin/.nuget/packages/microsoft.jsinterop.webassembly/10.0.10/microsoft.jsinterop.webassembly.10.0.10.nupkg.sha512",
     "/home/jublin/.nuget/packages/microsoft.net.illink.tasks/10.0.10/microsoft.net.illink.tasks.10.0.10.nupkg.sha512",
     "/home/jublin/.nuget/packages/microsoft.net.sdk.webassembly.pack/10.0.10/microsoft.net.sdk.webassembly.pack.10.0.10.nupkg.sha512",
+    "/home/jublin/.nuget/packages/polly/8.7.0/polly.8.7.0.nupkg.sha512",
+    "/home/jublin/.nuget/packages/polly.core/8.7.0/polly.core.8.7.0.nupkg.sha512",
+    "/home/jublin/.nuget/packages/radzen.blazor/11.2.0/radzen.blazor.11.2.0.nupkg.sha512",
+    "/home/jublin/.nuget/packages/system.io.pipelines/10.0.10/system.io.pipelines.10.0.10.nupkg.sha512",
     "/home/jublin/.nuget/packages/microsoft.netcore.app.runtime.mono.browser-wasm/10.0.10/microsoft.netcore.app.runtime.mono.browser-wasm.10.0.10.nupkg.sha512",
     "/home/jublin/.nuget/packages/microsoft.aspnetcore.app.ref/10.0.10/microsoft.aspnetcore.app.ref.10.0.10.nupkg.sha512"
   ],
-  "logs": []
+  "logs": [
+    {
+      "code": "NU1510",
+      "level": "Warning",
+      "message": "PackageReference System.IO.Pipelines will not be pruned. Consider removing this package from your dependencies, as it is likely unnecessary.",
+      "projectPath": "/home/jublin/Projects/HexTailSharp/src/HexTailSharp/HexTailSharp.csproj",
+      "warningLevel": 1,
+      "filePath": "/home/jublin/Projects/HexTailSharp/src/HexTailSharp/HexTailSharp.csproj",
+      "libraryId": "System.IO.Pipelines",
+      "targetGraphs": [
+        "net10.0"
+      ]
+    }
+  ]
 }

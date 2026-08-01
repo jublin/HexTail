@@ -75,6 +75,18 @@
               "target": "Package",
               "version": "[10.0.10, )",
               "autoReferenced": true
+            },
+            "Polly": {
+              "target": "Package",
+              "version": "[8.7.0, )"
+            },
+            "Radzen.Blazor": {
+              "target": "Package",
+              "version": "[11.2.0, )"
+            },
+            "System.IO.Pipelines": {
+              "target": "Package",
+              "version": "[10.0.10, )"
             }
           },
           "imports": [
