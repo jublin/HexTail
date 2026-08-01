@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HexTailSharp", "HexTailSharp\HexTailSharp.csproj", "{1E37B364-0307-4A7C-A5D3-B60EE9EB23A9}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{C336DFC1-0795-4E29-8A6E-1D1975FDFBEE}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "plans", "plans", "{7CB355FD-D692-4C7F-8664-A26BF7DB46EA}"
+	ProjectSection(SolutionItems) = preProject
+		..\docs\plans\2026-07-22-hextail.md = ..\docs\plans\2026-07-22-hextail.md
+		..\docs\plans\2026-07-26-search-toggles.md = ..\docs\plans\2026-07-26-search-toggles.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "specs", "specs", "{CFA75233-B1B9-4AB6-A7CF-87A4EBD527FE}"
+	ProjectSection(SolutionItems) = preProject
+		..\docs\specs\2026-07-22-log-tail-app-design.md = ..\docs\specs\2026-07-22-log-tail-app-design.md
+		..\docs\specs\2026-07-26-search-toggles-design.md = ..\docs\specs\2026-07-26-search-toggles-design.md
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1E37B364-0307-4A7C-A5D3-B60EE9EB23A9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1E37B364-0307-4A7C-A5D3-B60EE9EB23A9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1E37B364-0307-4A7C-A5D3-B60EE9EB23A9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1E37B364-0307-4A7C-A5D3-B60EE9EB23A9}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{7CB355FD-D692-4C7F-8664-A26BF7DB46EA} = {C336DFC1-0795-4E29-8A6E-1D1975FDFBEE}
+		{CFA75233-B1B9-4AB6-A7CF-87A4EBD527FE} = {C336DFC1-0795-4E29-8A6E-1D1975FDFBEE}
+	EndGlobalSection
+EndGlobal
