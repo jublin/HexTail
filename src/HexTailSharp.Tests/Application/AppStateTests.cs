@@ -75,6 +75,46 @@ public sealed class AppStateTests
     }
 
     [Fact]
+    public async Task UpdateSettings_PersistsNormalizedGlobalRules()
+    {
+        var persistence = new MemoryPersistence();
+        await using var state = new AppState(NewTailers(), persistence);
+
+        await state.UpdateSettingsAsync(new AppSettings
+        {
+            GlobalLabels =
+            [
+                new GlobalLabel { Text = " Error ", Color = "#ff0000" },
+                new GlobalLabel { Text = "error", Color = "#00ff00" },
+            ],
+            GlobalExcludeLabels = [" Health ", "health", ""],
+            Theme = "not-a-theme",
+        });
+
+        var settings = Assert.IsType<AppConfig>(persistence.Config).Settings;
+        var label = Assert.Single(settings.GlobalLabels);
+        Assert.Equal("Error", label.Text);
+        Assert.Equal("#ff0000", label.Color);
+        Assert.Equal(["Health"], settings.GlobalExcludeLabels);
+        Assert.Equal("material-dark", settings.Theme);
+    }
+
+    [Fact]
+    public void AppSettings_MatchesLabelsAndExclusionsCaseInsensitively()
+    {
+        var settings = new AppSettings
+        {
+            GlobalLabels = [new GlobalLabel { Text = "warn", Color = "#f59e0b" }],
+            GlobalExcludeLabels = ["health"],
+        };
+
+        Assert.True(settings.Excludes("GET /HEALTH"));
+        var highlight = settings.GetLabelHighlights("WARN: warn").First();
+        Assert.Equal(0, highlight.Start);
+        Assert.Equal(4, highlight.Length);
+    }
+
+    [Fact]
     public void LogParserSelector_UsesLogfmtOnlyForLogfmtExtension()
     {
         Assert.IsType<LogfmtParser>(LogParserSelector.ForPath("app.logfmt"));

@@ -17,12 +17,13 @@ public sealed class AppState : IAsyncDisposable
     {
         _tailers = tailers;
         _persistence = persistence;
-        _settings = settings ?? new AppSettings();
+        _settings = NormalizeSettings(settings ?? new AppSettings());
     }
 
     public IReadOnlyList<FileTabState> Files => _files;
     public FileTabState? SelectedFile { get; private set; }
     public AppWindowState Window { get; private set; } = new();
+    public AppSettings Settings => _settings;
     public event Action? Changed;
 
     public async ValueTask RestoreAsync(CancellationToken cancellationToken = default)
@@ -31,7 +32,7 @@ public sealed class AppState : IAsyncDisposable
         if (config is null)
             return;
 
-        _settings = config.Settings ?? new AppSettings();
+        _settings = NormalizeSettings(config.Settings ?? new AppSettings());
         Window = config.Window ?? new AppWindowState();
         foreach (var persisted in config.OpenFiles)
         {
@@ -192,6 +193,14 @@ public sealed class AppState : IAsyncDisposable
         NotifyChanged();
     }
 
+    public async ValueTask UpdateSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        _settings = NormalizeSettings(settings);
+        NotifyChanged();
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public void DrainTailerEvents()
     {
         while (_tailers.Events.TryRead(out var tailerEvent))
@@ -254,6 +263,35 @@ public sealed class AppState : IAsyncDisposable
     }
 
     private void NotifyChanged() => Changed?.Invoke();
+
+    private static AppSettings NormalizeSettings(AppSettings settings)
+    {
+        var labels = settings.GlobalLabels
+            .Where(label => !string.IsNullOrWhiteSpace(label.Text))
+            .Select(label => new GlobalLabel { Text = label.Text.Trim(), Color = NormalizeColor(label.Color) })
+            .DistinctBy(label => label.Text, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var exclusions = settings.GlobalExcludeLabels
+            .Where(label => !string.IsNullOrWhiteSpace(label))
+            .Select(label => label.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new AppSettings
+        {
+            MaxLines = settings.MaxLines,
+            ContextAbove = settings.ContextAbove,
+            ContextBelow = settings.ContextBelow,
+            GlobalLabels = labels,
+            GlobalExcludeLabels = exclusions,
+            Theme = settings.Theme is "material" or "material-dark" ? settings.Theme : "material-dark",
+            Density = Enum.IsDefined(settings.Density) ? settings.Density : UiDensity.Comfortable,
+            LogFontSize = Enum.IsDefined(settings.LogFontSize) ? settings.LogFontSize : LogFontSize.Medium,
+        };
+    }
+
+    private static string NormalizeColor(string color) =>
+        color.Length is 4 or 7 && color[0] == '#' && color[1..].All(Uri.IsHexDigit) ? color : "#f59e0b";
 }
 
 internal sealed class SnapshotFileTailer(string fileId, string path) : IFileTailer

@@ -43,6 +43,46 @@ public sealed class AppSettings
     public int MaxLines { get; init; } = FileBuffer.DefaultMaxLines;
     public int ContextAbove { get; init; } = 3;
     public int ContextBelow { get; init; } = 10;
+    public List<GlobalLabel> GlobalLabels { get; init; } = [];
+    public List<string> GlobalExcludeLabels { get; init; } = [];
+    public string Theme { get; init; } = "material-dark";
+    public UiDensity Density { get; init; } = UiDensity.Comfortable;
+    public LogFontSize LogFontSize { get; init; } = LogFontSize.Medium;
+
+    public bool Excludes(string text) =>
+        GlobalExcludeLabels.Any(label => text.Contains(label, StringComparison.OrdinalIgnoreCase));
+
+    public IEnumerable<LabelHighlight> GetLabelHighlights(string text)
+    {
+        foreach (var label in GlobalLabels)
+        {
+            for (var start = 0; (start = text.IndexOf(label.Text, start, StringComparison.OrdinalIgnoreCase)) >= 0; start += label.Text.Length)
+                yield return new LabelHighlight(start, label.Text.Length, label.Color);
+        }
+    }
+}
+
+public sealed class GlobalLabel
+{
+    public string Text { get; init; } = string.Empty;
+    public string Color { get; init; } = "#f59e0b";
+}
+
+public readonly record struct LabelHighlight(int Start, int Length, string Color);
+
+public enum UiDensity
+{
+    Comfortable,
+    Cozy,
+    Compact,
+}
+
+public enum LogFontSize
+{
+    Small,
+    Medium,
+    Large,
+    ExtraLarge,
 }
 
 public static class AppConfigJson
