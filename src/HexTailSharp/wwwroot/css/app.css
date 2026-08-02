@@ -310,6 +310,19 @@ body {
     width: 100%;
 }
 
+.log-row {
+    border-bottom: 1px solid rgba(51, 65, 85, .35);
+}
+
+.parsed-fields {
+    background: #172033;
+    color: #bae6fd;
+    font-family: "JetBrains Mono", "Cascadia Code", monospace;
+    font-size: .75rem;
+    padding: .35rem 1.6rem;
+    white-space: pre-wrap;
+}
+
 .log-line:hover {
     background: #1e293b;
 }

@@ -37,10 +37,7 @@
                     <span class="error-dot" title="@openFile.Error">!</span>
                 }
                 <span>@openFile.DisplayName</span>
-                @if (!openFile.IsSnapshot)
-                {
-                    <span class="file-tab-close" @onclick="() => CloseFileAsync(openFile)" @onclick:stopPropagation="true">×</span>
-                }
+                <span class="file-tab-close" @onclick="() => CloseFileAsync(openFile)" @onclick:stopPropagation="true">×</span>
             </button>
         }
         @if (State.Files.Count == 0)
@@ -191,10 +188,21 @@
         builder.AddAttribute(sequence++, "ChildContent", (RenderFragment<Line>)(line => rowBuilder =>
         {
             var rowSequence = 0;
+            rowBuilder.OpenElement(rowSequence++, "div");
+            rowBuilder.AddAttribute(rowSequence++, "class", "log-row");
             rowBuilder.OpenElement(rowSequence++, "button");
             rowBuilder.AddAttribute(rowSequence++, "class", "log-line");
             rowBuilder.AddAttribute(rowSequence++, "onclick", EventCallback.Factory.Create(this, () => SelectLine(file, line)));
+            rowBuilder.AddAttribute(rowSequence++, "ondblclick", EventCallback.Factory.Create(this, () => ToggleExpanded(file, line)));
             rowBuilder.AddContent(rowSequence++, new MarkupString(RenderLine(file, line)));
+            rowBuilder.CloseElement();
+            if (line.ParsedFields is { Count: > 0 } && file.ExpandedLine == FindLineIndex(file, line))
+            {
+                rowBuilder.OpenElement(rowSequence++, "div");
+                rowBuilder.AddAttribute(rowSequence++, "class", "parsed-fields");
+                rowBuilder.AddContent(rowSequence++, string.Join("  ", line.ParsedFields.Select(field => $"{field.Key}={field.Value}")));
+                rowBuilder.CloseElement();
+            }
             rowBuilder.CloseElement();
         }));
         builder.CloseComponent();
@@ -243,15 +251,26 @@
 
     private void SelectLine(FileTabState file, Line line)
     {
+        file.SelectedLine = FindLineIndex(file, line);
+        StateHasChanged();
+    }
+
+    private void ToggleExpanded(FileTabState file, Line line)
+    {
+        var index = FindLineIndex(file, line);
+        file.ExpandedLine = file.ExpandedLine == index ? null : index;
+        StateHasChanged();
+    }
+
+    private static int FindLineIndex(FileTabState file, Line line)
+    {
         for (var i = 0; i < file.Buffer.Count; i++)
         {
             if (ReferenceEquals(file.Buffer[i], line))
-            {
-                file.SelectedLine = i;
-                break;
-            }
+                return i;
         }
-        StateHasChanged();
+
+        return -1;
     }
 
     private static string RenderLine(FileTabState file, Line line)

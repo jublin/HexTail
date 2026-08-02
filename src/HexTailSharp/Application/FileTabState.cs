@@ -25,6 +25,7 @@ public sealed class FileTabState : IAsyncDisposable
     public List<bool> FollowSearches { get; } = [];
     public bool ShowContext { get; set; }
     public int? SelectedLine { get; set; }
+    public int? ExpandedLine { get; set; }
     public int ContextAbove { get; set; } = 3;
     public int ContextBelow { get; set; } = 10;
     public string? Error { get; internal set; }
@@ -70,6 +71,15 @@ public sealed class FileTabState : IAsyncDisposable
             SelectedLine -= change.RolledOutCount;
             if (SelectedLine < 0)
                 SelectedLine = null;
+        }
+
+        if (change.Cleared || ExpandedLine is null)
+            ExpandedLine = null;
+        else if (change.RolledOutCount > 0)
+        {
+            ExpandedLine -= change.RolledOutCount;
+            if (ExpandedLine < 0)
+                ExpandedLine = null;
         }
     }
 }
