@@ -1,7 +1,297 @@
 ﻿@page "/"
 
-<PageTitle>Home</PageTitle>
+@using System.Net
+@using HexTailSharp.Application
+@using HexTailSharp.Domain
+@using HexTailSharp.Persistence
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Radzen
+@using Radzen.Blazor
+@inject AppState State
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
 
-<h1>Hello, world!</h1>
+<PageTitle>HexTail</PageTitle>
 
-Welcome to your new app.
+<div class="hextail-shell">
+    <header class="app-toolbar">
+        <div class="brand"><span class="brand-mark">⌁</span><span>HexTail</span></div>
+        <div class="open-controls">
+            <RadzenTextBox @bind-Value="_path" Placeholder="Path to a log file" Style="width: min(34rem, 55vw)" @onkeydown="HandlePathKeyDown" />
+            <RadzenButton Text="Open" Icon="folder_open" ButtonStyle="ButtonStyle.Primary" Click="OpenPathAsync" />
+            <label class="file-picker-button">
+                <span>Pick file</span>
+                <InputFile OnChange="OpenSnapshotAsync" />
+            </label>
+        </div>
+        <div class="toolbar-status">@State.Files.Count file(s)</div>
+    </header>
+
+    <div class="file-tabs" role="tablist" aria-label="Open files">
+        @foreach (var openFile in State.Files)
+        {
+            <button class="file-tab @(ReferenceEquals(openFile, State.SelectedFile) ? "selected" : string.Empty)" @onclick="() => SelectFile(openFile)">
+                @if (openFile.Error is not null)
+                {
+                    <span class="error-dot" title="@openFile.Error">!</span>
+                }
+                <span>@openFile.DisplayName</span>
+                @if (!openFile.IsSnapshot)
+                {
+                    <span class="file-tab-close" @onclick="() => CloseFileAsync(openFile)" @onclick:stopPropagation="true">×</span>
+                }
+            </button>
+        }
+        @if (State.Files.Count == 0)
+        {
+            <span class="empty-tabs">Open a file to start tailing.</span>
+        }
+    </div>
+
+    @if (State.SelectedFile is { } file)
+    {
+        <section class="workspace">
+            <div class="search-toolbar">
+                <RadzenTextBox @bind-Value="_query" Placeholder="Search this file" Style="flex: 1; min-width: 12rem" />
+                <RadzenDropDown @bind-Value="_mode" Data="@MatchModes" TValue="MatchMode" Style="width: 8rem" />
+                <label class="toggle"><RadzenCheckBox @bind-Value="_caseSensitive" TValue="bool" /> Case sensitive</label>
+                <RadzenColorPicker @bind-Value="_color" />
+                <RadzenButton Text="Add search" Icon="search" Click="AddSearchAsync" ButtonStyle="ButtonStyle.Secondary" />
+                <RadzenButton Text="Save" Icon="save" Click="SaveAsync" ButtonStyle="ButtonStyle.Light" />
+            </div>
+            @if (_searchError is not null)
+            {
+                <div class="inline-error" role="alert">@_searchError</div>
+            }
+
+            <div class="view-toolbar">
+                <label class="toggle"><RadzenCheckBox @bind-Value="file.FollowAll" TValue="bool" Change="_ => SaveAsync()" /> Follow All</label>
+                <label class="toggle"><RadzenCheckBox @bind-Value="file.ShowContext" TValue="bool" Change="_ => StateHasChanged()" /> Show inline context</label>
+                <span class="line-count">@file.Buffer.Count.ToString("N0") lines</span>
+            </div>
+
+            <RadzenTabs @bind-SelectedIndex="_activeView" Class="view-tabs">
+                <Tabs>
+                    <RadzenTabsItem Text="All">
+                        @RenderView(file, null)
+                    </RadzenTabsItem>
+                    @foreach (var search in file.Searches)
+                    {
+                        <RadzenTabsItem Text="@Truncate(search.Query.Query)" IconColor="@search.Color">
+                            <div class="search-tab-toolbar">
+                                <label class="toggle"><RadzenCheckBox @bind-Value="file.FollowSearches[file.Searches.IndexOf(search)]" TValue="bool" /> Follow</label>
+                                <span>@search.Results.Count.ToString("N0") matches</span>
+                            </div>
+                            @RenderView(file, search)
+                        </RadzenTabsItem>
+                    }
+                </Tabs>
+            </RadzenTabs>
+        </section>
+    }
+</div>
+
+@code {
+    private static readonly MatchMode[] MatchModes = [MatchMode.Literal, MatchMode.Regex];
+    private readonly CancellationTokenSource _stop = new();
+    private Task? _pollTask;
+    private string _path = string.Empty;
+    private string _query = string.Empty;
+    private MatchMode _mode = MatchMode.Literal;
+    private bool _caseSensitive;
+    private string _color = "#f59e0b";
+    private string? _searchError;
+    private int _activeView;
+
+    protected override async Task OnInitializedAsync()
+    {
+        State.Changed += OnStateChanged;
+        await State.RestoreAsync();
+        _pollTask = DrainLoopAsync();
+    }
+
+    private async Task DrainLoopAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_stop.Token))
+            {
+                State.DrainTailerEvents();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void OnStateChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void SelectFile(FileTabState file)
+    {
+        State.SelectFile(file);
+        _activeView = 0;
+    }
+
+    private async Task OpenPathAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_path))
+            return;
+
+        await State.OpenFileAsync(_path);
+        _path = string.Empty;
+    }
+
+    private async Task HandlePathKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+            await OpenPathAsync();
+    }
+
+    private async Task OpenSnapshotAsync(InputFileChangeEventArgs args)
+    {
+        var file = args.File;
+        await using var stream = file.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
+        await State.OpenSnapshotAsync(file.Name, stream);
+    }
+
+    private async Task CloseFileAsync(FileTabState file) => await State.CloseFileAsync(file);
+
+    private async Task AddSearchAsync()
+    {
+        if (State.SelectedFile is not { } file || string.IsNullOrWhiteSpace(_query))
+            return;
+
+        try
+        {
+            State.AddSearch(file, _query, _mode, _caseSensitive, _color);
+            await State.SaveAsync();
+            _searchError = null;
+            _query = string.Empty;
+        }
+        catch (ArgumentException ex)
+        {
+            _searchError = ex.Message;
+        }
+    }
+
+    private async Task SaveAsync() => await State.SaveAsync();
+
+    private RenderFragment RenderView(FileTabState file, Search? search) => builder =>
+    {
+        var sequence = 0;
+        builder.OpenElement(sequence++, "div");
+        builder.AddAttribute(sequence++, "class", "log-view");
+        builder.AddAttribute(sequence++, "role", "log");
+        builder.OpenComponent<Virtualize<Line>>(sequence++);
+        builder.AddAttribute(sequence++, "Items", LinesFor(file, search));
+        builder.AddAttribute(sequence++, "ItemSize", 24d);
+        builder.AddAttribute(sequence++, "ChildContent", (RenderFragment<Line>)(line => rowBuilder =>
+        {
+            var rowSequence = 0;
+            rowBuilder.OpenElement(rowSequence++, "button");
+            rowBuilder.AddAttribute(rowSequence++, "class", "log-line");
+            rowBuilder.AddAttribute(rowSequence++, "onclick", EventCallback.Factory.Create(this, () => SelectLine(file, line)));
+            rowBuilder.AddContent(rowSequence++, new MarkupString(RenderLine(file, line)));
+            rowBuilder.CloseElement();
+        }));
+        builder.CloseComponent();
+        builder.CloseElement();
+        if (file.ShowContext)
+        {
+            builder.OpenComponent<RadzenSplitter>(sequence++);
+            builder.AddAttribute(sequence++, "Orientation", Orientation.Horizontal);
+            builder.AddAttribute(sequence++, "Style", "height: 12rem");
+            builder.AddAttribute(sequence++, "ChildContent", (RenderFragment)(splitterBuilder =>
+            {
+                var splitSequence = 0;
+                splitterBuilder.OpenComponent<RadzenSplitterPane>(splitSequence++);
+                splitterBuilder.AddAttribute(splitSequence++, "Size", "100%");
+                splitterBuilder.AddAttribute(splitSequence++, "ChildContent", (RenderFragment)(paneBuilder =>
+                {
+                    var paneSequence = 0;
+                    paneBuilder.OpenElement(paneSequence++, "div");
+                    paneBuilder.AddAttribute(paneSequence++, "class", "context-empty");
+                    paneBuilder.AddContent(paneSequence++, file.SelectedLine is null ? "Select a match to see context." : "Context is shown in the pane below.");
+                    paneBuilder.CloseElement();
+                }));
+                splitterBuilder.CloseComponent();
+                splitterBuilder.OpenComponent<RadzenSplitterPane>(splitSequence++);
+                splitterBuilder.AddAttribute(splitSequence++, "ChildContent", (RenderFragment)(paneBuilder =>
+                {
+                    var paneSequence = 0;
+                    foreach (var contextLine in file.ContextLines)
+                    {
+                        paneBuilder.OpenElement(paneSequence++, "div");
+                        paneBuilder.AddAttribute(paneSequence++, "class", "context-line");
+                        paneBuilder.AddContent(paneSequence++, contextLine.Raw);
+                        paneBuilder.CloseElement();
+                    }
+                }));
+                splitterBuilder.CloseComponent();
+            }));
+            builder.CloseComponent();
+        }
+    };
+
+    private IEnumerable<Line> LinesFor(FileTabState file, Search? search) =>
+        search is null
+            ? file.Buffer.Lines
+            : search.Results.Where(index => index >= 0 && index < file.Buffer.Count).Select(index => file.Buffer[index]);
+
+    private void SelectLine(FileTabState file, Line line)
+    {
+        for (var i = 0; i < file.Buffer.Count; i++)
+        {
+            if (ReferenceEquals(file.Buffer[i], line))
+            {
+                file.SelectedLine = i;
+                break;
+            }
+        }
+        StateHasChanged();
+    }
+
+    private static string RenderLine(FileTabState file, Line line)
+    {
+        var ranges = file.Searches
+            .SelectMany(search => search.GetHighlights(line).Select(range => (range.Start, range.Length, search.Color)))
+            .Where(range => range.Start >= 0 && range.Length > 0 && range.Start + range.Length <= line.Raw.Length)
+            .OrderBy(range => range.Start)
+            .ThenByDescending(range => range.Length)
+            .ToList();
+        if (ranges.Count == 0)
+            return WebUtility.HtmlEncode(line.Raw);
+
+        var output = new System.Text.StringBuilder();
+        var cursor = 0;
+        foreach (var range in ranges)
+        {
+            if (range.Start < cursor)
+                continue;
+            output.Append(WebUtility.HtmlEncode(line.Raw[cursor..range.Start]));
+            output.Append("<mark style=\"background:");
+            output.Append(WebUtility.HtmlEncode(range.Color));
+            output.Append("\">");
+            output.Append(WebUtility.HtmlEncode(line.Raw.Substring(range.Start, range.Length)));
+            output.Append("</mark>");
+            cursor = range.Start + range.Length;
+        }
+
+        output.Append(WebUtility.HtmlEncode(line.Raw[cursor..]));
+        return output.ToString();
+    }
+
+    private static string Truncate(string text) => text.Length > 24 ? $"{text[..21]}..." : text;
+
+    public async ValueTask DisposeAsync()
+    {
+        State.Changed -= OnStateChanged;
+        _stop.Cancel();
+        if (_pollTask is not null)
+            await _pollTask;
+        _stop.Dispose();
+    }
+}
