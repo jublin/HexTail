@@ -18,6 +18,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "specs", "specs", "{CFA75233
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HexTailSharp.Tests", "HexTailSharp.Tests\HexTailSharp.Tests.csproj", "{1E551ACD-2B6E-4AFD-A7D1-1D54A0A402E4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HexTailSharp.Tool", "HexTailSharp.Tool\HexTailSharp.Tool.csproj", "{C4EF4D6E-3F05-48FB-B2B2-62817FD95709}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -52,6 +54,18 @@ Global
 		{1E551ACD-2B6E-4AFD-A7D1-1D54A0A402E4}.Release|x64.Build.0 = Release|Any CPU
 		{1E551ACD-2B6E-4AFD-A7D1-1D54A0A402E4}.Release|x86.ActiveCfg = Release|Any CPU
 		{1E551ACD-2B6E-4AFD-A7D1-1D54A0A402E4}.Release|x86.Build.0 = Release|Any CPU
+		{C4EF4D6E-3F05-48FB-B2B2-62817FD95709}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C4EF4D6E-3F05-48FB-B2B2-62817FD95709}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C4EF4D6E-3F05-48FB-B2B2-62817FD95709}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C4EF4D6E-3F05-48FB-B2B2-62817FD95709}.Debug|x64.Build.0 = Debug|Any CPU
+		{C4EF4D6E-3F05-48FB-B2B2-62817FD95709}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C4EF4D6E-3F05-48FB-B2B2-62817FD95709}.Debug|x86.Build.0 = Debug|Any CPU
+		{C4EF4D6E-3F05-48FB-B2B2-62817FD95709}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C4EF4D6E-3F05-48FB-B2B2-62817FD95709}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C4EF4D6E-3F05-48FB-B2B2-62817FD95709}.Release|x64.ActiveCfg = Release|Any CPU
+		{C4EF4D6E-3F05-48FB-B2B2-62817FD95709}.Release|x64.Build.0 = Release|Any CPU
+		{C4EF4D6E-3F05-48FB-B2B2-62817FD95709}.Release|x86.ActiveCfg = Release|Any CPU
+		{C4EF4D6E-3F05-48FB-B2B2-62817FD95709}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

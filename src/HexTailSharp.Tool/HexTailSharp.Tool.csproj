@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), 'Directory.Build.props'))\Directory.Build.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Version>0.1.0-alpha</Version>
+    <PackAsTool>true</PackAsTool>
+    <IsPackable>true</IsPackable>
+    <ToolCommandName>hextail</ToolCommandName>
+    <PackageId>HexTailSharp.Tool</PackageId>
+    <Description>Offline-capable HexTail log viewer.</Description>
+    <Authors>HexTailSharp</Authors>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <ClientProject>$(MSBuildThisFileDirectory)..\HexTailSharp\HexTailSharp.csproj</ClientProject>
+    <ClientPublishDir>$(MSBuildProjectDirectory)/obj/client/</ClientPublishDir>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <TargetsForTfmSpecificContentInPackage>IncludeClientAssets</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <Target Name="PublishClient">
+    <MSBuild Projects="$(ClientProject)" Targets="Publish" Properties="Configuration=$(Configuration);PublishDir=$(ClientPublishDir)" />
+  </Target>
+
+  <Target Name="IncludeClientAssets" DependsOnTargets="PublishClient">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(ClientPublishDir)wwwroot\**">
+        <PackagePath>tools/net10.0/any/wwwroot/%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
+  </Target>
+</Project>
