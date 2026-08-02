@@ -112,12 +112,38 @@ code {
     position: fixed;
     right: 0;
     top: 0;
-    width: min(26rem, 100vw);
+    width: clamp(18rem, 35vw, 26rem);
+    max-width: 100vw;
     z-index: 100;
 }
 
 .settings-button {
+    flex: none;
     margin-left: auto;
+}
+
+.settings-button .rzi {
+    font-size: clamp(1.2rem, 2vw, 1.5rem);
+}
+
+.settings-menu {
+    align-items: center;
+    display: flex;
+}
+
+.settings-flyout h2 {
+    font-size: 1rem;
+    margin: 0;
+}
+
+@media (max-width: 32rem) {
+    .settings-flyout {
+        width: 100vw;
+    }
+
+    .toolbar-status {
+        display: none;
+    }
 }
 
 .settings-help {
