@@ -181,7 +181,7 @@
         builder.AddAttribute(sequence++, "role", "log");
         builder.OpenComponent<Virtualize<Line>>(sequence++);
         builder.AddAttribute(sequence++, "Items", LinesFor(file, search));
-        builder.AddAttribute(sequence++, "ItemSize", 24d);
+        builder.AddAttribute(sequence++, "ItemSize", 24f);
         builder.AddAttribute(sequence++, "ChildContent", (RenderFragment<Line>)(line => rowBuilder =>
         {
             var rowSequence = 0;
