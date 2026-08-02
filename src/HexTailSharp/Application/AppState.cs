@@ -1,6 +1,7 @@
 using HexTailSharp.Domain;
 using HexTailSharp.Persistence;
 using HexTailSharp.Tailing;
+using System.Text;
 
 namespace HexTailSharp.Application;
 
@@ -9,7 +10,7 @@ public sealed class AppState : IAsyncDisposable
     private readonly TailerService _tailers;
     private readonly IAppPersistence _persistence;
     private readonly List<FileTabState> _files = [];
-    private readonly AppSettings _settings;
+    private AppSettings _settings;
     private int _nextFileId;
 
     public AppState(TailerService tailers, IAppPersistence persistence, AppSettings? settings = null)
@@ -30,7 +31,8 @@ public sealed class AppState : IAsyncDisposable
         if (config is null)
             return;
 
-        Window = config.Window;
+        _settings = config.Settings ?? new AppSettings();
+        Window = config.Window ?? new AppWindowState();
         foreach (var persisted in config.OpenFiles)
         {
             var tab = await OpenFileAsync(persisted.Path, save: false, cancellationToken).ConfigureAwait(false);
@@ -99,6 +101,32 @@ public sealed class AppState : IAsyncDisposable
         return tab;
     }
 
+    public async ValueTask<FileTabState> OpenSnapshotAsync(string fileName, Stream content)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+        ArgumentNullException.ThrowIfNull(content);
+
+        var id = $"file-{++_nextFileId}";
+        var parser = LogParserSelector.ForPath(fileName);
+        var tab = new FileTabState(id, fileName, new FileBuffer(_settings.MaxLines), parser, new SnapshotFileTailer(id, fileName), true)
+        {
+            ContextAbove = _settings.ContextAbove,
+            ContextBelow = _settings.ContextBelow,
+        };
+
+        using var reader = new StreamReader(content, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096, leaveOpen: true);
+        var text = await reader.ReadToEndAsync().ConfigureAwait(false);
+        var lines = text.Split('\n').Select(line => line.EndsWith('\r') ? line[..^1] : line).ToList();
+        if (text.EndsWith('\n'))
+            lines.RemoveAt(lines.Count - 1);
+
+        tab.Buffer.Append(lines.Select(parser.Parse));
+        _files.Add(tab);
+        SelectedFile = tab;
+        NotifyChanged();
+        return tab;
+    }
+
     public async ValueTask CloseFileAsync(FileTabState tab, CancellationToken cancellationToken = default)
     {
         if (!_files.Remove(tab))
@@ -154,7 +182,7 @@ public sealed class AppState : IAsyncDisposable
     {
         var config = new AppConfig
         {
-            OpenFiles = _files.Select(tab => new PersistedFileTab
+            OpenFiles = _files.Where(tab => !tab.IsSnapshot).Select(tab => new PersistedFileTab
             {
                 Path = tab.Path,
                 FollowAll = tab.FollowAll,
@@ -187,6 +215,15 @@ public sealed class AppState : IAsyncDisposable
     }
 
     private void NotifyChanged() => Changed?.Invoke();
+}
+
+internal sealed class SnapshotFileTailer(string fileId, string path) : IFileTailer
+{
+    public string FileId { get; } = fileId;
+    public string Path { get; } = path;
+    public Task Completion { get; } = Task.CompletedTask;
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
 public static class LogParserSelector

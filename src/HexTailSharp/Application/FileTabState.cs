@@ -5,13 +5,15 @@ namespace HexTailSharp.Application;
 
 public sealed class FileTabState : IAsyncDisposable
 {
-    internal FileTabState(string id, string path, FileBuffer buffer, ILogParser parser, IFileTailer tailer)
+    internal FileTabState(string id, string path, FileBuffer buffer, ILogParser parser, IFileTailer tailer, bool isSnapshot = false)
     {
         Id = id;
         Path = path;
         Buffer = buffer;
         Parser = parser;
         Tailer = tailer;
+        IsSnapshot = isSnapshot;
+        Buffer.Changed += OnBufferChanged;
     }
 
     public string Id { get; }
@@ -27,6 +29,7 @@ public sealed class FileTabState : IAsyncDisposable
     public int ContextBelow { get; set; } = 10;
     public string? Error { get; internal set; }
     public IFileTailer Tailer { get; }
+    public bool IsSnapshot { get; }
     public string DisplayName => System.IO.Path.GetFileName(Path) is { Length: > 0 } name ? name : Path;
 
     public IReadOnlyList<Line> ContextLines =>
@@ -52,5 +55,21 @@ public sealed class FileTabState : IAsyncDisposable
         return Buffer.RemoveSearch(search);
     }
 
-    public async ValueTask DisposeAsync() => await Tailer.DisposeAsync().ConfigureAwait(false);
+    public async ValueTask DisposeAsync()
+    {
+        Buffer.Changed -= OnBufferChanged;
+        await Tailer.DisposeAsync().ConfigureAwait(false);
+    }
+
+    private void OnBufferChanged(BufferChange change)
+    {
+        if (change.Cleared || SelectedLine is null)
+            SelectedLine = null;
+        else if (change.RolledOutCount > 0)
+        {
+            SelectedLine -= change.RolledOutCount;
+            if (SelectedLine < 0)
+                SelectedLine = null;
+        }
+    }
 }
