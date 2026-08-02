@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "HexTail: Debug PWA",
+      "type": "blazorwasm",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/src/HexTailSharp",
+      "url": "http://localhost:5062",
+      "browser": "edge",
+      "preLaunchTask": "dotnet: build"
+    }
+  ]
+}

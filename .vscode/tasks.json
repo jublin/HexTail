@@ -1,0 +1,31 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dotnet: build",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["build", "${workspaceFolder}/src/HexTailSharp.sln"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "dotnet: test",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["test", "${workspaceFolder}/src/HexTailSharp.Tests/HexTailSharp.Tests.csproj"],
+      "group": "test",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "dotnet: pack tool",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["pack", "${workspaceFolder}/src/HexTailSharp.Tool/HexTailSharp.Tool.csproj", "-c", "Release", "-o", "${workspaceFolder}/artifacts/nupkg"],
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}

@@ -21,6 +21,7 @@ build/
 
 # VSCode
 .vscode/
+!.vscode/
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
@@ -133,6 +134,7 @@ build/
 *.rider.user.xml
 *.rider.workspace.xml
 *.vscode/
+!.vscode/
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
