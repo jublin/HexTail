@@ -4,71 +4,64 @@
 @using HexTailSharp.Application
 @using HexTailSharp.Domain
 @using HexTailSharp.Persistence
-@using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.AspNetCore.Components.Web.Virtualization
 @using Radzen
 @using Radzen.Blazor
 @inject AppState State
+@inject IJSRuntime JS
 @implements IAsyncDisposable
 
 <PageTitle>HexTail</PageTitle>
 
-<div class="hextail-shell">
-    <header class="app-toolbar">
-        <div class="brand"><span class="brand-mark">⌁</span><span>HexTail</span></div>
-        <div class="open-controls">
-            <label class="file-picker-button" for="file-picker">
-                <span>Pick log files</span>
-            </label>
-            <InputFile id="file-picker" class="file-picker-input" OnChange="OpenSnapshotAsync" multiple />
-        </div>
-        <div class="toolbar-status">@State.Files.Count file(s)</div>
-    </header>
+<RadzenStack class="hextail-shell" Gap="0">
+    <RadzenStack class="app-toolbar" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".5rem">
+        <RadzenStack class="brand" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".4rem">
+            <span class="brand-mark">⌁</span><span>HexTail</span>
+        </RadzenStack>
+        <RadzenButton Text="Pick and tail log files" Icon="folder_open" ButtonStyle="ButtonStyle.Primary" Click="PickFilesAsync" />
+        <span class="toolbar-status">@State.Files.Count file(s)</span>
+    </RadzenStack>
 
     @if (_fileError is not null)
     {
-        <div class="inline-error" role="alert">@_fileError</div>
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" AllowClose="false" ShowIcon="true" Text="@_fileError" />
     }
 
-    <div class="file-tabs" role="tablist" aria-label="Open files">
+    <RadzenStack class="file-tabs" Orientation="Orientation.Horizontal" Gap="0">
         @foreach (var openFile in State.Files)
         {
-            <button class="file-tab @(ReferenceEquals(openFile, State.SelectedFile) ? "selected" : string.Empty)" @onclick="() => SelectFile(openFile)">
-                @if (openFile.Error is not null)
-                {
-                    <span class="error-dot" title="@openFile.Error">!</span>
-                }
-                <span>@openFile.DisplayName</span>
-                <span class="file-tab-close" @onclick="() => CloseFileAsync(openFile)" @onclick:stopPropagation="true">×</span>
-            </button>
+            <RadzenStack class="@($"file-tab {(ReferenceEquals(openFile, State.SelectedFile) ? "selected" : string.Empty)}")" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0">
+                <RadzenButton Text="@TabText(openFile)" Title="@openFile.Error" ButtonStyle="ButtonStyle.Light" Click="() => SelectFile(openFile)" />
+                <RadzenButton Icon="close" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="() => CloseFileAsync(openFile)" />
+            </RadzenStack>
         }
         @if (State.Files.Count == 0)
         {
             <span class="empty-tabs">Open a file to start tailing.</span>
         }
-    </div>
+    </RadzenStack>
 
     @if (State.SelectedFile is { } file)
     {
-        <section class="workspace">
-            <div class="search-toolbar">
+        <RadzenStack class="workspace" Gap="0">
+            <RadzenStack class="search-toolbar" Orientation="Orientation.Horizontal" Wrap="FlexWrap.Wrap" AlignItems="AlignItems.Center" Gap=".65rem">
                 <RadzenTextBox @bind-Value="_query" Placeholder="Search this file" Style="flex: 1; min-width: 12rem" />
                 <RadzenDropDown @bind-Value="_mode" Data="@MatchModes" TValue="MatchMode" Style="width: 8rem" />
                 <label class="toggle"><RadzenCheckBox @bind-Value="_caseSensitive" TValue="bool" /> Case sensitive</label>
                 <RadzenColorPicker @bind-Value="_color" />
                 <RadzenButton Text="Add search" Icon="search" Click="AddSearchAsync" ButtonStyle="ButtonStyle.Secondary" />
                 <RadzenButton Text="Save" Icon="save" Click="SaveAsync" ButtonStyle="ButtonStyle.Light" />
-            </div>
+            </RadzenStack>
             @if (_searchError is not null)
             {
-                <div class="inline-error" role="alert">@_searchError</div>
+                <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" AllowClose="false" ShowIcon="true" Text="@_searchError" />
             }
 
-            <div class="view-toolbar">
+            <RadzenStack class="view-toolbar" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".65rem">
                 <label class="toggle"><RadzenCheckBox @bind-Value="file.FollowAll" TValue="bool" Change="_ => SaveAsync()" /> Follow All</label>
                 <label class="toggle"><RadzenCheckBox @bind-Value="file.ShowContext" TValue="bool" Change="_ => StateHasChanged()" /> Show inline context</label>
                 <span class="line-count">@file.Buffer.Count.ToString("N0") lines</span>
-            </div>
+            </RadzenStack>
 
             <RadzenTabs @bind-SelectedIndex="_activeView" Class="view-tabs">
                 <Tabs>
@@ -78,22 +71,23 @@
                     @foreach (var search in file.Searches)
                     {
                         <RadzenTabsItem Text="@Truncate(search.Query.Query)" IconColor="@search.Color">
-                            <div class="search-tab-toolbar">
+                            <RadzenStack class="search-tab-toolbar" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".65rem">
                                 <label class="toggle"><RadzenCheckBox @bind-Value="file.FollowSearches[file.Searches.IndexOf(search)]" TValue="bool" /> Follow</label>
                                 <span>@search.Results.Count.ToString("N0") matches</span>
-                            </div>
+                            </RadzenStack>
                             @RenderView(file, search)
                         </RadzenTabsItem>
                     }
                 </Tabs>
             </RadzenTabs>
-        </section>
+        </RadzenStack>
     }
-</div>
+</RadzenStack>
 
 @code {
     private static readonly MatchMode[] MatchModes = [MatchMode.Literal, MatchMode.Regex];
     private readonly CancellationTokenSource _stop = new();
+    private DotNetObjectReference<Home>? _browserReference;
     private Task? _pollTask;
     private string _query = string.Empty;
     private MatchMode _mode = MatchMode.Literal;
@@ -134,24 +128,44 @@
         _activeView = 0;
     }
 
-    private async Task OpenSnapshotAsync(InputFileChangeEventArgs args)
+    private async Task PickFilesAsync()
     {
         _fileError = null;
+        _browserReference ??= DotNetObjectReference.Create(this);
         try
         {
-            foreach (var file in args.GetMultipleFiles(100))
-            {
-                await using var stream = file.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
-                await State.OpenSnapshotAsync(file.Name, stream);
-            }
+            await JS.InvokeVoidAsync("hexTailFilePicker.pick", _browserReference);
+        }
+        catch (JSException ex)
+        {
+            _fileError = ex.Message;
         }
         catch (Exception ex)
         {
-            _fileError = $"Could not open file: {ex.Message}";
+            _fileError = $"Could not pick file: {ex.Message}";
         }
     }
 
-    private async Task CloseFileAsync(FileTabState file) => await State.CloseFileAsync(file);
+    [JSInvokable]
+    public void OnBrowserFileLines(string fileId, string fileName, string[] lines)
+    {
+        if (!State.Files.Any(file => file.Id == fileId))
+            State.OpenBrowserFile(fileId, fileName, lines);
+        else
+            State.AppendBrowserLines(fileId, lines);
+    }
+
+    [JSInvokable]
+    public void OnBrowserFileTruncated(string fileId) => State.TruncateBrowserFile(fileId);
+
+    private async Task CloseFileAsync(FileTabState file)
+    {
+        await State.CloseFileAsync(file);
+        if (file.IsSnapshot)
+            await JS.InvokeVoidAsync("hexTailFilePicker.stop", file.Id);
+    }
+
+    private static string TabText(FileTabState file) => file.Error is null ? file.DisplayName : $"! {file.DisplayName}";
 
     private async Task AddSearchAsync()
     {
@@ -308,6 +322,14 @@
         _stop.Cancel();
         if (_pollTask is not null)
             await _pollTask;
+        try
+        {
+            await JS.InvokeVoidAsync("hexTailFilePicker.stopAll");
+        }
+        catch (JSException)
+        {
+        }
+        _browserReference?.Dispose();
         _stop.Dispose();
     }
 }

@@ -127,6 +127,45 @@ public sealed class AppState : IAsyncDisposable
         return tab;
     }
 
+    public FileTabState OpenBrowserFile(string fileId, string fileName, IEnumerable<string> lines)
+    {
+        var existing = _files.FirstOrDefault(file => file.Id == fileId);
+        if (existing is not null)
+            return existing;
+
+        var parser = LogParserSelector.ForPath(fileName);
+        var tab = new FileTabState(fileId, fileName, new FileBuffer(_settings.MaxLines), parser, new SnapshotFileTailer(fileId, fileName), true)
+        {
+            ContextAbove = _settings.ContextAbove,
+            ContextBelow = _settings.ContextBelow,
+        };
+        tab.Buffer.Append(lines.Select(parser.Parse));
+        _files.Add(tab);
+        SelectedFile = tab;
+        NotifyChanged();
+        return tab;
+    }
+
+    public void AppendBrowserLines(string fileId, IEnumerable<string> lines)
+    {
+        var tab = _files.FirstOrDefault(file => file.Id == fileId);
+        if (tab is null)
+            return;
+
+        tab.Buffer.Append(lines.Select(tab.Parser.Parse));
+        NotifyChanged();
+    }
+
+    public void TruncateBrowserFile(string fileId)
+    {
+        var tab = _files.FirstOrDefault(file => file.Id == fileId);
+        if (tab is null)
+            return;
+
+        tab.Buffer.Clear();
+        NotifyChanged();
+    }
+
     public async ValueTask CloseFileAsync(FileTabState tab, CancellationToken cancellationToken = default)
     {
         if (!_files.Remove(tab))
