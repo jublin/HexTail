@@ -89,15 +89,48 @@ code {
 }
 
 :root {
-    color-scheme: dark;
-    --surface: #111827;
-    --surface-raised: #1f2937;
-    --surface-high: #273449;
-    --border: #334155;
-    --text: #e5e7eb;
-    --muted: #94a3b8;
-    --accent: #38bdf8;
+    --surface: var(--rz-base-background-color);
+    --surface-raised: var(--rz-base-100);
+    --surface-high: var(--rz-base-200);
+    --border: var(--rz-base-300);
+    --text: var(--rz-text-color);
+    --muted: var(--rz-text-secondary-color);
+    --accent: var(--rz-primary);
 }
+
+.settings-flyout {
+    background: var(--surface-raised);
+    border-left: 1px solid var(--border);
+    box-shadow: -8px 0 24px rgba(0, 0, 0, .3);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: .8rem;
+    height: 100vh;
+    overflow: auto;
+    padding: 1rem;
+    position: fixed;
+    right: 0;
+    top: 0;
+    width: min(26rem, 100vw);
+    z-index: 100;
+}
+
+.settings-button {
+    margin-left: auto;
+}
+
+.settings-help {
+    color: var(--muted);
+    font-size: .8rem;
+}
+
+.density-cozy .log-line { padding-block: .14rem; }
+.density-compact .log-line { padding-block: .06rem; }
+.font-small .log-line, .font-small .context-line { font-size: .72rem; }
+.font-medium .log-line, .font-medium .context-line { font-size: .78rem; }
+.font-large .log-line, .font-large .context-line { font-size: .9rem; }
+.font-extralarge .log-line, .font-extralarge .context-line { font-size: 1rem; }
 
 html, body, #app {
     background: var(--surface);
@@ -124,7 +157,7 @@ body {
 }
 
 .app-toolbar {
-    background: #0b1220;
+    background: var(--surface-high);
     border-bottom: 1px solid var(--border);
     min-height: 3.5rem;
     padding: 0 .9rem;
@@ -181,7 +214,7 @@ body {
 
 .file-tabs {
     align-items: stretch;
-    background: #0f172a;
+    background: var(--surface-raised);
     border-bottom: 1px solid var(--border);
     display: flex;
     gap: 2px;
@@ -292,7 +325,7 @@ body {
 }
 
 .log-view {
-    background: #0b1120;
+    background: var(--surface);
     flex: 1;
     min-height: 8rem;
     overflow: auto;
@@ -322,8 +355,8 @@ body {
 }
 
 .parsed-fields {
-    background: #172033;
-    color: #bae6fd;
+    background: var(--surface-high);
+    color: var(--text);
     font-family: "JetBrains Mono", "Cascadia Code", monospace;
     font-size: .75rem;
     padding: .35rem 1.6rem;
@@ -331,7 +364,7 @@ body {
 }
 
 .log-line:hover {
-    background: #1e293b;
+    background: var(--surface-high);
 }
 
 .log-line mark {
@@ -364,3 +397,8 @@ body {
 .rz-splitter {
     background: var(--surface-raised);
 }
+
+.density-cozy .app-toolbar { min-height: 3.1rem; padding-inline: .7rem; }
+.density-cozy .search-toolbar, .density-cozy .view-toolbar { gap: .5rem; padding: .5rem .65rem; }
+.density-compact .app-toolbar { min-height: 2.75rem; padding-inline: .5rem; }
+.density-compact .search-toolbar, .density-compact .view-toolbar { gap: .35rem; padding: .35rem .5rem; }

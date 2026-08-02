@@ -38,7 +38,7 @@ public sealed class AppWindowState
     public int ContextPaneSize { get; init; } = 300;
 }
 
-public sealed class AppSettings
+public sealed record AppSettings
 {
     public int MaxLines { get; init; } = FileBuffer.DefaultMaxLines;
     public int ContextAbove { get; init; } = 3;

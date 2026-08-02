@@ -9,18 +9,82 @@
 @using Radzen.Blazor
 @inject AppState State
 @inject IJSRuntime JS
+@inject ThemeService ThemeService
 @implements IAsyncDisposable
 
 <PageTitle>HexTail</PageTitle>
 
-<RadzenStack class="hextail-shell" Gap="0">
+<RadzenStack class="@($"hextail-shell density-{State.Settings.Density.ToString().ToLowerInvariant()}")" Gap="0">
     <RadzenStack class="app-toolbar" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".5rem">
         <RadzenStack class="brand" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".4rem">
             <span class="brand-mark">⌁</span><span>HexTail</span>
         </RadzenStack>
         <RadzenButton Text="Pick and tail log files" Icon="folder_open" ButtonStyle="ButtonStyle.Primary" Click="PickFilesAsync" />
         <span class="toolbar-status">@State.Files.Count file(s)</span>
+        <RadzenButton class="settings-button" Icon="settings" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" AriaLabel="Open settings" Click="ToggleSettings" />
     </RadzenStack>
+
+    @if (_settingsOpen)
+    {
+        <aside class="settings-flyout" aria-label="Settings">
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+                <strong>Settings</strong>
+                <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" AriaLabel="Close settings" Click="ToggleSettings" />
+            </RadzenStack>
+            <RadzenPanelMenu class="settings-menu">
+                <RadzenPanelMenuItem Text="Global labels" Icon="label" Path="#settings-labels" />
+                <RadzenPanelMenuItem Text="Global exclude labels" Icon="visibility_off" Path="#settings-exclusions" />
+                <RadzenPanelMenuItem Text="Appearance" Icon="palette" Path="#settings-appearance" />
+            </RadzenPanelMenu>
+
+            <section id="settings-labels">
+            {
+                <RadzenStack Gap=".5rem">
+                    <span class="settings-help">Highlight case-insensitive text across every log view.</span>
+                    @for (var index = 0; index < State.Settings.GlobalLabels.Count; index++)
+                    {
+                        var label = State.Settings.GlobalLabels[index];
+                        var labelIndex = index;
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".35rem">
+                            <RadzenTextBox Value="@label.Text" Change="value => UpdateLabelTextAsync(labelIndex, value)" Style="flex: 1" />
+                            <RadzenColorPicker Value="@label.Color" Change="value => UpdateLabelColorAsync(labelIndex, value)" />
+                            <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" AriaLabel="Remove label" Click="() => RemoveLabelAsync(labelIndex)" />
+                        </RadzenStack>
+                    }
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".35rem">
+                        <RadzenTextBox @bind-Value="_newLabel" Placeholder="Text to highlight" Style="flex: 1" />
+                        <RadzenColorPicker @bind-Value="_newLabelColor" />
+                        <RadzenButton Icon="add" ButtonStyle="ButtonStyle.Secondary" Size="ButtonSize.Small" AriaLabel="Add label" Click="AddLabelAsync" />
+                    </RadzenStack>
+                </RadzenStack>
+            </section>
+            <section id="settings-exclusions">
+                <RadzenStack Gap=".5rem">
+                    <span class="settings-help">Matching lines stay buffered but are hidden from all log and context views.</span>
+                    @for (var index = 0; index < State.Settings.GlobalExcludeLabels.Count; index++)
+                    {
+                        var label = State.Settings.GlobalExcludeLabels[index];
+                        var labelIndex = index;
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".35rem">
+                            <RadzenTextBox Value="@label" Change="value => UpdateExclusionAsync(labelIndex, value)" Style="flex: 1" />
+                            <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" AriaLabel="Remove exclusion" Click="() => RemoveExclusionAsync(labelIndex)" />
+                        </RadzenStack>
+                    }
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".35rem">
+                        <RadzenTextBox @bind-Value="_newExclusion" Placeholder="Text to hide" Style="flex: 1" />
+                        <RadzenButton Icon="add" ButtonStyle="ButtonStyle.Secondary" Size="ButtonSize.Small" AriaLabel="Add exclusion" Click="AddExclusionAsync" />
+                    </RadzenStack>
+                </RadzenStack>
+            </section>
+            <section id="settings-appearance">
+                <RadzenStack Gap=".75rem">
+                    <label>Theme <RadzenDropDown TValue="string" Value="@State.Settings.Theme" Data="@Themes" Change="@(async value => await UpdateThemeAsync((string)value))" Style="width: 100%" /></label>
+                    <label>UI spacing <RadzenDropDown TValue="UiDensity" Value="@State.Settings.Density" Data="@Densities" Change="@(async value => await UpdateDensityAsync((UiDensity)value))" Style="width: 100%" /></label>
+                    <label>Log font size <RadzenDropDown TValue="LogFontSize" Value="@State.Settings.LogFontSize" Data="@FontSizes" Change="@(async value => await UpdateLogFontSizeAsync((LogFontSize)value))" Style="width: 100%" /></label>
+                </RadzenStack>
+            </section>
+        </aside>
+    }
 
     @if (_fileError is not null)
     {
@@ -88,6 +152,9 @@
 
 @code {
     private static readonly MatchMode[] MatchModes = [MatchMode.Literal, MatchMode.Regex];
+    private static readonly string[] Themes = ["material-dark", "material"];
+    private static readonly UiDensity[] Densities = [UiDensity.Comfortable, UiDensity.Cozy, UiDensity.Compact];
+    private static readonly LogFontSize[] FontSizes = [LogFontSize.Small, LogFontSize.Medium, LogFontSize.Large, LogFontSize.ExtraLarge];
     private readonly CancellationTokenSource _stop = new();
     private DotNetObjectReference<Home>? _browserReference;
     private Task? _pollTask;
@@ -98,13 +165,78 @@
     private string? _searchError;
     private string? _fileError;
     private int _activeView;
+    private bool _settingsOpen;
+    private string _newLabel = string.Empty;
+    private string _newLabelColor = "#f59e0b";
+    private string _newExclusion = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
         State.Changed += OnStateChanged;
         await State.RestoreAsync();
+        ThemeService.SetTheme(State.Settings.Theme);
         _pollTask = DrainLoopAsync();
     }
+
+    private void ToggleSettings() => _settingsOpen = !_settingsOpen;
+
+    private async Task AddLabelAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newLabel))
+            return;
+
+        await UpdateSettingsAsync(State.Settings with
+        {
+            GlobalLabels = [.. State.Settings.GlobalLabels, new GlobalLabel { Text = _newLabel, Color = _newLabelColor }],
+        });
+        _newLabel = string.Empty;
+    }
+
+    private Task RemoveLabelAsync(int index) => UpdateSettingsAsync(State.Settings with
+    {
+        GlobalLabels = State.Settings.GlobalLabels.Where((_, current) => current != index).ToList(),
+    });
+
+    private Task UpdateLabelTextAsync(int index, string value) => UpdateSettingsAsync(State.Settings with
+    {
+        GlobalLabels = State.Settings.GlobalLabels.Select((label, current) => current == index ? new GlobalLabel { Text = value, Color = label.Color } : label).ToList(),
+    });
+
+    private Task UpdateLabelColorAsync(int index, string value) => UpdateSettingsAsync(State.Settings with
+    {
+        GlobalLabels = State.Settings.GlobalLabels.Select((label, current) => current == index ? new GlobalLabel { Text = label.Text, Color = value } : label).ToList(),
+    });
+
+    private async Task AddExclusionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newExclusion))
+            return;
+
+        await UpdateSettingsAsync(State.Settings with { GlobalExcludeLabels = [.. State.Settings.GlobalExcludeLabels, _newExclusion] });
+        _newExclusion = string.Empty;
+    }
+
+    private Task RemoveExclusionAsync(int index) => UpdateSettingsAsync(State.Settings with
+    {
+        GlobalExcludeLabels = State.Settings.GlobalExcludeLabels.Where((_, current) => current != index).ToList(),
+    });
+
+    private Task UpdateExclusionAsync(int index, string value) => UpdateSettingsAsync(State.Settings with
+    {
+        GlobalExcludeLabels = State.Settings.GlobalExcludeLabels.Select((label, current) => current == index ? value : label).ToList(),
+    });
+
+    private async Task UpdateThemeAsync(string theme)
+    {
+        await UpdateSettingsAsync(State.Settings with { Theme = theme });
+        ThemeService.SetTheme(State.Settings.Theme);
+    }
+
+    private Task UpdateDensityAsync(UiDensity density) => UpdateSettingsAsync(State.Settings with { Density = density });
+
+    private Task UpdateLogFontSizeAsync(LogFontSize size) => UpdateSettingsAsync(State.Settings with { LogFontSize = size });
+
+    private Task UpdateSettingsAsync(AppSettings settings) => State.UpdateSettingsAsync(settings).AsTask();
 
     private async Task DrainLoopAsync()
     {
@@ -201,12 +333,12 @@
     {
         var sequence = 0;
         builder.OpenElement(sequence++, "div");
-        builder.AddAttribute(sequence++, "class", "log-view");
+        builder.AddAttribute(sequence++, "class", $"log-view density-{State.Settings.Density.ToString().ToLowerInvariant()} font-{State.Settings.LogFontSize.ToString().ToLowerInvariant()}");
         builder.AddAttribute(sequence++, "id", LogViewId(file, search));
         builder.AddAttribute(sequence++, "role", "log");
         builder.OpenComponent<Virtualize<Line>>(sequence++);
         builder.AddAttribute(sequence++, "Items", LinesFor(file, search));
-        builder.AddAttribute(sequence++, "ItemSize", 24f);
+        builder.AddAttribute(sequence++, "ItemSize", LogItemSize(State.Settings.LogFontSize));
         builder.AddAttribute(sequence++, "ChildContent", (RenderFragment<Line>)(line => rowBuilder =>
         {
             var rowSequence = 0;
@@ -252,7 +384,7 @@
                 splitterBuilder.AddAttribute(splitSequence++, "ChildContent", (RenderFragment)(paneBuilder =>
                 {
                     var paneSequence = 0;
-                    foreach (var contextLine in file.ContextLines)
+                    foreach (var contextLine in file.ContextLines.Where(line => !State.Settings.Excludes(line.Raw)))
                     {
                         paneBuilder.OpenElement(paneSequence++, "div");
                         paneBuilder.AddAttribute(paneSequence++, "class", "context-line");
@@ -267,9 +399,11 @@
     };
 
     private ICollection<Line> LinesFor(FileTabState file, Search? search) =>
-        search is null
+        (search is null
             ? file.Buffer.Lines as ICollection<Line> ?? file.Buffer.Lines.ToList()
-            : search.Results.Where(index => index >= 0 && index < file.Buffer.Count).Select(index => file.Buffer[index]).ToList();
+            : search.Results.Where(index => index >= 0 && index < file.Buffer.Count).Select(index => file.Buffer[index]).ToList())
+        .Where(line => !State.Settings.Excludes(line.Raw))
+        .ToList();
 
     private async Task FollowTailAsync(string fileId)
     {
@@ -311,10 +445,11 @@
         return -1;
     }
 
-    private static string RenderLine(FileTabState file, Line line)
+    private string RenderLine(FileTabState file, Line line)
     {
         var ranges = file.Searches
             .SelectMany(search => search.GetHighlights(line).Select(range => (range.Start, range.Length, search.Color)))
+            .Concat(State.Settings.GetLabelHighlights(line.Raw).Select(range => (range.Start, range.Length, range.Color)))
             .Where(range => range.Start >= 0 && range.Length > 0 && range.Start + range.Length <= line.Raw.Length)
             .OrderBy(range => range.Start)
             .ThenByDescending(range => range.Length)
@@ -342,6 +477,14 @@
     }
 
     private static string Truncate(string text) => text.Length > 24 ? $"{text[..21]}..." : text;
+
+    private static float LogItemSize(LogFontSize size) => size switch
+    {
+        LogFontSize.Small => 22f,
+        LogFontSize.Large => 28f,
+        LogFontSize.ExtraLarge => 32f,
+        _ => 24f,
+    };
 
     public async ValueTask DisposeAsync()
     {
