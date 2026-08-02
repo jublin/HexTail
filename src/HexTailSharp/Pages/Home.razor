@@ -14,30 +14,31 @@
 
 <PageTitle>HexTail</PageTitle>
 
-<RadzenStack class="@($"hextail-shell density-{State.Settings.Density.ToString().ToLowerInvariant()}")" Gap="0">
-    <RadzenStack class="app-toolbar" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".5rem">
+<RadzenLayout class="@($"hextail-shell density-{State.Settings.Density.ToString().ToLowerInvariant()}")">
+    <RadzenHeader>
+        <RadzenStack class="app-toolbar" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".5rem">
         <RadzenStack class="brand" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".4rem">
             <span class="brand-mark">⌁</span><span>HexTail</span>
         </RadzenStack>
         <RadzenButton Text="Pick and tail log files" Icon="folder_open" ButtonStyle="ButtonStyle.Primary" Click="PickFilesAsync" />
         <span class="toolbar-status">@State.Files.Count file(s)</span>
-        <RadzenButton class="@($"settings-button settings-button-{State.Settings.SettingsMenuAlignment.ToString().ToLowerInvariant()}")" Icon="menu" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" AriaLabel="Open settings menu" aria-expanded="@_settingsOpen" Click="ToggleSettings" />
-    </RadzenStack>
+            <RadzenButton class="@($"settings-button settings-button-{State.Settings.SettingsMenuAlignment.ToString().ToLowerInvariant()}")" Icon="menu" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" AriaLabel="Open settings menu" aria-expanded="@_settingsOpen" Click="ToggleSettings" />
+        </RadzenStack>
+    </RadzenHeader>
 
-    @if (_settingsOpen)
-    {
-        <aside class="settings-flyout" aria-label="Settings">
+    <RadzenSidebar class="settings-sidebar" Position="@SettingsSidebarPosition" @bind-Expanded="_settingsOpen" Responsive="true" ResponsiveMaxWidth="512">
+        <div class="settings-sidebar-content">
             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
                 <strong>Settings</strong>
                 <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" AriaLabel="Close settings" Click="ToggleSettings" />
             </RadzenStack>
-            <RadzenStack class="settings-menu" Orientation="Orientation.Horizontal" Wrap="FlexWrap.Wrap" Gap=".35rem">
-                <RadzenButton Text="Labels" Icon="label" ButtonStyle="@SettingsButtonStyle("labels")" Size="ButtonSize.Small" Click='() => _settingsSection = "labels"' />
-                <RadzenButton Text="Exclusions" Icon="visibility_off" ButtonStyle="@SettingsButtonStyle("exclusions")" Size="ButtonSize.Small" Click='() => _settingsSection = "exclusions"' />
-                <RadzenButton Text="Appearance" Icon="palette" ButtonStyle="@SettingsButtonStyle("appearance")" Size="ButtonSize.Small" Click='() => _settingsSection = "appearance"' />
-            </RadzenStack>
+            <RadzenPanelMenu class="settings-menu" Multiple="false" Click="OnSettingsMenuClick" AriaLabel="Settings sections">
+                <RadzenPanelMenuItem Text="Global labels" Value="@SettingsSection.Labels" Icon="label" Selected="@(_settingsSection == SettingsSection.Labels)" />
+                <RadzenPanelMenuItem Text="Global exclusions" Value="@SettingsSection.Exclusions" Icon="visibility_off" Selected="@(_settingsSection == SettingsSection.Exclusions)" />
+                <RadzenPanelMenuItem Text="Appearance" Value="@SettingsSection.Appearance" Icon="palette" Selected="@(_settingsSection == SettingsSection.Appearance)" />
+            </RadzenPanelMenu>
 
-            @if (_settingsSection == "labels")
+            @if (_settingsSection == SettingsSection.Labels)
             {
                 <section aria-labelledby="settings-labels">
                 <RadzenStack Gap=".5rem">
@@ -61,7 +62,7 @@
                 </RadzenStack>
                 </section>
             }
-            else if (_settingsSection == "exclusions")
+            else if (_settingsSection == SettingsSection.Exclusions)
             {
                 <section aria-labelledby="settings-exclusions">
                 <RadzenStack Gap=".5rem">
@@ -95,8 +96,11 @@
                 </RadzenStack>
                 </section>
             }
-        </aside>
-    }
+        </div>
+    </RadzenSidebar>
+
+    <RadzenBody>
+        <RadzenStack class="hextail-body" Gap="0">
 
     @if (_fileError is not null)
     {
@@ -160,7 +164,9 @@
             </RadzenTabs>
         </RadzenStack>
     }
-</RadzenStack>
+        </RadzenStack>
+    </RadzenBody>
+</RadzenLayout>
 
 @code {
     private static readonly MatchMode[] MatchModes = [MatchMode.Literal, MatchMode.Regex];
@@ -179,7 +185,7 @@
     private string? _fileError;
     private int _activeView;
     private bool _settingsOpen;
-    private string _settingsSection = "labels";
+    private SettingsSection _settingsSection = SettingsSection.Labels;
     private string _newLabel = string.Empty;
     private string _newLabelColor = "#f59e0b";
     private string _newExclusion = string.Empty;
@@ -194,7 +200,22 @@
 
     private void ToggleSettings() => _settingsOpen = !_settingsOpen;
 
-    private ButtonStyle SettingsButtonStyle(string section) => _settingsSection == section ? ButtonStyle.Primary : ButtonStyle.Light;
+    private SidebarPosition SettingsSidebarPosition => State.Settings.SettingsMenuAlignment == SettingsMenuAlignment.Left
+        ? SidebarPosition.Left
+        : SidebarPosition.Right;
+
+    private void OnSettingsMenuClick(MenuItemEventArgs args)
+    {
+        if (args.Value is SettingsSection section)
+            _settingsSection = section;
+    }
+
+    private enum SettingsSection
+    {
+        Labels,
+        Exclusions,
+        Appearance,
+    }
 
     private async Task AddLabelAsync()
     {
