@@ -9,7 +9,6 @@
 @using Radzen
 @using Radzen.Blazor
 @inject AppState State
-@inject NavigationManager Navigation
 @implements IAsyncDisposable
 
 <PageTitle>HexTail</PageTitle>
@@ -18,15 +17,18 @@
     <header class="app-toolbar">
         <div class="brand"><span class="brand-mark">⌁</span><span>HexTail</span></div>
         <div class="open-controls">
-            <RadzenTextBox @bind-Value="_path" Placeholder="Path to a log file" Style="width: min(34rem, 55vw)" @onkeydown="HandlePathKeyDown" />
-            <RadzenButton Text="Open" Icon="folder_open" ButtonStyle="ButtonStyle.Primary" Click="OpenPathAsync" />
-            <label class="file-picker-button">
-                <span>Pick file</span>
-                <InputFile OnChange="OpenSnapshotAsync" />
+            <label class="file-picker-button" for="file-picker">
+                <span>Pick log files</span>
             </label>
+            <InputFile id="file-picker" class="file-picker-input" OnChange="OpenSnapshotAsync" multiple />
         </div>
         <div class="toolbar-status">@State.Files.Count file(s)</div>
     </header>
+
+    @if (_fileError is not null)
+    {
+        <div class="inline-error" role="alert">@_fileError</div>
+    }
 
     <div class="file-tabs" role="tablist" aria-label="Open files">
         @foreach (var openFile in State.Files)
@@ -93,12 +95,12 @@
     private static readonly MatchMode[] MatchModes = [MatchMode.Literal, MatchMode.Regex];
     private readonly CancellationTokenSource _stop = new();
     private Task? _pollTask;
-    private string _path = string.Empty;
     private string _query = string.Empty;
     private MatchMode _mode = MatchMode.Literal;
     private bool _caseSensitive;
     private string _color = "#f59e0b";
     private string? _searchError;
+    private string? _fileError;
     private int _activeView;
 
     protected override async Task OnInitializedAsync()
@@ -132,26 +134,21 @@
         _activeView = 0;
     }
 
-    private async Task OpenPathAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_path))
-            return;
-
-        await State.OpenFileAsync(_path);
-        _path = string.Empty;
-    }
-
-    private async Task HandlePathKeyDown(KeyboardEventArgs args)
-    {
-        if (args.Key == "Enter")
-            await OpenPathAsync();
-    }
-
     private async Task OpenSnapshotAsync(InputFileChangeEventArgs args)
     {
-        var file = args.File;
-        await using var stream = file.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
-        await State.OpenSnapshotAsync(file.Name, stream);
+        _fileError = null;
+        try
+        {
+            foreach (var file in args.GetMultipleFiles(100))
+            {
+                await using var stream = file.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
+                await State.OpenSnapshotAsync(file.Name, stream);
+            }
+        }
+        catch (Exception ex)
+        {
+            _fileError = $"Could not open file: {ex.Message}";
+        }
     }
 
     private async Task CloseFileAsync(FileTabState file) => await State.CloseFileAsync(file);
