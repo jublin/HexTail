@@ -53,6 +53,12 @@ window.hexTailFilePicker = (() => {
             for (const watcher of watchers.values())
                 clearInterval(watcher.timer);
             watchers.clear();
+        },
+
+        scrollToEnd(id) {
+            const element = document.getElementById(id);
+            if (element)
+                element.scrollTop = element.scrollHeight;
         }
     };
 })();

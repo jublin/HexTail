@@ -63,16 +63,18 @@
                 <span class="line-count">@file.Buffer.Count.ToString("N0") lines</span>
             </RadzenStack>
 
-            <RadzenTabs @bind-SelectedIndex="_activeView" Class="view-tabs">
+            <RadzenTabs @bind-SelectedIndex="_activeView" Class="view-tabs" RenderMode="TabRenderMode.Client">
                 <Tabs>
                     <RadzenTabsItem Text="All">
                         @RenderView(file, null)
                     </RadzenTabsItem>
-                    @foreach (var search in file.Searches)
+                    @for (var index = 0; index < file.Searches.Count; index++)
                     {
-                        <RadzenTabsItem Text="@Truncate(search.Query.Query)" IconColor="@search.Color">
+                        var search = file.Searches[index];
+                        var searchIndex = index;
+                        <RadzenTabsItem @key="search" Text="@Truncate(search.Query.Query)" IconColor="@search.Color">
                             <RadzenStack class="search-tab-toolbar" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".65rem">
-                                <label class="toggle"><RadzenCheckBox @bind-Value="file.FollowSearches[file.Searches.IndexOf(search)]" TValue="bool" /> Follow</label>
+                                <label class="toggle"><RadzenCheckBox TValue="bool" Value="@file.FollowSearches[searchIndex]" Change="value => SetSearchFollow(file, searchIndex, value)" /> Follow</label>
                                 <span>@search.Results.Count.ToString("N0") matches</span>
                             </RadzenStack>
                             @RenderView(file, search)
@@ -147,12 +149,14 @@
     }
 
     [JSInvokable]
-    public void OnBrowserFileLines(string fileId, string fileName, string[] lines)
+    public async Task OnBrowserFileLines(string fileId, string fileName, string[] lines)
     {
         if (!State.Files.Any(file => file.Id == fileId))
             State.OpenBrowserFile(fileId, fileName, lines);
         else
             State.AppendBrowserLines(fileId, lines);
+
+        await FollowTailAsync(fileId);
     }
 
     [JSInvokable]
@@ -166,6 +170,12 @@
     }
 
     private static string TabText(FileTabState file) => file.Error is null ? file.DisplayName : $"! {file.DisplayName}";
+
+    private void SetSearchFollow(FileTabState file, int searchIndex, bool value)
+    {
+        file.FollowSearches[searchIndex] = value;
+        _ = SaveAsync();
+    }
 
     private async Task AddSearchAsync()
     {
@@ -192,6 +202,7 @@
         var sequence = 0;
         builder.OpenElement(sequence++, "div");
         builder.AddAttribute(sequence++, "class", "log-view");
+        builder.AddAttribute(sequence++, "id", LogViewId(file, search));
         builder.AddAttribute(sequence++, "role", "log");
         builder.OpenComponent<Virtualize<Line>>(sequence++);
         builder.AddAttribute(sequence++, "Items", LinesFor(file, search));
@@ -259,6 +270,22 @@
         search is null
             ? file.Buffer.Lines
             : search.Results.Where(index => index >= 0 && index < file.Buffer.Count).Select(index => file.Buffer[index]);
+
+    private async Task FollowTailAsync(string fileId)
+    {
+        var file = State.SelectedFile;
+        if (file?.Id != fileId)
+            return;
+
+        var follows = _activeView == 0
+            ? file.FollowAll
+            : _activeView - 1 < file.FollowSearches.Count && file.FollowSearches[_activeView - 1];
+        if (follows)
+            await JS.InvokeVoidAsync("hexTailFilePicker.scrollToEnd", $"log-view-{fileId}-{_activeView}");
+    }
+
+    private static string LogViewId(FileTabState file, Search? search) =>
+        $"log-view-{file.Id}-{(search is null ? 0 : file.Searches.IndexOf(search) + 1)}";
 
     private void SelectLine(FileTabState file, Line line)
     {
