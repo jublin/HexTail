@@ -89,6 +89,7 @@ public sealed class AppStateTests
             ],
             GlobalExcludeLabels = [" Health ", "health", ""],
             Theme = "not-a-theme",
+            SettingsMenuAlignment = SettingsMenuAlignment.Left,
         });
 
         var settings = Assert.IsType<AppConfig>(persistence.Config).Settings;
@@ -97,6 +98,7 @@ public sealed class AppStateTests
         Assert.Equal("#ff0000", label.Color);
         Assert.Equal(["Health"], settings.GlobalExcludeLabels);
         Assert.Equal("material-dark", settings.Theme);
+        Assert.Equal(SettingsMenuAlignment.Left, settings.SettingsMenuAlignment);
     }
 
     [Fact]

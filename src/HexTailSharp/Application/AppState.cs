@@ -287,6 +287,7 @@ public sealed class AppState : IAsyncDisposable
             Theme = settings.Theme is "material" or "material-dark" ? settings.Theme : "material-dark",
             Density = Enum.IsDefined(settings.Density) ? settings.Density : UiDensity.Comfortable,
             LogFontSize = Enum.IsDefined(settings.LogFontSize) ? settings.LogFontSize : LogFontSize.Medium,
+            SettingsMenuAlignment = Enum.IsDefined(settings.SettingsMenuAlignment) ? settings.SettingsMenuAlignment : SettingsMenuAlignment.Right,
         };
     }
 

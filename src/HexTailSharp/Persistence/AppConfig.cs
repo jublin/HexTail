@@ -48,6 +48,7 @@ public sealed record AppSettings
     public string Theme { get; init; } = "material-dark";
     public UiDensity Density { get; init; } = UiDensity.Comfortable;
     public LogFontSize LogFontSize { get; init; } = LogFontSize.Medium;
+    public SettingsMenuAlignment SettingsMenuAlignment { get; init; } = SettingsMenuAlignment.Right;
 
     public bool Excludes(string text) =>
         GlobalExcludeLabels.Any(label => text.Contains(label, StringComparison.OrdinalIgnoreCase));
@@ -83,6 +84,12 @@ public enum LogFontSize
     Medium,
     Large,
     ExtraLarge,
+}
+
+public enum SettingsMenuAlignment
+{
+    Left,
+    Right,
 }
 
 public static class AppConfigJson

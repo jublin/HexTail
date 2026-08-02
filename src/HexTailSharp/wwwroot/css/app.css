@@ -119,7 +119,14 @@ code {
 
 .settings-button {
     flex: none;
+}
+
+.settings-button-right {
     margin-left: auto;
+}
+
+.settings-button-left {
+    order: -1;
 }
 
 .settings-button .rzi {
