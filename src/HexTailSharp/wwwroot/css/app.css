@@ -112,27 +112,6 @@ code {
     padding: 1rem;
 }
 
-.settings-button {
-    flex: none;
-}
-
-.settings-button-right {
-    margin-left: auto;
-}
-
-.settings-button-left {
-    order: -1;
-}
-
-.settings-button .rzi {
-    font-size: clamp(1.2rem, 2vw, 1.5rem);
-}
-
-.settings-sidebar h2 {
-    font-size: 1rem;
-    margin: 0;
-}
-
 @media (max-width: 32rem) {
     .settings-sidebar {
         width: 100vw !important;
@@ -198,12 +177,6 @@ body {
     font-weight: 700;
     gap: .4rem;
     margin-right: 1rem;
-}
-
-.brand-mark {
-    color: var(--accent);
-    font-size: 1.7rem;
-    line-height: 1;
 }
 
 .open-controls {

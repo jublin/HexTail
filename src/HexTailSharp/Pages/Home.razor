@@ -17,19 +17,17 @@
 <RadzenLayout class="@($"hextail-shell density-{State.Settings.Density.ToString().ToLowerInvariant()}")">
     <RadzenHeader>
         <RadzenStack class="app-toolbar" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".5rem">
-        <RadzenStack class="brand" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".4rem">
-            <span class="brand-mark">⌁</span><span>HexTail</span>
-        </RadzenStack>
-        <RadzenButton Text="Pick and tail log files" Icon="folder_open" ButtonStyle="ButtonStyle.Primary" Click="PickFilesAsync" />
-        <span class="toolbar-status">@State.Files.Count file(s)</span>
-            <RadzenButton class="@($"settings-button settings-button-{State.Settings.SettingsMenuAlignment.ToString().ToLowerInvariant()}")" Icon="menu" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" AriaLabel="Open settings menu" aria-expanded="@_settingsOpen" Click="ToggleSettings" />
+            <RadzenSidebarToggle Click="ToggleSettings" ToggleAriaLabel="Open settings" />
+            <RadzenLabel class="brand" Text="HexTail" />
+            <RadzenButton Text="Pick and tail log files" Icon="folder_open" ButtonStyle="ButtonStyle.Primary" Click="PickFilesAsync" />
+            <RadzenLabel class="toolbar-status" Text="@FileCountText" />
         </RadzenStack>
     </RadzenHeader>
 
     <RadzenSidebar class="settings-sidebar" Position="@SettingsSidebarPosition" @bind-Expanded="_settingsOpen" Responsive="true" ResponsiveMaxWidth="512">
         <div class="settings-sidebar-content">
             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
-                <strong>Settings</strong>
+                <RadzenLabel Text="Settings" />
                 <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" AriaLabel="Close settings" Click="ToggleSettings" />
             </RadzenStack>
             <RadzenPanelMenu class="settings-menu" Multiple="false" Click="OnSettingsMenuClick" AriaLabel="Settings sections">
@@ -40,10 +38,9 @@
 
             @if (_settingsSection == SettingsSection.Labels)
             {
-                <section aria-labelledby="settings-labels">
-                <RadzenStack Gap=".5rem">
-                    <h2 id="settings-labels">Global labels</h2>
-                    <span class="settings-help">Highlight case-insensitive text across every log view.</span>
+                <RadzenPanel Text="Global labels" class="settings-panel">
+                    <RadzenStack Gap=".5rem">
+                        <RadzenLabel class="settings-help" Text="Highlight case-insensitive text across every log view." />
                     @for (var index = 0; index < State.Settings.GlobalLabels.Count; index++)
                     {
                         var label = State.Settings.GlobalLabels[index];
@@ -59,15 +56,14 @@
                         <RadzenColorPicker @bind-Value="_newLabelColor" />
                         <RadzenButton Icon="add" ButtonStyle="ButtonStyle.Secondary" Size="ButtonSize.Small" AriaLabel="Add label" Click="AddLabelAsync" />
                     </RadzenStack>
-                </RadzenStack>
-                </section>
+                    </RadzenStack>
+                </RadzenPanel>
             }
             else if (_settingsSection == SettingsSection.Exclusions)
             {
-                <section aria-labelledby="settings-exclusions">
-                <RadzenStack Gap=".5rem">
-                    <h2 id="settings-exclusions">Global exclusions</h2>
-                    <span class="settings-help">Matching lines stay buffered but are hidden from all log and context views.</span>
+                <RadzenPanel Text="Global exclusions" class="settings-panel">
+                    <RadzenStack Gap=".5rem">
+                    <RadzenLabel class="settings-help" Text="Matching lines stay buffered but are hidden from all log and context views." />
                     @for (var index = 0; index < State.Settings.GlobalExcludeLabels.Count; index++)
                     {
                         var label = State.Settings.GlobalExcludeLabels[index];
@@ -81,20 +77,27 @@
                         <RadzenTextBox @bind-Value="_newExclusion" Placeholder="Text to hide" Style="flex: 1" />
                         <RadzenButton Icon="add" ButtonStyle="ButtonStyle.Secondary" Size="ButtonSize.Small" AriaLabel="Add exclusion" Click="AddExclusionAsync" />
                     </RadzenStack>
-                </RadzenStack>
-                </section>
+                    </RadzenStack>
+                </RadzenPanel>
             }
             else
             {
-                <section aria-labelledby="settings-appearance">
-                <RadzenStack Gap=".75rem">
-                    <h2 id="settings-appearance">Appearance</h2>
-                    <label>Theme <RadzenDropDown TValue="string" Value="@State.Settings.Theme" Data="@Themes" Change="@(async value => await UpdateThemeAsync((string)value))" Style="width: 100%" /></label>
-                    <label>UI spacing <RadzenDropDown TValue="UiDensity" Value="@State.Settings.Density" Data="@Densities" Change="@(async value => await UpdateDensityAsync((UiDensity)value))" Style="width: 100%" /></label>
-                    <label>Log font size <RadzenDropDown TValue="LogFontSize" Value="@State.Settings.LogFontSize" Data="@FontSizes" Change="@(async value => await UpdateLogFontSizeAsync((LogFontSize)value))" Style="width: 100%" /></label>
-                    <label>Menu alignment <RadzenDropDown TValue="SettingsMenuAlignment" Value="@State.Settings.SettingsMenuAlignment" Data="@MenuAlignments" Change="@(async value => await UpdateMenuAlignmentAsync((SettingsMenuAlignment)value))" Style="width: 100%" /></label>
-                </RadzenStack>
-                </section>
+                <RadzenPanel Text="Appearance" class="settings-panel">
+                    <RadzenStack Gap=".75rem">
+                        <RadzenFormField Text="Theme" AllowFloatingLabel="false">
+                            <RadzenDropDown TValue="string" Value="@State.Settings.Theme" Data="@Themes" Change="@(async value => await UpdateThemeAsync((string)value))" Style="width: 100%" />
+                        </RadzenFormField>
+                        <RadzenFormField Text="UI spacing" AllowFloatingLabel="false">
+                            <RadzenDropDown TValue="UiDensity" Value="@State.Settings.Density" Data="@Densities" Change="@(async value => await UpdateDensityAsync((UiDensity)value))" Style="width: 100%" />
+                        </RadzenFormField>
+                        <RadzenFormField Text="Log font size" AllowFloatingLabel="false">
+                            <RadzenDropDown TValue="LogFontSize" Value="@State.Settings.LogFontSize" Data="@FontSizes" Change="@(async value => await UpdateLogFontSizeAsync((LogFontSize)value))" Style="width: 100%" />
+                        </RadzenFormField>
+                        <RadzenFormField Text="Menu alignment" AllowFloatingLabel="false">
+                            <RadzenDropDown TValue="SettingsMenuAlignment" Value="@State.Settings.SettingsMenuAlignment" Data="@MenuAlignments" Change="@(async value => await UpdateMenuAlignmentAsync((SettingsMenuAlignment)value))" Style="width: 100%" />
+                        </RadzenFormField>
+                    </RadzenStack>
+                </RadzenPanel>
             }
         </div>
     </RadzenSidebar>
@@ -189,6 +192,8 @@
     private string _newLabel = string.Empty;
     private string _newLabelColor = "#f59e0b";
     private string _newExclusion = string.Empty;
+
+    private string FileCountText => $"{State.Files.Count} file(s)";
 
     protected override async Task OnInitializedAsync()
     {
