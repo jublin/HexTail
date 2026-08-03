@@ -31,9 +31,11 @@
                 <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" AriaLabel="Close settings" Click="ToggleSettings" />
             </RadzenStack>
             <RadzenPanelMenu class="settings-menu" Multiple="false" Click="OnSettingsMenuClick" AriaLabel="Settings sections">
-                <RadzenPanelMenuItem Text="Global labels" Value="@SettingsSection.Labels" Icon="label" Selected="@(_settingsSection == SettingsSection.Labels)" />
-                <RadzenPanelMenuItem Text="Global exclusions" Value="@SettingsSection.Exclusions" Icon="visibility_off" Selected="@(_settingsSection == SettingsSection.Exclusions)" />
-                <RadzenPanelMenuItem Text="Appearance" Value="@SettingsSection.Appearance" Icon="palette" Selected="@(_settingsSection == SettingsSection.Appearance)" />
+                <RadzenPanelMenuItem Text="Settings" Icon="settings" Expanded="true">
+                    <RadzenPanelMenuItem Text="Global labels" Value="@SettingsSection.Labels" Icon="label" Selected="@(_settingsSection == SettingsSection.Labels)" />
+                    <RadzenPanelMenuItem Text="Global exclusions" Value="@SettingsSection.Exclusions" Icon="visibility_off" Selected="@(_settingsSection == SettingsSection.Exclusions)" />
+                    <RadzenPanelMenuItem Text="Appearance" Value="@SettingsSection.Appearance" Icon="palette" Selected="@(_settingsSection == SettingsSection.Appearance)" />
+                </RadzenPanelMenuItem>
             </RadzenPanelMenu>
 
             @if (_settingsSection == SettingsSection.Labels)
