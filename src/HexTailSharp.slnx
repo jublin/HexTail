@@ -1,0 +1,18 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Folder Name="/docs/" />
+  <Folder Name="/docs/plans/">
+    <File Path="../docs/plans/2026-07-22-hextail.md" />
+    <File Path="../docs/plans/2026-07-26-search-toggles.md" />
+  </Folder>
+  <Folder Name="/docs/specs/">
+    <File Path="../docs/specs/2026-07-22-log-tail-app-design.md" />
+    <File Path="../docs/specs/2026-07-26-search-toggles-design.md" />
+  </Folder>
+  <Project Path="HexTailSharp.Tests/HexTailSharp.Tests.csproj" />
+  <Project Path="HexTailSharp.Tool/HexTailSharp.Tool.csproj" />
+  <Project Path="HexTailSharp/HexTailSharp.csproj" />
+</Solution>

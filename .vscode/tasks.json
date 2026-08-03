@@ -5,7 +5,7 @@
       "label": "dotnet: build",
       "type": "process",
       "command": "dotnet",
-      "args": ["build", "${workspaceFolder}/src/HexTailSharp.sln"],
+      "args": ["build", "${workspaceFolder}/src/HexTailSharp.slnx"],
       "group": {
         "kind": "build",
         "isDefault": true
