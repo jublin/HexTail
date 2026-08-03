@@ -311,7 +311,11 @@
 
     private Task UpdateMenuAlignmentAsync(SettingsMenuAlignment alignment) => UpdateSettingsAsync(State.Settings with { SettingsMenuAlignment = alignment });
 
-    private Task UpdateSettingsAsync(AppSettings settings) => State.UpdateSettingsAsync(settings).AsTask();
+    private async Task UpdateSettingsAsync(AppSettings settings)
+    {
+        await State.UpdateSettingsAsync(settings);
+        await RefreshViewsAsync();
+    }
 
     private async Task DrainLoopAsync()
     {
