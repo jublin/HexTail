@@ -212,6 +212,7 @@
     private string? _fileError;
     private int _activeView;
     private bool _settingsOpen;
+    private bool _followAfterRender;
     private SettingsItem _settingsItem = SettingsItem.Labels;
     private string _newLabel = string.Empty;
     private string _newLabelColor = "#f59e0b";
@@ -221,7 +222,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        State.Changed += OnStateChanged;
         await State.RestoreAsync();
         ApplyTheme(State.Settings.Theme);
         _pollTask = DrainLoopAsync();
@@ -319,20 +319,20 @@
         try
         {
             while (await timer.WaitForNextTickAsync(_stop.Token))
-                State.DrainTailerEvents();
+                if (State.DrainTailerEvents())
+                    await InvokeAsync(() => RefreshViewsAsync(followTail: true));
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested)
         {
         }
     }
 
-    private void OnStateChanged() => _ = InvokeAsync(RefreshViewsAsync);
-
-    private async Task RefreshViewsAsync()
+    private async Task RefreshViewsAsync(bool followTail = false)
     {
         foreach (var virtualizer in _virtualizers.Values.ToList())
             await virtualizer.RefreshDataAsync();
 
+        _followAfterRender |= followTail;
         StateHasChanged();
     }
 
@@ -368,11 +368,15 @@
         else
             State.AppendBrowserLines(fileId, lines);
 
-        await FollowTailAsync(fileId);
+        await RefreshViewsAsync(followTail: true);
     }
 
     [JSInvokable]
-    public void OnBrowserFileTruncated(string fileId) => State.TruncateBrowserFile(fileId);
+    public async Task OnBrowserFileTruncated(string fileId)
+    {
+        State.TruncateBrowserFile(fileId);
+        await RefreshViewsAsync();
+    }
 
     private async Task CloseFileAsync(FileTabState file)
     {
@@ -587,9 +591,18 @@
         _ => 24f,
     };
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_followAfterRender)
+            return;
+
+        _followAfterRender = false;
+        if (State.SelectedFile is { } file)
+            await FollowTailAsync(file.Id);
+    }
+
     public async ValueTask DisposeAsync()
     {
-        State.Changed -= OnStateChanged;
         _stop.Cancel();
         if (_pollTask is not null)
             await _pollTask;
