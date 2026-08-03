@@ -31,25 +31,23 @@
                 <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" AriaLabel="Close settings" Click="ToggleSettings" />
             </RadzenStack>
             <RadzenPanelMenu class="settings-menu" Multiple="false" Click="OnSettingsMenuClick" AriaLabel="Settings sections">
-                <RadzenPanelMenuItem Text="Global labels" Value="@SettingsSection.Labels" Icon="label" Expanded="@(_settingsSection == SettingsSection.Labels)" Selected="@(_settingsSection == SettingsSection.Labels)">
-                    <RadzenPanelMenuItem Text="Manage labels" Value="@SettingsSection.Labels" Icon="edit" />
-                    <RadzenPanelMenuItem Text="Add label" Value="@SettingsSection.Labels" Icon="add" />
+                <RadzenPanelMenuItem Text="Global labels" Value="@SettingsItem.Labels" Icon="label" Expanded="@(_settingsItem == SettingsItem.Labels)" Selected="@(_settingsItem == SettingsItem.Labels)">
+                    <RadzenPanelMenuItem Text="Labels" Value="@SettingsItem.Labels" />
                 </RadzenPanelMenuItem>
-                <RadzenPanelMenuItem Text="Global exclusions" Value="@SettingsSection.Exclusions" Icon="visibility_off" Expanded="@(_settingsSection == SettingsSection.Exclusions)" Selected="@(_settingsSection == SettingsSection.Exclusions)">
-                    <RadzenPanelMenuItem Text="Manage exclusions" Value="@SettingsSection.Exclusions" Icon="edit" />
-                    <RadzenPanelMenuItem Text="Add exclusion" Value="@SettingsSection.Exclusions" Icon="add" />
+                <RadzenPanelMenuItem Text="Global exclusions" Value="@SettingsItem.Exclusions" Icon="visibility_off" Expanded="@(_settingsItem == SettingsItem.Exclusions)" Selected="@(_settingsItem == SettingsItem.Exclusions)">
+                    <RadzenPanelMenuItem Text="Exclusions" Value="@SettingsItem.Exclusions" />
                 </RadzenPanelMenuItem>
-                <RadzenPanelMenuItem Text="Appearance" Value="@SettingsSection.Appearance" Icon="palette" Expanded="@(_settingsSection == SettingsSection.Appearance)" Selected="@(_settingsSection == SettingsSection.Appearance)">
-                    <RadzenPanelMenuItem Text="Theme" Value="@SettingsSection.Appearance" Icon="contrast" />
-                    <RadzenPanelMenuItem Text="UI spacing" Value="@SettingsSection.Appearance" Icon="spacing" />
-                    <RadzenPanelMenuItem Text="Log font size" Value="@SettingsSection.Appearance" Icon="format_size" />
-                    <RadzenPanelMenuItem Text="Menu alignment" Value="@SettingsSection.Appearance" Icon="format_align_left" />
+                <RadzenPanelMenuItem Text="Appearance" Value="@SettingsItem.Theme" Icon="palette" Expanded="@IsAppearanceSetting" Selected="@IsAppearanceSetting">
+                    <RadzenPanelMenuItem Text="Theme" Value="@SettingsItem.Theme" />
+                    <RadzenPanelMenuItem Text="UI spacing" Value="@SettingsItem.Density" />
+                    <RadzenPanelMenuItem Text="Log font size" Value="@SettingsItem.FontSize" />
+                    <RadzenPanelMenuItem Text="Menu alignment" Value="@SettingsItem.MenuAlignment" />
                 </RadzenPanelMenuItem>
             </RadzenPanelMenu>
 
-            @if (_settingsSection == SettingsSection.Labels)
+            @if (_settingsItem == SettingsItem.Labels)
             {
-                <RadzenPanel Text="Global labels" class="settings-panel">
+                <RadzenPanel Text="Labels" class="settings-panel">
                     <RadzenStack Gap=".5rem">
                         <RadzenLabel class="settings-help" Text="Highlight case-insensitive text across every log view." />
                     @for (var index = 0; index < State.Settings.GlobalLabels.Count; index++)
@@ -70,9 +68,9 @@
                     </RadzenStack>
                 </RadzenPanel>
             }
-            else if (_settingsSection == SettingsSection.Exclusions)
+            else if (_settingsItem == SettingsItem.Exclusions)
             {
-                <RadzenPanel Text="Global exclusions" class="settings-panel">
+                <RadzenPanel Text="Exclusions" class="settings-panel">
                     <RadzenStack Gap=".5rem">
                     <RadzenLabel class="settings-help" Text="Matching lines stay buffered but are hidden from all log and context views." />
                     @for (var index = 0; index < State.Settings.GlobalExcludeLabels.Count; index++)
@@ -91,23 +89,36 @@
                     </RadzenStack>
                 </RadzenPanel>
             }
+            else if (_settingsItem == SettingsItem.Theme)
+            {
+                <RadzenPanel Text="Theme" class="settings-panel">
+                    <RadzenFormField Text="Theme" AllowFloatingLabel="false">
+                        <RadzenDropDown TValue="string" Value="@State.Settings.Theme" Data="@Themes" Change="@(async value => await UpdateThemeAsync((string)value))" Style="width: 100%" />
+                    </RadzenFormField>
+                </RadzenPanel>
+            }
+            else if (_settingsItem == SettingsItem.Density)
+            {
+                <RadzenPanel Text="UI spacing" class="settings-panel">
+                    <RadzenFormField Text="UI spacing" AllowFloatingLabel="false">
+                        <RadzenDropDown TValue="UiDensity" Value="@State.Settings.Density" Data="@Densities" Change="@(async value => await UpdateDensityAsync((UiDensity)value))" Style="width: 100%" />
+                    </RadzenFormField>
+                </RadzenPanel>
+            }
+            else if (_settingsItem == SettingsItem.FontSize)
+            {
+                <RadzenPanel Text="Log font size" class="settings-panel">
+                    <RadzenFormField Text="Log font size" AllowFloatingLabel="false">
+                        <RadzenDropDown TValue="LogFontSize" Value="@State.Settings.LogFontSize" Data="@FontSizes" Change="@(async value => await UpdateLogFontSizeAsync((LogFontSize)value))" Style="width: 100%" />
+                    </RadzenFormField>
+                </RadzenPanel>
+            }
             else
             {
-                <RadzenPanel Text="Appearance" class="settings-panel">
-                    <RadzenStack Gap=".75rem">
-                        <RadzenFormField Text="Theme" AllowFloatingLabel="false">
-                            <RadzenDropDown TValue="string" Value="@State.Settings.Theme" Data="@Themes" Change="@(async value => await UpdateThemeAsync((string)value))" Style="width: 100%" />
-                        </RadzenFormField>
-                        <RadzenFormField Text="UI spacing" AllowFloatingLabel="false">
-                            <RadzenDropDown TValue="UiDensity" Value="@State.Settings.Density" Data="@Densities" Change="@(async value => await UpdateDensityAsync((UiDensity)value))" Style="width: 100%" />
-                        </RadzenFormField>
-                        <RadzenFormField Text="Log font size" AllowFloatingLabel="false">
-                            <RadzenDropDown TValue="LogFontSize" Value="@State.Settings.LogFontSize" Data="@FontSizes" Change="@(async value => await UpdateLogFontSizeAsync((LogFontSize)value))" Style="width: 100%" />
-                        </RadzenFormField>
-                        <RadzenFormField Text="Menu alignment" AllowFloatingLabel="false">
-                            <RadzenDropDown TValue="SettingsMenuAlignment" Value="@State.Settings.SettingsMenuAlignment" Data="@MenuAlignments" Change="@(async value => await UpdateMenuAlignmentAsync((SettingsMenuAlignment)value))" Style="width: 100%" />
-                        </RadzenFormField>
-                    </RadzenStack>
+                <RadzenPanel Text="Menu alignment" class="settings-panel">
+                    <RadzenFormField Text="Menu alignment" AllowFloatingLabel="false">
+                        <RadzenDropDown TValue="SettingsMenuAlignment" Value="@State.Settings.SettingsMenuAlignment" Data="@MenuAlignments" Change="@(async value => await UpdateMenuAlignmentAsync((SettingsMenuAlignment)value))" Style="width: 100%" />
+                    </RadzenFormField>
                 </RadzenPanel>
             }
         </div>
@@ -201,7 +212,7 @@
     private string? _fileError;
     private int _activeView;
     private bool _settingsOpen;
-    private SettingsSection _settingsSection = SettingsSection.Labels;
+    private SettingsItem _settingsItem = SettingsItem.Labels;
     private string _newLabel = string.Empty;
     private string _newLabelColor = "#f59e0b";
     private string _newExclusion = string.Empty;
@@ -222,17 +233,22 @@
         ? SidebarPosition.Left
         : SidebarPosition.Right;
 
+    private bool IsAppearanceSetting => _settingsItem is SettingsItem.Theme or SettingsItem.Density or SettingsItem.FontSize or SettingsItem.MenuAlignment;
+
     private void OnSettingsMenuClick(MenuItemEventArgs args)
     {
-        if (args.Value is SettingsSection section)
-            _settingsSection = section;
+        if (args.Value is SettingsItem item)
+            _settingsItem = item;
     }
 
-    private enum SettingsSection
+    private enum SettingsItem
     {
         Labels,
         Exclusions,
-        Appearance,
+        Theme,
+        Density,
+        FontSize,
+        MenuAlignment,
     }
 
     private async Task AddLabelAsync()
