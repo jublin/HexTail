@@ -117,6 +117,17 @@ public sealed class AppStateTests
     }
 
     [Fact]
+    public async Task DrainTailerEvents_WithoutEventsDoesNotNotify()
+    {
+        await using var state = new AppState(NewTailers(), new MemoryPersistence());
+        var notifications = 0;
+        state.Changed += () => notifications++;
+
+        Assert.False(state.DrainTailerEvents());
+        Assert.Equal(0, notifications);
+    }
+
+    [Fact]
     public void LogParserSelector_UsesLogfmtOnlyForLogfmtExtension()
     {
         Assert.IsType<LogfmtParser>(LogParserSelector.ForPath("app.logfmt"));

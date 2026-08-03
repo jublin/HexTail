@@ -178,6 +178,8 @@
     private static readonly LogFontSize[] FontSizes = [LogFontSize.Small, LogFontSize.Medium, LogFontSize.Large, LogFontSize.ExtraLarge];
     private static readonly SettingsMenuAlignment[] MenuAlignments = [SettingsMenuAlignment.Left, SettingsMenuAlignment.Right];
     private readonly CancellationTokenSource _stop = new();
+    private readonly Dictionary<string, ItemsProviderDelegate<Line>> _lineProviders = [];
+    private readonly Dictionary<string, Virtualize<Line>> _virtualizers = [];
     private DotNetObjectReference<Home>? _browserReference;
     private Task? _pollTask;
     private string _query = string.Empty;
@@ -288,17 +290,22 @@
         try
         {
             while (await timer.WaitForNextTickAsync(_stop.Token))
-            {
                 State.DrainTailerEvents();
-                await InvokeAsync(StateHasChanged);
-            }
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested)
         {
         }
     }
 
-    private void OnStateChanged() => _ = InvokeAsync(StateHasChanged);
+    private void OnStateChanged() => _ = InvokeAsync(RefreshViewsAsync);
+
+    private async Task RefreshViewsAsync()
+    {
+        foreach (var virtualizer in _virtualizers.Values.ToList())
+            await virtualizer.RefreshDataAsync();
+
+        StateHasChanged();
+    }
 
     private void SelectFile(FileTabState file)
     {
@@ -341,6 +348,13 @@
     private async Task CloseFileAsync(FileTabState file)
     {
         await State.CloseFileAsync(file);
+        var viewPrefix = $"log-view-{file.Id}-";
+        foreach (var viewId in _virtualizers.Keys.Where(key => key.StartsWith(viewPrefix, StringComparison.Ordinal)).ToList())
+        {
+            _virtualizers.Remove(viewId);
+            _lineProviders.Remove(viewId);
+        }
+
         if (file.IsSnapshot)
             await JS.InvokeVoidAsync("hexTailFilePicker.stop", file.Id);
     }
@@ -376,12 +390,17 @@
     private RenderFragment RenderView(FileTabState file, Search? search) => builder =>
     {
         var sequence = 0;
+        var viewId = LogViewId(file, search);
+        if (!_lineProviders.TryGetValue(viewId, out var provider))
+            _lineProviders[viewId] = provider = request => ProvideLines(file, search, request);
+
         builder.OpenElement(sequence++, "div");
         builder.AddAttribute(sequence++, "class", $"log-view density-{State.Settings.Density.ToString().ToLowerInvariant()} font-{State.Settings.LogFontSize.ToString().ToLowerInvariant()}");
-        builder.AddAttribute(sequence++, "id", LogViewId(file, search));
+        builder.AddAttribute(sequence++, "id", viewId);
         builder.AddAttribute(sequence++, "role", "log");
+        builder.SetKey(viewId);
         builder.OpenComponent<Virtualize<Line>>(sequence++);
-        builder.AddAttribute(sequence++, "Items", LinesFor(file, search));
+        builder.AddAttribute(sequence++, "ItemsProvider", provider);
         builder.AddAttribute(sequence++, "ItemSize", LogItemSize(State.Settings.LogFontSize));
         builder.AddAttribute(sequence++, "ChildContent", (RenderFragment<Line>)(line => rowBuilder =>
         {
@@ -403,6 +422,7 @@
             }
             rowBuilder.CloseElement();
         }));
+        builder.AddComponentReferenceCapture(sequence++, component => _virtualizers[viewId] = (Virtualize<Line>)component);
         builder.CloseComponent();
         builder.CloseElement();
         if (file.ShowContext)
@@ -442,8 +462,16 @@
         }
     };
 
-    private ICollection<Line> LinesFor(FileTabState file, Search? search) =>
-        (search is null
+    private ValueTask<ItemsProviderResult<Line>> ProvideLines(FileTabState file, Search? search, ItemsProviderRequest request)
+    {
+        var lines = LinesFor(file, search);
+        return ValueTask.FromResult(new ItemsProviderResult<Line>(lines.Skip(request.StartIndex).Take(request.Count), lines.Count));
+    }
+
+    private IReadOnlyList<Line> LinesFor(FileTabState file, Search? search) =>
+        State.Settings.GlobalExcludeLabels.Count == 0 && search is null
+            ? file.Buffer.Lines
+            : (search is null
             ? file.Buffer.Lines as ICollection<Line> ?? file.Buffer.Lines.ToList()
             : search.Results.Where(index => index >= 0 && index < file.Buffer.Count).Select(index => file.Buffer[index]).ToList())
         .Where(line => !State.Settings.Excludes(line.Raw))

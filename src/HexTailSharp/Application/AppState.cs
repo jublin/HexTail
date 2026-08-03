@@ -201,8 +201,9 @@ public sealed class AppState : IAsyncDisposable
         await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public void DrainTailerEvents()
+    public bool DrainTailerEvents()
     {
+        var changed = false;
         while (_tailers.Events.TryRead(out var tailerEvent))
         {
             var tab = _files.FirstOrDefault(file => file.Id == tailerEvent.FileId);
@@ -221,9 +222,14 @@ public sealed class AppState : IAsyncDisposable
                     tab.Buffer.Clear();
                     break;
             }
+
+            changed = true;
         }
 
-        NotifyChanged();
+        if (changed)
+            NotifyChanged();
+
+        return changed;
     }
 
     public async ValueTask SaveAsync(CancellationToken cancellationToken = default)
