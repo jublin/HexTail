@@ -31,10 +31,19 @@
                 <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" AriaLabel="Close settings" Click="ToggleSettings" />
             </RadzenStack>
             <RadzenPanelMenu class="settings-menu" Multiple="false" Click="OnSettingsMenuClick" AriaLabel="Settings sections">
-                <RadzenPanelMenuItem Text="Settings" Icon="settings" Expanded="true">
-                    <RadzenPanelMenuItem Text="Global labels" Value="@SettingsSection.Labels" Icon="label" Selected="@(_settingsSection == SettingsSection.Labels)" />
-                    <RadzenPanelMenuItem Text="Global exclusions" Value="@SettingsSection.Exclusions" Icon="visibility_off" Selected="@(_settingsSection == SettingsSection.Exclusions)" />
-                    <RadzenPanelMenuItem Text="Appearance" Value="@SettingsSection.Appearance" Icon="palette" Selected="@(_settingsSection == SettingsSection.Appearance)" />
+                <RadzenPanelMenuItem Text="Global labels" Value="@SettingsSection.Labels" Icon="label" Expanded="@(_settingsSection == SettingsSection.Labels)" Selected="@(_settingsSection == SettingsSection.Labels)">
+                    <RadzenPanelMenuItem Text="Manage labels" Value="@SettingsSection.Labels" Icon="edit" />
+                    <RadzenPanelMenuItem Text="Add label" Value="@SettingsSection.Labels" Icon="add" />
+                </RadzenPanelMenuItem>
+                <RadzenPanelMenuItem Text="Global exclusions" Value="@SettingsSection.Exclusions" Icon="visibility_off" Expanded="@(_settingsSection == SettingsSection.Exclusions)" Selected="@(_settingsSection == SettingsSection.Exclusions)">
+                    <RadzenPanelMenuItem Text="Manage exclusions" Value="@SettingsSection.Exclusions" Icon="edit" />
+                    <RadzenPanelMenuItem Text="Add exclusion" Value="@SettingsSection.Exclusions" Icon="add" />
+                </RadzenPanelMenuItem>
+                <RadzenPanelMenuItem Text="Appearance" Value="@SettingsSection.Appearance" Icon="palette" Expanded="@(_settingsSection == SettingsSection.Appearance)" Selected="@(_settingsSection == SettingsSection.Appearance)">
+                    <RadzenPanelMenuItem Text="Theme" Value="@SettingsSection.Appearance" Icon="contrast" />
+                    <RadzenPanelMenuItem Text="UI spacing" Value="@SettingsSection.Appearance" Icon="spacing" />
+                    <RadzenPanelMenuItem Text="Log font size" Value="@SettingsSection.Appearance" Icon="format_size" />
+                    <RadzenPanelMenuItem Text="Menu alignment" Value="@SettingsSection.Appearance" Icon="format_align_left" />
                 </RadzenPanelMenuItem>
             </RadzenPanelMenu>
 
