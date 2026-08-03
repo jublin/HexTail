@@ -63,6 +63,25 @@ public sealed record AppSettings
     }
 }
 
+public static class ThemeCatalog
+{
+    public static readonly string[] Names =
+    [
+        "dark", "dark-wcag",
+        "default", "default-wcag",
+        "humanistic", "humanistic-dark", "humanistic-dark-wcag", "humanistic-wcag",
+        "material", "material-dark", "material-dark-wcag", "material-wcag",
+        "software", "software-dark", "software-dark-wcag", "software-wcag",
+        "standard", "standard-dark", "standard-dark-wcag", "standard-wcag",
+    ];
+
+    public static bool Contains(string theme) => Names.Contains(theme, StringComparer.Ordinal);
+
+    public static bool IsWcag(string theme) => theme.EndsWith("-wcag", StringComparison.Ordinal);
+
+    public static string BaseName(string theme) => IsWcag(theme) ? theme[..^5] : theme;
+}
+
 public sealed class GlobalLabel
 {
     public string Text { get; init; } = string.Empty;

@@ -195,7 +195,7 @@
 
 @code {
     private static readonly MatchMode[] MatchModes = [MatchMode.Literal, MatchMode.Regex];
-    private static readonly string[] Themes = ["material-dark", "material"];
+    private static readonly string[] Themes = ThemeCatalog.Names;
     private static readonly UiDensity[] Densities = [UiDensity.Comfortable, UiDensity.Cozy, UiDensity.Compact];
     private static readonly LogFontSize[] FontSizes = [LogFontSize.Small, LogFontSize.Medium, LogFontSize.Large, LogFontSize.ExtraLarge];
     private static readonly SettingsMenuAlignment[] MenuAlignments = [SettingsMenuAlignment.Left, SettingsMenuAlignment.Right];
@@ -223,7 +223,7 @@
     {
         State.Changed += OnStateChanged;
         await State.RestoreAsync();
-        ThemeService.SetTheme(State.Settings.Theme);
+        ApplyTheme(State.Settings.Theme);
         _pollTask = DrainLoopAsync();
     }
 
@@ -300,8 +300,10 @@
     private async Task UpdateThemeAsync(string theme)
     {
         await UpdateSettingsAsync(State.Settings with { Theme = theme });
-        ThemeService.SetTheme(State.Settings.Theme);
+        ApplyTheme(State.Settings.Theme);
     }
+
+    private void ApplyTheme(string theme) => ThemeService.SetTheme(ThemeCatalog.BaseName(theme), ThemeCatalog.IsWcag(theme));
 
     private Task UpdateDensityAsync(UiDensity density) => UpdateSettingsAsync(State.Settings with { Density = density });
 

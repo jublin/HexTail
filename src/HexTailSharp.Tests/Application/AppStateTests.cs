@@ -117,6 +117,24 @@ public sealed class AppStateTests
     }
 
     [Fact]
+    public void ThemeCatalog_ListsAllRadzenThemes()
+    {
+        Assert.Equal(
+        [
+            "dark", "dark-wcag",
+            "default", "default-wcag",
+            "humanistic", "humanistic-dark", "humanistic-dark-wcag", "humanistic-wcag",
+            "material", "material-dark", "material-dark-wcag", "material-wcag",
+            "software", "software-dark", "software-dark-wcag", "software-wcag",
+            "standard", "standard-dark", "standard-dark-wcag", "standard-wcag",
+        ],
+        ThemeCatalog.Names);
+        Assert.Equal("material-dark", ThemeCatalog.BaseName("material-dark-wcag"));
+        Assert.True(ThemeCatalog.IsWcag("material-dark-wcag"));
+        Assert.False(ThemeCatalog.IsWcag("material-dark"));
+    }
+
+    [Fact]
     public async Task DrainTailerEvents_WithoutEventsDoesNotNotify()
     {
         await using var state = new AppState(NewTailers(), new MemoryPersistence());
