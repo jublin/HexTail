@@ -65,7 +65,16 @@ public partial class MainWindow : Window
         await _state.RestoreAsync();
         ApplyWindowState();
         foreach (var path in _startupPaths.Where(path => !string.IsNullOrWhiteSpace(path)))
-            await _state.OpenFileAsync(path);
+        {
+            try
+            {
+                await _state.OpenFileAsync(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                ShowFileError($"Could not open {path}: {ex.Message}");
+            }
+        }
         RefreshUi();
     }
 
@@ -217,7 +226,7 @@ public partial class MainWindow : Window
         TextBlock? contextEmpty = null;
         if (file.ShowContext)
         {
-            body.RowDefinitions = new RowDefinitions("*,4,180");
+            body.RowDefinitions = new RowDefinitions($"*,4,{Math.Max(120, _state.Window.ContextPaneSize)}");
             var splitter = new GridSplitter
             {
                 Background = Brush("#334155"),
@@ -225,6 +234,7 @@ public partial class MainWindow : Window
                 ResizeBehavior = GridResizeBehavior.PreviousAndNext,
                 ShowsPreview = false,
             };
+            splitter.DragCompleted += (_, _) => SaveContextPaneSize(body);
             Grid.SetRow(splitter, 1);
             body.Children.Add(splitter);
 
@@ -717,14 +727,9 @@ public partial class MainWindow : Window
                 AllowMultiple = true,
                 Title = "Open log files",
             });
-            foreach (var file in files)
-            {
-                if (file.Path.IsFile)
-                    await _state.OpenFileAsync(file.Path.LocalPath);
-                file.Dispose();
-            }
+            await OpenStorageFilesAsync(files);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException)
         {
             ShowFileError($"Could not pick files: {ex.Message}");
         }
@@ -741,12 +746,45 @@ public partial class MainWindow : Window
     {
         if (e.DataTransfer.TryGetFiles() is not { } files)
             return;
+        await OpenStorageFilesAsync(files);
+    }
+
+    private async Task OpenStorageFilesAsync(IEnumerable<IStorageItem> files)
+    {
         foreach (var file in files)
         {
-            if (file.Path.IsFile)
-                await _state.OpenFileAsync(file.Path.LocalPath);
-            file.Dispose();
+            try
+            {
+                if (file.Path.IsFile)
+                    await _state.OpenFileAsync(file.Path.LocalPath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                ShowFileError($"Could not open {file.Name}: {ex.Message}");
+            }
+            finally
+            {
+                file.Dispose();
+            }
         }
+    }
+
+    private void SaveContextPaneSize(Grid body)
+    {
+        if (body.RowDefinitions.Count < 3)
+            return;
+
+        var size = Math.Max(120, (int)Math.Round(body.RowDefinitions[2].ActualHeight));
+        _state.SetWindowState(new AppWindowState
+        {
+            Width = _state.Window.Width,
+            Height = _state.Window.Height,
+            X = _state.Window.X,
+            Y = _state.Window.Y,
+            ContextPaneSize = size,
+            VerticalFileTabs = _state.Window.VerticalFileTabs,
+        });
+        _ = _state.SaveAsync();
     }
 
     private void ShowFileError(string message)
