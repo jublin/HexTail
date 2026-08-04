@@ -374,8 +374,6 @@ public partial class MainWindow : Window
 
     private void AddHighlightedRuns(TextBlock target, FileTabState file, Line line)
     {
-        var inlines = new InlineCollection();
-        target.Inlines = inlines;
         var ranges = file.Searches
             .SelectMany(search => search.GetHighlights(line).Select(range => (range.Start, range.Length, search.Color)))
             .Concat(_state.Settings.GetLabelHighlights(line.Raw).Select(range => (range.Start, range.Length, range.Color)))
@@ -386,10 +384,11 @@ public partial class MainWindow : Window
 
         if (ranges.Count == 0)
         {
-            inlines.Add(new Run { Text = line.Raw });
+            target.Text = line.Raw;
             return;
         }
 
+        var inlines = new InlineCollection();
         var cursor = 0;
         foreach (var range in ranges)
         {
@@ -406,6 +405,7 @@ public partial class MainWindow : Window
 
         if (cursor < line.Raw.Length)
             inlines.Add(new Run { Text = line.Raw[cursor..] });
+        target.Inlines = inlines;
     }
 
     private void AttachScrollHandler(FileTabState file, Search? search, ListBox list)
@@ -426,12 +426,17 @@ public partial class MainWindow : Window
         foreach (var view in _views)
         {
             var selected = view.List.SelectedItem as Line;
+            view.List.ItemsSource = null;
             view.List.ItemsSource = LinesFor(view.File, view.Search);
             if (selected is not null && view.List.ItemsSource is IEnumerable<Line> lines && lines.Contains(selected))
                 view.List.SelectedItem = selected;
             UpdateContext(view);
-            if (followTail && ShouldFollow(view) && view.List.ItemCount > 0)
-                Dispatcher.UIThread.Post(() => view.List.ScrollIntoView(view.List.ItemCount - 1), DispatcherPriority.Background);
+            if (followTail && ShouldFollow(view))
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (ShouldFollow(view) && view.List.ItemCount > 0)
+                        view.List.ScrollIntoView(view.List.ItemCount - 1);
+                }, DispatcherPriority.Background);
         }
 
         if (_state.SelectedFile is { } selectedFile)
