@@ -135,6 +135,12 @@ public sealed class AppState : IAsyncDisposable
         await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public void SetWindowState(AppWindowState window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        Window = window;
+    }
+
     public bool DrainTailerEvents()
     {
         var changed = false;
@@ -233,15 +239,6 @@ public sealed class AppState : IAsyncDisposable
 
     private static string NormalizeColor(string color) =>
         color.Length is 4 or 7 && color[0] == '#' && color[1..].All(Uri.IsHexDigit) ? color : "#f59e0b";
-}
-
-internal sealed class SnapshotFileTailer(string fileId, string path) : IFileTailer
-{
-    public string FileId { get; } = fileId;
-    public string Path { get; } = path;
-    public Task Completion { get; } = Task.CompletedTask;
-
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
 public static class LogParserSelector
