@@ -20,7 +20,7 @@ public partial class App : Avalonia.Application
             builder.WithDefaultCultureInfo(CultureInfo.CurrentUICulture);
             builder.WithInitialTheme(
                 IThemeManager.DEFAULT_THEME_ID,
-                new ThemeConfigBuilder().WithAlgorithms(["dark"]).Build()
+                new ThemeConfigBuilder().WithAlgorithms(["Default"]).Build()
             );
             builder.UseAlibabaSansFont();
             builder.UseDesktopControls();

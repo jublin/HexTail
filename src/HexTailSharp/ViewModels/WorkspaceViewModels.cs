@@ -6,7 +6,6 @@ using System.Reactive.Linq;
 using AtomUI.Controls;
 using AtomUI.Desktop.Controls;
 using AtomUI.Theme;
-using AtomUI.Theme.Configuration;
 using Avalonia;
 using Avalonia.Media;
 using HexTailSharp.Application;
@@ -181,6 +180,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         try
         {
             await _state.RestoreAsync();
+            await ApplyThemeAsync(_state.Settings.Theme);
             foreach (var path in _startupPaths.Where(path => !string.IsNullOrWhiteSpace(path)))
                 await TryOpenPathAsync(path);
 
@@ -214,9 +214,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         try
         {
             await _state.UpdateSettingsAsync(settings);
-            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
-                ApplyThemeAsync(settings.Theme)
-            );
+            if (Avalonia.Application.Current is not null)
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                    ApplyThemeAsync(settings.Theme)
+                );
         }
         catch (Exception ex)
         {
@@ -405,11 +406,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         var manager = application.GetThemeManager();
         if (manager is not null)
         {
-            var algorithms = theme == "dark" ? new[] { "default", "dark" } : new[] { "default" };
             var result = await manager.ApplyThemeAsync(
                 new ThemeRequest(
                     IThemeManager.DEFAULT_THEME_ID,
-                    new ThemeConfigBuilder().WithAlgorithms(algorithms).Build(),
+                    null,
                     ThemeTransitionReason.UserRequest
                 )
             );
@@ -417,11 +417,13 @@ public sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 throw new InvalidOperationException("AtomUI could not apply the selected theme.");
         }
 
-        application.RequestedThemeVariant =
-            theme == "light"
-                ? Avalonia.Styling.ThemeVariant.Light
-                : Avalonia.Styling.ThemeVariant.Dark;
-        var light = theme == "light";
+        application.RequestedThemeVariant = theme switch
+        {
+            "light" => Avalonia.Styling.ThemeVariant.Light,
+            "dark" => Avalonia.Styling.ThemeVariant.Dark,
+            _ => null,
+        };
+        var light = application.ActualThemeVariant != Avalonia.Styling.ThemeVariant.Dark;
         application.Resources["SurfaceBrush"] = new SolidColorBrush(
             Color.Parse(light ? "#F8FAFC" : "#111827")
         );
