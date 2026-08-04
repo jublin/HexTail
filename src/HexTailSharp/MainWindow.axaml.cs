@@ -284,18 +284,7 @@ public partial class MainWindow : Window
                 Background = Brush("#172033"),
                 BorderThickness = new Thickness(0),
                 ItemsSource = contextItems,
-                ItemTemplate = new FuncDataTemplate<Line>((line, _) => line is null
-                    ? new Border()
-                    : new TextBlock
-                    {
-                        Text = line.Raw,
-                        FontFamily = LogFont,
-                        FontSize = ToLogFontSize(_state.Settings.LogFontSize),
-                        Foreground = Brush("#CBD5E1"),
-                        Padding = new Thickness(12, 4),
-                        TextWrapping = TextWrapping.NoWrap,
-                        TextTrimming = TextTrimming.CharacterEllipsis,
-                    }, supportsRecycling: false),
+                ItemTemplate = new FuncDataTemplate<Line>((line, _) => BuildContextRow(file, line), supportsRecycling: false),
                 ItemsPanel = new FuncTemplate<Panel?>(() => new VirtualizingStackPanel()),
             };
             Grid.SetRow(contextList, 2);
@@ -303,7 +292,7 @@ public partial class MainWindow : Window
 
             contextEmpty = new TextBlock
             {
-                Text = "Select a match to see context.",
+                Text = "No lines to show.",
                 Foreground = Brush("#94A3B8"),
                 FontFamily = LogFont,
                 FontSize = ToLogFontSize(_state.Settings.LogFontSize),
@@ -350,6 +339,29 @@ public partial class MainWindow : Window
         return new ViewEntry(file, search, root, list, contextList, contextEmpty,
             lineItems,
             contextItems);
+    }
+
+    private Control BuildContextRow(FileTabState file, Line? line)
+    {
+        if (line is null)
+            return new Border();
+
+        var text = new TextBlock
+        {
+            FontFamily = LogFont,
+            FontSize = ToLogFontSize(_state.Settings.LogFontSize),
+            Foreground = Brush("#CBD5E1"),
+            TextWrapping = TextWrapping.NoWrap,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        AddHighlightedRuns(text, file, line);
+        return new Border
+        {
+            Child = text,
+            Padding = LogRowPadding(),
+            BorderBrush = Brush("#263449"),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+        };
     }
 
     private Control BuildLogRow(FileTabState file, Line? line)
@@ -535,20 +547,17 @@ public partial class MainWindow : Window
 
     private void UpdateContext(ViewEntry view, bool resetItems = false)
     {
-        if (view.ContextList is null || view.ContextEmpty is null)
+        if (view.ContextList is null || view.ContextEmpty is null || view.ContextLines is null)
             return;
 
         var lines = ContextLines(view.File);
-        if (view.ContextLines is not null)
+        if (resetItems)
         {
-            if (resetItems)
-            {
-                view.ContextLines = new ObservableCollection<Line>(lines);
-                view.ContextList.ItemsSource = view.ContextLines;
-            }
-            else
-                SyncLines(view.ContextLines, lines);
+            view.ContextLines = new ObservableCollection<Line>(lines);
+            view.ContextList.ItemsSource = view.ContextLines;
         }
+        else
+            SyncLines(view.ContextLines, lines);
         view.ContextEmpty.IsVisible = lines.Count == 0;
     }
 
@@ -595,8 +604,7 @@ public partial class MainWindow : Window
             : lines.Where(line => !_state.Settings.Excludes(line.Raw)).ToList();
     }
 
-    private IReadOnlyList<Line> ContextLines(FileTabState file) =>
-        file.ContextLines.Where(line => !_state.Settings.Excludes(line.Raw)).ToList();
+    private IReadOnlyList<Line> ContextLines(FileTabState file) => LinesFor(file, search: null);
 
     private void RefreshSettingsEditor()
     {
