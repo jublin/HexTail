@@ -13,7 +13,8 @@ HexTail is a native .NET 10 desktop application built with Avalonia 12.1.1. It t
 - Parse plaintext and logfmt lines without changing the raw log display.
 - Support literal and regular-expression searches with case sensitivity and per-search colors.
 - Highlight active searches and global labels in the All view.
-- Show a configurable context window for the selected line.
+- Show a scrollable full-file context view; selecting a main-view line jumps
+  the context view to that line.
 - Open files from the native file picker, OS drag-and-drop, and command-line paths.
 - Restore open files, searches, settings, window geometry, and pane size on restart.
 
@@ -51,7 +52,8 @@ Log rows are `TextBlock` instances containing `Run` inlines, so matching ranges 
 2. Startup paths and restored paths are opened through `AppState.OpenFileAsync`.
 3. Each tailer reads complete lines and pushes immutable events to the channel.
 4. The Avalonia dispatcher drains events, parses/appends lines, updates searches, and refreshes visible virtualized lists.
-5. Selecting a row records its buffer index; the context view derives its window from `FileBuffer.GetContextWindow`.
+5. Selecting a row records its buffer index; the context view selects and
+   scrolls to the matching line while remaining independently scrollable.
 6. Closing the window saves state and disposes every tailer.
 
 ## Search and filtering
@@ -60,7 +62,8 @@ Log rows are `TextBlock` instances containing `Run` inlines, so matching ranges 
 - Invalid regular expressions stay in the search form and show an inline error.
 - Search result indices are buffer-relative and are rebased when old lines roll out.
 - Global exclusions hide matching rows from every visible log/context list but do not remove them from the buffer.
-- Global labels produce additional case-insensitive highlight ranges.
+- Global labels produce additional case-insensitive highlight ranges in both
+  the main and context views.
 
 ## Limits and errors
 
