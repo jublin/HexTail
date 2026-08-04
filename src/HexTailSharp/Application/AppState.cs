@@ -151,6 +151,79 @@ public sealed class AppState : IAsyncDisposable
         NotifyChanged();
     }
 
+    public async ValueTask SetFollowAllAsync(
+        FileTabState tab,
+        bool value,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        if (!_files.Contains(tab) || tab.FollowAll == value)
+            return;
+
+        tab.FollowAll = value;
+        NotifyChanged();
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async ValueTask SetShowContextAsync(
+        FileTabState tab,
+        bool value,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        if (!_files.Contains(tab) || tab.ShowContext == value)
+            return;
+
+        tab.ShowContext = value;
+        NotifyChanged();
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async ValueTask SetSearchFollowAsync(
+        FileTabState tab,
+        Search search,
+        bool value,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(search);
+        var index = tab.Searches.IndexOf(search);
+        if (index < 0 || index >= tab.FollowSearches.Count || tab.FollowSearches[index] == value)
+            return;
+
+        tab.FollowSearches[index] = value;
+        NotifyChanged();
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public void SelectLine(FileTabState tab, Line? line)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        if (!_files.Contains(tab))
+            return;
+
+        tab.SelectedLine = line is null ? null : FindLineIndex(tab, line);
+        NotifyChanged();
+    }
+
+    public void ToggleExpanded(FileTabState tab, Line line)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(line);
+        if (!_files.Contains(tab))
+            return;
+
+        var index = FindLineIndex(tab, line);
+        if (index < 0)
+            return;
+
+        tab.ExpandedLine = tab.ExpandedLine == index ? null : index;
+        NotifyChanged();
+    }
+
     public async ValueTask UpdateSettingsAsync(
         AppSettings settings,
         CancellationToken cancellationToken = default
@@ -166,6 +239,14 @@ public sealed class AppState : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(window);
         Window = window;
+    }
+
+    private static int FindLineIndex(FileTabState tab, Line line)
+    {
+        for (var index = 0; index < tab.Buffer.Count; index++)
+            if (ReferenceEquals(tab.Buffer[index], line))
+                return index;
+        return -1;
     }
 
     public bool DrainTailerEvents()
