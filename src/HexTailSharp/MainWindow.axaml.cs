@@ -374,6 +374,8 @@ public partial class MainWindow : Window
 
     private void AddHighlightedRuns(TextBlock target, FileTabState file, Line line)
     {
+        var inlines = new InlineCollection();
+        target.Inlines = inlines;
         var ranges = file.Searches
             .SelectMany(search => search.GetHighlights(line).Select(range => (range.Start, range.Length, search.Color)))
             .Concat(_state.Settings.GetLabelHighlights(line.Raw).Select(range => (range.Start, range.Length, range.Color)))
@@ -384,7 +386,7 @@ public partial class MainWindow : Window
 
         if (ranges.Count == 0)
         {
-            target.Inlines!.Add(new Run { Text = line.Raw });
+            inlines.Add(new Run { Text = line.Raw });
             return;
         }
 
@@ -394,8 +396,8 @@ public partial class MainWindow : Window
             if (range.Start < cursor)
                 continue;
             if (range.Start > cursor)
-                target.Inlines!.Add(new Run { Text = line.Raw[cursor..range.Start] });
-            target.Inlines!.Add(new Run { Text = line.Raw.Substring(range.Start, range.Length),
+                inlines.Add(new Run { Text = line.Raw[cursor..range.Start] });
+            inlines.Add(new Run { Text = line.Raw.Substring(range.Start, range.Length),
                 Background = Brush(range.Color),
                 Foreground = Brush("#111827"),
             });
@@ -403,7 +405,7 @@ public partial class MainWindow : Window
         }
 
         if (cursor < line.Raw.Length)
-            target.Inlines!.Add(new Run { Text = line.Raw[cursor..] });
+            inlines.Add(new Run { Text = line.Raw[cursor..] });
     }
 
     private void AttachScrollHandler(FileTabState file, Search? search, ListBox list)
