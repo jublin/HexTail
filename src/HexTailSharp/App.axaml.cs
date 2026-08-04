@@ -1,6 +1,8 @@
 using System.Globalization;
 using AtomUI;
 using AtomUI.Desktop.Controls;
+using AtomUI.Theme;
+using AtomUI.Theme.Configuration;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
@@ -16,7 +18,10 @@ public partial class App : Avalonia.Application
         {
             builder.WithApplicationId("HexTailSharp");
             builder.WithDefaultCultureInfo(CultureInfo.CurrentUICulture);
-            builder.WithInitialTheme(AtomUI.Theme.IThemeManager.DEFAULT_THEME_ID);
+            builder.WithInitialTheme(
+                IThemeManager.DEFAULT_THEME_ID,
+                new ThemeConfigBuilder().WithAlgorithms(["dark"]).Build()
+            );
             builder.UseAlibabaSansFont();
             builder.UseDesktopControls();
             builder.UseDesktopColorPicker();

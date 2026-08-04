@@ -3,7 +3,11 @@ using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using AtomUI.Controls;
 using AtomUI.Desktop.Controls;
+using AtomUI.Theme;
+using AtomUI.Theme.Configuration;
+using Avalonia;
 using Avalonia.Media;
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
@@ -210,6 +214,9 @@ public sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         try
         {
             await _state.UpdateSettingsAsync(settings);
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                ApplyThemeAsync(settings.Theme)
+            );
         }
         catch (Exception ex)
         {
@@ -388,6 +395,51 @@ public sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         this.RaisePropertyChanged(nameof(HasFileError));
         this.RaisePropertyChanged(nameof(HasSearchError));
         this.RaisePropertyChanged(nameof(SettingsPlacement));
+    }
+
+    private async Task ApplyThemeAsync(string theme)
+    {
+        if (Avalonia.Application.Current is not { } application)
+            return;
+
+        var manager = application.GetThemeManager();
+        if (manager is not null)
+        {
+            var algorithms = theme == "dark" ? new[] { "default", "dark" } : new[] { "default" };
+            var result = await manager.ApplyThemeAsync(
+                new ThemeRequest(
+                    IThemeManager.DEFAULT_THEME_ID,
+                    new ThemeConfigBuilder().WithAlgorithms(algorithms).Build(),
+                    ThemeTransitionReason.UserRequest
+                )
+            );
+            if (result.Status == ThemeTransitionStatus.Failed)
+                throw new InvalidOperationException("AtomUI could not apply the selected theme.");
+        }
+
+        application.RequestedThemeVariant =
+            theme == "light"
+                ? Avalonia.Styling.ThemeVariant.Light
+                : Avalonia.Styling.ThemeVariant.Dark;
+        var light = theme == "light";
+        application.Resources["SurfaceBrush"] = new SolidColorBrush(
+            Color.Parse(light ? "#F8FAFC" : "#111827")
+        );
+        application.Resources["RaisedSurfaceBrush"] = new SolidColorBrush(
+            Color.Parse(light ? "#F1F5F9" : "#172033")
+        );
+        application.Resources["ToolbarBrush"] = new SolidColorBrush(
+            Color.Parse(light ? "#FFFFFF" : "#1F2937")
+        );
+        application.Resources["BorderBrush"] = new SolidColorBrush(
+            Color.Parse(light ? "#CBD5E1" : "#334155")
+        );
+        application.Resources["TextBrush"] = new SolidColorBrush(
+            Color.Parse(light ? "#1E293B" : "#E2E8F0")
+        );
+        application.Resources["MutedTextBrush"] = new SolidColorBrush(
+            Color.Parse(light ? "#475569" : "#94A3B8")
+        );
     }
 
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
