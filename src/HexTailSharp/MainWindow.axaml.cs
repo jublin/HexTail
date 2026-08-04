@@ -827,7 +827,7 @@ public partial class MainWindow : Window
             return;
         file.ShowContext = ShowContextBox.IsChecked == true;
         await _state.SaveAsync();
-        RefreshUi();
+        await Dispatcher.UIThread.InvokeAsync(RefreshUi);
     }
 
     private void SetSearchFollow(FileTabState file, Search search, bool value)
