@@ -21,36 +21,51 @@ namespace HexTailSharp;
 public partial class MainWindow : Window
 {
     private static readonly MatchMode[] MatchModes = [MatchMode.Literal, MatchMode.Regex];
-    private static readonly UiDensity[] Densities = [UiDensity.Comfortable, UiDensity.Cozy, UiDensity.Compact];
-    private static readonly LogFontSize[] FontSizes = [LogFontSize.Small, LogFontSize.Medium, LogFontSize.Large, LogFontSize.ExtraLarge];
-    private static readonly SettingsMenuAlignment[] MenuAlignments = [SettingsMenuAlignment.Left, SettingsMenuAlignment.Right];
+    private static readonly UiDensity[] Densities =
+    [
+        UiDensity.Comfortable,
+        UiDensity.Cozy,
+        UiDensity.Compact,
+    ];
+
+    private static readonly LogFontSize[] FontSizes =
+    [
+        LogFontSize.Small,
+        LogFontSize.Medium,
+        LogFontSize.Large,
+        LogFontSize.ExtraLarge,
+    ];
+
+    private static readonly SettingsMenuAlignment[] MenuAlignments =
+    [
+        SettingsMenuAlignment.Left,
+        SettingsMenuAlignment.Right,
+    ];
 
     private readonly string[] _startupPaths;
-    private readonly TailerService _tailers = new();
-    private readonly AppState _state;
     private readonly DispatcherTimer _tailerTimer;
+    private readonly TailerService _tailers = new();
     private readonly List<ViewEntry> _views = [];
-    private bool _started;
+    private int _activeViewIndex;
     private bool _closed;
     private bool _drainingTailer;
-    private bool _updatingUi;
     private int _refreshQueued;
-    private int _activeViewIndex;
     private string _settingsSection = "labels";
+    private bool _started;
+    private bool _updatingUi;
     private FileTabState? _viewFile;
     private int _viewSearchCount;
     private bool _viewShowContext;
 
-    public MainWindow() : this(null)
-    {
-    }
+    public MainWindow()
+        : this(null) { }
 
     public MainWindow(string[]? startupPaths = null)
     {
         InitializeComponent();
         _startupPaths = startupPaths ?? [];
-        _state = new AppState(_tailers, new JsonFileAppPersistence());
-        _state.Changed += OnStateChanged;
+        State = new AppState(_tailers, new JsonFileAppPersistence());
+        State.Changed += OnStateChanged;
 
         ModeBox.ItemsSource = MatchModes;
         ModeBox.SelectedItem = MatchMode.Literal;
@@ -64,7 +79,9 @@ public partial class MainWindow : Window
         Closed += OnClosed;
     }
 
-    public AppState State => _state;
+    public AppState State { get; }
+
+    private static FontFamily LogFont => new("Cascadia Mono,Consolas,Menlo,monospace");
 
     private async void OnOpened(object? sender, EventArgs e)
     {
@@ -72,18 +89,18 @@ public partial class MainWindow : Window
             return;
 
         _started = true;
-        await _state.RestoreAsync();
+        await State.RestoreAsync();
         foreach (var path in _startupPaths.Where(path => !string.IsNullOrWhiteSpace(path)))
-        {
             try
             {
-                await _state.OpenFileAsync(path);
+                await State.OpenFileAsync(path);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            catch (Exception ex)
+                when (ex is IOException or UnauthorizedAccessException or ArgumentException)
             {
                 ShowFileError($"Could not open {path}: {ex.Message}");
             }
-        }
+
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
             ApplyWindowState();
@@ -94,11 +111,11 @@ public partial class MainWindow : Window
 
     private void ApplyWindowState()
     {
-        if (_state.Window.Width > 0)
-            Width = _state.Window.Width;
-        if (_state.Window.Height > 0)
-            Height = _state.Window.Height;
-        if (_state.Window.X is int x && _state.Window.Y is int y)
+        if (State.Window.Width > 0)
+            Width = State.Window.Width;
+        if (State.Window.Height > 0)
+            Height = State.Window.Height;
+        if (State.Window.X is int x && State.Window.Y is int y)
             Position = new PixelPoint(x, y);
     }
 
@@ -107,20 +124,23 @@ public partial class MainWindow : Window
         if (_drainingTailer || _closed || Interlocked.Exchange(ref _refreshQueued, 1) != 0)
             return;
 
-        Dispatcher.UIThread.Post(() =>
-        {
-            Interlocked.Exchange(ref _refreshQueued, 0);
-            RefreshUi();
-        }, DispatcherPriority.Background);
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                Interlocked.Exchange(ref _refreshQueued, 0);
+                RefreshUi();
+            },
+            DispatcherPriority.Background
+        );
     }
 
     private void DrainTailerEvents(object? sender, EventArgs e)
     {
         _drainingTailer = true;
-        var changed = _state.DrainTailerEvents();
+        var changed = State.DrainTailerEvents();
         _drainingTailer = false;
         if (changed)
-            RefreshVisibleViews(followTail: true);
+            RefreshVisibleViews(true);
     }
 
     private void RefreshUi()
@@ -132,10 +152,10 @@ public partial class MainWindow : Window
         try
         {
             ApplyTheme();
-            FileCountText.Text = $"{_state.Files.Count} file(s)";
+            FileCountText.Text = $"{State.Files.Count} file(s)";
             RefreshFileTabs();
 
-            var file = _state.SelectedFile;
+            var file = State.SelectedFile;
             var hasFile = file is not null;
             EmptyState.IsVisible = !hasFile;
             FileWorkspace.IsVisible = hasFile;
@@ -165,15 +185,19 @@ public partial class MainWindow : Window
     private void RefreshFileTabs()
     {
         FileTabsPanel.Children.Clear();
-        foreach (var file in _state.Files)
+        foreach (var file in State.Files)
         {
             var tab = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
             var select = new Button
             {
                 Content = file.Error is null ? file.DisplayName : $"! {file.DisplayName}",
                 HorizontalContentAlignment = HorizontalAlignment.Left,
-                Background = ReferenceEquals(file, _state.SelectedFile) ? Brush("#334155") : Brushes.Transparent,
-                Foreground = ReferenceEquals(file, _state.SelectedFile) ? Brush("#F8FAFC") : Brush("#94A3B8"),
+                Background = ReferenceEquals(file, State.SelectedFile)
+                    ? Brush("#334155")
+                    : Brushes.Transparent,
+                Foreground = ReferenceEquals(file, State.SelectedFile)
+                    ? Brush("#F8FAFC")
+                    : Brush("#94A3B8"),
                 Padding = new Thickness(12, 8),
                 Tag = file,
             };
@@ -193,12 +217,16 @@ public partial class MainWindow : Window
             Grid.SetColumn(close, 1);
             tab.Children.Add(close);
 
-            FileTabsPanel.Children.Add(new Border
-            {
-                Child = tab,
-                BorderBrush = ReferenceEquals(file, _state.SelectedFile) ? Brush("#F59E0B") : Brushes.Transparent,
-                BorderThickness = new Thickness(0, 0, 0, 2),
-            });
+            FileTabsPanel.Children.Add(
+                new Border
+                {
+                    Child = tab,
+                    BorderBrush = ReferenceEquals(file, State.SelectedFile)
+                        ? Brush("#F59E0B")
+                        : Brushes.Transparent,
+                    BorderThickness = new Thickness(0, 0, 0, 2),
+                }
+            );
         }
     }
 
@@ -227,10 +255,12 @@ public partial class MainWindow : Window
         _viewShowContext = false;
     }
 
-    private bool ViewStructureChanged(FileTabState file) =>
-        !ReferenceEquals(_viewFile, file) ||
-        _viewSearchCount != file.Searches.Count ||
-        _viewShowContext != file.ShowContext;
+    private bool ViewStructureChanged(FileTabState file)
+    {
+        return !ReferenceEquals(_viewFile, file)
+            || _viewSearchCount != file.Searches.Count
+            || _viewShowContext != file.ShowContext;
+    }
 
     private void AddViewTab(FileTabState file, Search? search, string header)
     {
@@ -248,7 +278,7 @@ public partial class MainWindow : Window
             Background = Brush("#111827"),
             BorderThickness = new Thickness(0),
             ItemsSource = lineItems,
-            ItemTemplate = new FuncDataTemplate<Line>((line, _) => BuildLogRow(file, line), supportsRecycling: false),
+            ItemTemplate = new FuncDataTemplate<Line>((line, _) => BuildLogRow(file, line)),
             ItemsPanel = new FuncTemplate<Panel?>(() => new VirtualizingStackPanel()),
         };
         list.SelectionChanged += (_, _) =>
@@ -267,7 +297,9 @@ public partial class MainWindow : Window
         ObservableCollection<Line>? contextItems = null;
         if (file.ShowContext)
         {
-            body.RowDefinitions = new RowDefinitions($"*,4,{Math.Max(120, _state.Window.ContextPaneSize)}");
+            body.RowDefinitions = new RowDefinitions(
+                $"*,4,{Math.Max(120, State.Window.ContextPaneSize)}"
+            );
             var splitter = new GridSplitter
             {
                 Background = Brush("#334155"),
@@ -285,7 +317,7 @@ public partial class MainWindow : Window
                 Background = Brush("#172033"),
                 BorderThickness = new Thickness(0),
                 ItemsSource = contextItems,
-                ItemTemplate = new FuncDataTemplate<Line>((line, _) => BuildContextRow(file, line), supportsRecycling: false),
+                ItemTemplate = new FuncDataTemplate<Line>((line, _) => BuildContextRow(file, line)),
                 ItemsPanel = new FuncTemplate<Panel?>(() => new VirtualizingStackPanel()),
             };
             Grid.SetRow(contextList, 2);
@@ -296,7 +328,7 @@ public partial class MainWindow : Window
                 Text = "No lines to show.",
                 Foreground = Brush("#94A3B8"),
                 FontFamily = LogFont,
-                FontSize = ToLogFontSize(_state.Settings.LogFontSize),
+                FontSize = ToLogFontSize(State.Settings.LogFontSize),
                 Margin = new Thickness(12, 8),
                 IsVisible = !ContextLines(file).Any(),
             };
@@ -306,7 +338,12 @@ public partial class MainWindow : Window
 
         Grid.SetRow(list, 0);
         body.Children.Insert(0, list);
-        var root = new Grid { RowDefinitions = search is null ? new RowDefinitions("*") : new RowDefinitions("Auto,*") };
+        var root = new Grid
+        {
+            RowDefinitions = search is null
+                ? new RowDefinitions("*")
+                : new RowDefinitions("Auto,*"),
+        };
         if (search is not null)
         {
             var follow = new CheckBox
@@ -315,7 +352,8 @@ public partial class MainWindow : Window
                 IsChecked = IsSearchFollow(file, search),
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            follow.IsCheckedChanged += (_, _) => SetSearchFollow(file, search, follow.IsChecked == true);
+            follow.IsCheckedChanged += (_, _) =>
+                SetSearchFollow(file, search, follow.IsChecked == true);
             var toolbar = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
@@ -335,11 +373,19 @@ public partial class MainWindow : Window
             root.Children.Add(toolbar);
             Grid.SetRow(body, 1);
         }
+
         root.Children.Add(body);
 
-        return new ViewEntry(file, search, root, list, contextList, contextEmpty,
+        return new ViewEntry(
+            file,
+            search,
+            root,
+            list,
+            contextList,
+            contextEmpty,
             lineItems,
-            contextItems);
+            contextItems
+        );
     }
 
     private Control BuildContextRow(FileTabState file, Line? line)
@@ -350,7 +396,7 @@ public partial class MainWindow : Window
         var text = new TextBlock
         {
             FontFamily = LogFont,
-            FontSize = ToLogFontSize(_state.Settings.LogFontSize),
+            FontSize = ToLogFontSize(State.Settings.LogFontSize),
             Foreground = Brush("#CBD5E1"),
             TextWrapping = TextWrapping.NoWrap,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -374,7 +420,7 @@ public partial class MainWindow : Window
         var text = new TextBlock
         {
             FontFamily = LogFont,
-            FontSize = ToLogFontSize(_state.Settings.LogFontSize),
+            FontSize = ToLogFontSize(State.Settings.LogFontSize),
             Foreground = Brush("#E2E8F0"),
             TextWrapping = TextWrapping.NoWrap,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -383,7 +429,6 @@ public partial class MainWindow : Window
 
         Control content = text;
         if (line.ParsedFields is { Count: > 0 } && file.ExpandedLine == lineIndex)
-        {
             content = new StackPanel
             {
                 Spacing = 3,
@@ -392,16 +437,18 @@ public partial class MainWindow : Window
                     text,
                     new TextBlock
                     {
-                        Text = string.Join("  ", line.ParsedFields.Select(field => $"{field.Key}={field.Value}")),
+                        Text = string.Join(
+                            "  ",
+                            line.ParsedFields.Select(field => $"{field.Key}={field.Value}")
+                        ),
                         FontFamily = LogFont,
-                        FontSize = ToLogFontSize(_state.Settings.LogFontSize),
+                        FontSize = ToLogFontSize(State.Settings.LogFontSize),
                         Foreground = Brush("#CBD5E1"),
                         TextWrapping = TextWrapping.Wrap,
                         Padding = new Thickness(16, 2, 0, 6),
                     },
                 },
             };
-        }
 
         var row = new Border
         {
@@ -429,10 +476,22 @@ public partial class MainWindow : Window
 
     private void AddHighlightedRuns(TextBlock target, FileTabState file, Line line)
     {
-        var ranges = file.Searches
-            .SelectMany(search => search.GetHighlights(line).Select(range => (range.Start, range.Length, search.Color)))
-            .Concat(_state.Settings.GetLabelHighlights(line.Raw).Select(range => (range.Start, range.Length, range.Color)))
-            .Where(range => range.Start >= 0 && range.Length > 0 && range.Start + range.Length <= line.Raw.Length)
+        var ranges = file
+            .Searches.SelectMany(search =>
+                search
+                    .GetHighlights(line)
+                    .Select(range => (range.Start, range.Length, search.Color))
+            )
+            .Concat(
+                State
+                    .Settings.GetLabelHighlights(line.Raw)
+                    .Select(range => (range.Start, range.Length, range.Color))
+            )
+            .Where(range =>
+                range.Start >= 0
+                && range.Length > 0
+                && range.Start + range.Length <= line.Raw.Length
+            )
             .OrderBy(range => range.Start)
             .ThenByDescending(range => range.Length)
             .ToList();
@@ -451,10 +510,14 @@ public partial class MainWindow : Window
                 continue;
             if (range.Start > cursor)
                 inlines.Add(new Run { Text = line.Raw[cursor..range.Start] });
-            inlines.Add(new Run { Text = line.Raw.Substring(range.Start, range.Length),
-                Background = Brush(range.Color),
-                Foreground = Brush("#111827"),
-            });
+            inlines.Add(
+                new Run
+                {
+                    Text = line.Raw.Substring(range.Start, range.Length),
+                    Background = Brush(range.Color),
+                    Foreground = Brush("#111827"),
+                }
+            );
             cursor = range.Start + range.Length;
         }
 
@@ -466,6 +529,7 @@ public partial class MainWindow : Window
     private void WireScrollHandler(FileTabState file, Search? search, ListBox list)
     {
         var attached = false;
+
         void TryAttach()
         {
             if (attached)
@@ -484,7 +548,8 @@ public partial class MainWindow : Window
         }
 
         list.TemplateApplied += (_, _) => TryAttach();
-        list.AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(TryAttach, DispatcherPriority.Background);
+        list.AttachedToVisualTree += (_, _) =>
+            Dispatcher.UIThread.Post(TryAttach, DispatcherPriority.Background);
         TryAttach();
     }
 
@@ -500,19 +565,25 @@ public partial class MainWindow : Window
                 view.List.ItemsSource = view.Lines;
             }
             else
+            {
                 SyncLines(view.Lines, lines);
+            }
+
             if (selected is not null && view.Lines.Contains(selected))
                 view.List.SelectedItem = selected;
             UpdateContext(view, resetItems);
             if (followTail && ShouldFollow(view))
-                Dispatcher.UIThread.Post(() =>
-                {
-                    if (ShouldFollow(view) && view.List.ItemCount > 0)
-                        view.List.ScrollIntoView(view.List.ItemCount - 1);
-                }, DispatcherPriority.Background);
+                Dispatcher.UIThread.Post(
+                    () =>
+                    {
+                        if (ShouldFollow(view) && view.List.ItemCount > 0)
+                            view.List.ScrollIntoView(view.List.ItemCount - 1);
+                    },
+                    DispatcherPriority.Background
+                );
         }
 
-        if (_state.SelectedFile is { } selectedFile)
+        if (State.SelectedFile is { } selectedFile)
             LineCountText.Text = $"{selectedFile.Buffer.Count:N0} lines";
     }
 
@@ -521,23 +592,41 @@ public partial class MainWindow : Window
         if (Avalonia.Application.Current is not { } application)
             return;
 
-        application.RequestedThemeVariant = _state.Settings.Theme switch
+        application.RequestedThemeVariant = State.Settings.Theme switch
         {
             "light" => ThemeVariant.Light,
             "system" => ThemeVariant.Default,
             _ => ThemeVariant.Dark,
         };
 
-        var light = _state.Settings.Theme == "light";
-        application.Resources["SurfaceBrush"] = new SolidColorBrush(Color.Parse(light ? "#F8FAFC" : "#111827"));
-        application.Resources["RaisedSurfaceBrush"] = new SolidColorBrush(Color.Parse(light ? "#F1F5F9" : "#172033"));
-        application.Resources["ToolbarBrush"] = new SolidColorBrush(Color.Parse(light ? "#FFFFFF" : "#1F2937"));
-        application.Resources["BorderBrush"] = new SolidColorBrush(Color.Parse(light ? "#CBD5E1" : "#334155"));
-        application.Resources["TextBrush"] = new SolidColorBrush(Color.Parse(light ? "#1E293B" : "#E2E8F0"));
-        application.Resources["MutedTextBrush"] = new SolidColorBrush(Color.Parse(light ? "#475569" : "#94A3B8"));
-        application.Resources["ErrorBackgroundBrush"] = new SolidColorBrush(Color.Parse(light ? "#FEE2E2" : "#451A1A"));
-        application.Resources["ErrorBorderBrush"] = new SolidColorBrush(Color.Parse(light ? "#B91C1C" : "#EF4444"));
-        application.Resources["ErrorTextBrush"] = new SolidColorBrush(Color.Parse(light ? "#991B1B" : "#FECACA"));
+        var light = State.Settings.Theme == "light";
+        application.Resources["SurfaceBrush"] = new SolidColorBrush(
+            Color.Parse(light ? "#F8FAFC" : "#111827")
+        );
+        application.Resources["RaisedSurfaceBrush"] = new SolidColorBrush(
+            Color.Parse(light ? "#F1F5F9" : "#172033")
+        );
+        application.Resources["ToolbarBrush"] = new SolidColorBrush(
+            Color.Parse(light ? "#FFFFFF" : "#1F2937")
+        );
+        application.Resources["BorderBrush"] = new SolidColorBrush(
+            Color.Parse(light ? "#CBD5E1" : "#334155")
+        );
+        application.Resources["TextBrush"] = new SolidColorBrush(
+            Color.Parse(light ? "#1E293B" : "#E2E8F0")
+        );
+        application.Resources["MutedTextBrush"] = new SolidColorBrush(
+            Color.Parse(light ? "#475569" : "#94A3B8")
+        );
+        application.Resources["ErrorBackgroundBrush"] = new SolidColorBrush(
+            Color.Parse(light ? "#FEE2E2" : "#451A1A")
+        );
+        application.Resources["ErrorBorderBrush"] = new SolidColorBrush(
+            Color.Parse(light ? "#B91C1C" : "#EF4444")
+        );
+        application.Resources["ErrorTextBrush"] = new SolidColorBrush(
+            Color.Parse(light ? "#991B1B" : "#FECACA")
+        );
     }
 
     private void UpdateContextViews(FileTabState file)
@@ -561,7 +650,10 @@ public partial class MainWindow : Window
             view.ContextList.ItemsSource = view.ContextLines;
         }
         else
+        {
             SyncLines(view.ContextLines, lines);
+        }
+
         view.ContextEmpty.IsVisible = lines.Count == 0;
         if (resetItems)
             ScrollContextToSelected(view);
@@ -569,8 +661,13 @@ public partial class MainWindow : Window
 
     private void ScrollContextToSelected(ViewEntry view)
     {
-        if (view.ContextList is null || view.ContextLines is null ||
-            view.File.SelectedLine is not int selected || selected < 0 || selected >= view.File.Buffer.Count)
+        if (
+            view.ContextList is null
+            || view.ContextLines is null
+            || view.File.SelectedLine is not int selected
+            || selected < 0
+            || selected >= view.File.Buffer.Count
+        )
             return;
 
         var line = view.File.Buffer[selected];
@@ -579,24 +676,38 @@ public partial class MainWindow : Window
             return;
 
         view.ContextList.SelectedItem = line;
-        Dispatcher.UIThread.Post(() =>
-        {
-            if (_closed || view.File.SelectedLine is not int current || current < 0 || current >= view.File.Buffer.Count ||
-                !ReferenceEquals(view.File.Buffer[current], line) || view.ContextLines is null || index >= view.ContextLines.Count ||
-                !ReferenceEquals(view.ContextLines[index], line))
-                return;
-            view.ContextList.ScrollIntoView(index);
-        }, DispatcherPriority.Background);
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                if (
+                    _closed
+                    || view.File.SelectedLine is not int current
+                    || current < 0
+                    || current >= view.File.Buffer.Count
+                    || !ReferenceEquals(view.File.Buffer[current], line)
+                    || view.ContextLines is null
+                    || index >= view.ContextLines.Count
+                    || !ReferenceEquals(view.ContextLines[index], line)
+                )
+                    return;
+                view.ContextList.ScrollIntoView(index);
+            },
+            DispatcherPriority.Background
+        );
     }
 
     private static void SyncLines(ObservableCollection<Line> current, IReadOnlyList<Line> desired)
     {
-        if (current.Count == desired.Count &&
-            (current.Count == 0 || ReferenceEquals(current[^1], desired[^1])))
+        if (
+            current.Count == desired.Count
+            && (current.Count == 0 || ReferenceEquals(current[^1], desired[^1]))
+        )
             return;
 
-        if (current.Count < desired.Count &&
-            (current.Count == 0 || ReferenceEquals(current[^1], desired[current.Count - 1])))
+        if (
+            current.Count < desired.Count
+            && (current.Count == 0 || ReferenceEquals(current[^1], desired[current.Count - 1]))
+        )
         {
             for (var index = current.Count; index < desired.Count; index++)
                 current.Add(desired[index]);
@@ -604,7 +715,11 @@ public partial class MainWindow : Window
         }
 
         var common = 0;
-        while (common < current.Count && common < desired.Count && ReferenceEquals(current[common], desired[common]))
+        while (
+            common < current.Count
+            && common < desired.Count
+            && ReferenceEquals(current[common], desired[common])
+        )
             common++;
 
         if (common < current.Count / 2)
@@ -624,15 +739,20 @@ public partial class MainWindow : Window
 
     private IReadOnlyList<Line> LinesFor(FileTabState file, Search? search)
     {
-        IEnumerable<Line> lines = search is null
+        var lines = search is null
             ? file.Buffer.Lines
-            : search.Results.Where(index => index >= 0 && index < file.Buffer.Count).Select(index => file.Buffer[index]);
-        return _state.Settings.GlobalExcludeLabels.Count == 0
+            : search
+                .Results.Where(index => index >= 0 && index < file.Buffer.Count)
+                .Select(index => file.Buffer[index]);
+        return State.Settings.GlobalExcludeLabels.Count == 0
             ? lines as IReadOnlyList<Line> ?? lines.ToList()
-            : lines.Where(line => !_state.Settings.Excludes(line.Raw)).ToList();
+            : lines.Where(line => !State.Settings.Excludes(line.Raw)).ToList();
     }
 
-    private IReadOnlyList<Line> ContextLines(FileTabState file) => LinesFor(file, search: null);
+    private IReadOnlyList<Line> ContextLines(FileTabState file)
+    {
+        return LinesFor(file, null);
+    }
 
     private void RefreshSettingsEditor()
     {
@@ -646,58 +766,114 @@ public partial class MainWindow : Window
                 BuildExclusionsEditor();
                 break;
             case "theme":
-                BuildChoiceEditor("Theme", ThemeCatalog.Names, _state.Settings.Theme,
-                    value => UpdateSettings(_state.Settings with { Theme = (string)value }));
+                BuildChoiceEditor(
+                    "Theme",
+                    ThemeCatalog.Names,
+                    State.Settings.Theme,
+                    value => UpdateSettings(State.Settings with { Theme = (string)value })
+                );
                 break;
             case "density":
-                BuildChoiceEditor("UI spacing", Densities, _state.Settings.Density,
-                    value => UpdateSettings(_state.Settings with { Density = (UiDensity)value }));
+                BuildChoiceEditor(
+                    "UI spacing",
+                    Densities,
+                    State.Settings.Density,
+                    value => UpdateSettings(State.Settings with { Density = (UiDensity)value })
+                );
                 break;
             case "font-size":
-                BuildChoiceEditor("Log font size", FontSizes, _state.Settings.LogFontSize,
-                    value => UpdateSettings(_state.Settings with { LogFontSize = (LogFontSize)value }));
+                BuildChoiceEditor(
+                    "Log font size",
+                    FontSizes,
+                    State.Settings.LogFontSize,
+                    value =>
+                        UpdateSettings(State.Settings with { LogFontSize = (LogFontSize)value })
+                );
                 break;
             case "menu-alignment":
-                BuildChoiceEditor("Menu alignment", MenuAlignments, _state.Settings.SettingsMenuAlignment,
-                    value => UpdateSettings(_state.Settings with { SettingsMenuAlignment = (SettingsMenuAlignment)value }));
+                BuildChoiceEditor(
+                    "Menu alignment",
+                    MenuAlignments,
+                    State.Settings.SettingsMenuAlignment,
+                    value =>
+                        UpdateSettings(
+                            State.Settings with
+                            {
+                                SettingsMenuAlignment = (SettingsMenuAlignment)value,
+                            }
+                        )
+                );
                 break;
         }
     }
 
     private void BuildLabelsEditor()
     {
-        SettingsEditor.Children.Add(HelpText("Highlight case-insensitive text across every log view."));
-        for (var index = 0; index < _state.Settings.GlobalLabels.Count; index++)
+        SettingsEditor.Children.Add(
+            HelpText("Highlight case-insensitive text across every log view.")
+        );
+        for (var index = 0; index < State.Settings.GlobalLabels.Count; index++)
         {
             var labelIndex = index;
-            var label = _state.Settings.GlobalLabels[index];
-            var text = new TextBox { Text = label.Text, PlaceholderText = "Text to highlight", HorizontalAlignment = HorizontalAlignment.Stretch };
+            var label = State.Settings.GlobalLabels[index];
+            var text = new TextBox
+            {
+                Text = label.Text,
+                PlaceholderText = "Text to highlight",
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+            };
             var color = ColorPicker(label.Color);
             text.LostFocus += (_, _) =>
             {
-                var labels = _state.Settings.GlobalLabels.Select((item, current) => current == labelIndex
-                    ? new GlobalLabel { Text = text.Text ?? string.Empty, Color = ColorToHex(color.Color) }
-                    : item).ToList();
-                _ = UpdateSettings(_state.Settings with { GlobalLabels = labels }, refreshEditor: true);
+                var labels = State
+                    .Settings.GlobalLabels.Select(
+                        (item, current) =>
+                            current == labelIndex
+                                ? new GlobalLabel
+                                {
+                                    Text = text.Text ?? string.Empty,
+                                    Color = ColorToHex(color.Color),
+                                }
+                                : item
+                    )
+                    .ToList();
+                _ = UpdateSettings(State.Settings with { GlobalLabels = labels }, true);
             };
             color.ColorChanged += (_, args) =>
             {
-                var labels = _state.Settings.GlobalLabels.Select((item, current) => current == labelIndex
-                    ? new GlobalLabel { Text = item.Text, Color = ColorToHex(args.NewColor) }
-                    : item).ToList();
-                _ = UpdateSettings(_state.Settings with { GlobalLabels = labels });
+                var labels = State
+                    .Settings.GlobalLabels.Select(
+                        (item, current) =>
+                            current == labelIndex
+                                ? new GlobalLabel
+                                {
+                                    Text = item.Text,
+                                    Color = ColorToHex(args.NewColor),
+                                }
+                                : item
+                    )
+                    .ToList();
+                _ = UpdateSettings(State.Settings with { GlobalLabels = labels });
             };
             var remove = new Button { Content = "×" };
             ToolTip.SetTip(remove, "Remove label");
-            remove.Click += (_, _) => _ = UpdateSettings(_state.Settings with
-            {
-                GlobalLabels = _state.Settings.GlobalLabels.Where((_, current) => current != labelIndex).ToList(),
-            }, refreshEditor: true);
-            SettingsEditor.Children.Add(new Grid
-            {
-                ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
-                Children = { text, color, remove },
-            });
+            remove.Click += (_, _) =>
+                _ = UpdateSettings(
+                    State.Settings with
+                    {
+                        GlobalLabels = State
+                            .Settings.GlobalLabels.Where((_, current) => current != labelIndex)
+                            .ToList(),
+                    },
+                    true
+                );
+            SettingsEditor.Children.Add(
+                new Grid
+                {
+                    ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
+                    Children = { text, color, remove },
+                }
+            );
             Grid.SetColumn(color, 1);
             Grid.SetColumn(remove, 2);
         }
@@ -710,43 +886,73 @@ public partial class MainWindow : Window
         {
             if (string.IsNullOrWhiteSpace(newText.Text))
                 return;
-            _ = UpdateSettings(_state.Settings with
-            {
-                GlobalLabels = [.. _state.Settings.GlobalLabels, new GlobalLabel { Text = newText.Text, Color = ColorToHex(newColor.Color) }],
-            }, refreshEditor: true);
+            _ = UpdateSettings(
+                State.Settings with
+                {
+                    GlobalLabels =
+                    [
+                        .. State.Settings.GlobalLabels,
+                        new GlobalLabel { Text = newText.Text, Color = ColorToHex(newColor.Color) },
+                    ],
+                },
+                true
+            );
         };
-        SettingsEditor.Children.Add(new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
-            Children = { newText, newColor, add },
-        });
+        SettingsEditor.Children.Add(
+            new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
+                Children = { newText, newColor, add },
+            }
+        );
         Grid.SetColumn(newColor, 1);
         Grid.SetColumn(add, 2);
     }
 
     private void BuildExclusionsEditor()
     {
-        SettingsEditor.Children.Add(HelpText("Matching lines stay buffered but are hidden from log and context views."));
-        for (var index = 0; index < _state.Settings.GlobalExcludeLabels.Count; index++)
+        SettingsEditor.Children.Add(
+            HelpText("Matching lines stay buffered but are hidden from log and context views.")
+        );
+        for (var index = 0; index < State.Settings.GlobalExcludeLabels.Count; index++)
         {
             var exclusionIndex = index;
-            var text = new TextBox { Text = _state.Settings.GlobalExcludeLabels[index], PlaceholderText = "Text to hide" };
+            var text = new TextBox
+            {
+                Text = State.Settings.GlobalExcludeLabels[index],
+                PlaceholderText = "Text to hide",
+            };
             text.LostFocus += (_, _) =>
             {
-                var values = _state.Settings.GlobalExcludeLabels.Select((item, current) => current == exclusionIndex ? text.Text ?? string.Empty : item).ToList();
-                _ = UpdateSettings(_state.Settings with { GlobalExcludeLabels = values }, refreshEditor: true);
+                var values = State
+                    .Settings.GlobalExcludeLabels.Select(
+                        (item, current) =>
+                            current == exclusionIndex ? text.Text ?? string.Empty : item
+                    )
+                    .ToList();
+                _ = UpdateSettings(State.Settings with { GlobalExcludeLabels = values }, true);
             };
             var remove = new Button { Content = "×" };
             ToolTip.SetTip(remove, "Remove exclusion");
-            remove.Click += (_, _) => _ = UpdateSettings(_state.Settings with
-            {
-                GlobalExcludeLabels = _state.Settings.GlobalExcludeLabels.Where((_, current) => current != exclusionIndex).ToList(),
-            }, refreshEditor: true);
-            SettingsEditor.Children.Add(new Grid
-            {
-                ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-                Children = { text, remove },
-            });
+            remove.Click += (_, _) =>
+                _ = UpdateSettings(
+                    State.Settings with
+                    {
+                        GlobalExcludeLabels = State
+                            .Settings.GlobalExcludeLabels.Where(
+                                (_, current) => current != exclusionIndex
+                            )
+                            .ToList(),
+                    },
+                    true
+                );
+            SettingsEditor.Children.Add(
+                new Grid
+                {
+                    ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                    Children = { text, remove },
+                }
+            );
             Grid.SetColumn(remove, 1);
         }
 
@@ -757,23 +963,38 @@ public partial class MainWindow : Window
         {
             if (string.IsNullOrWhiteSpace(newText.Text))
                 return;
-            _ = UpdateSettings(_state.Settings with
-            {
-                GlobalExcludeLabels = [.. _state.Settings.GlobalExcludeLabels, newText.Text],
-            }, refreshEditor: true);
+            _ = UpdateSettings(
+                State.Settings with
+                {
+                    GlobalExcludeLabels = [.. State.Settings.GlobalExcludeLabels, newText.Text],
+                },
+                true
+            );
         };
-        SettingsEditor.Children.Add(new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Children = { newText, add },
-        });
+        SettingsEditor.Children.Add(
+            new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                Children = { newText, add },
+            }
+        );
         Grid.SetColumn(add, 1);
     }
 
-    private void BuildChoiceEditor<T>(string label, IEnumerable<T> values, T selected, Func<object, Task> changed)
+    private void BuildChoiceEditor<T>(
+        string label,
+        IEnumerable<T> values,
+        T selected,
+        Func<object, Task> changed
+    )
     {
         SettingsEditor.Children.Add(new TextBlock { Text = label, Foreground = Brush("#CBD5E1") });
-        var combo = new ComboBox { ItemsSource = values.ToList(), SelectedItem = selected, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var combo = new ComboBox
+        {
+            ItemsSource = values.ToList(),
+            SelectedItem = selected,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
         combo.SelectionChanged += (_, _) =>
         {
             if (!_updatingUi && combo.SelectedItem is not null)
@@ -784,7 +1005,7 @@ public partial class MainWindow : Window
 
     private async Task UpdateSettings(AppSettings settings, bool refreshEditor = false)
     {
-        await _state.UpdateSettingsAsync(settings);
+        await State.UpdateSettingsAsync(settings);
         if (refreshEditor && !_closed)
             await Dispatcher.UIThread.InvokeAsync(RefreshSettingsEditor);
     }
@@ -793,20 +1014,26 @@ public partial class MainWindow : Window
     {
         if (SettingsSections.SelectedItem is ListBoxItem item && item.Tag is string section)
         {
-            if (string.Equals(_settingsSection, section, StringComparison.Ordinal) && SettingsEditor.Children.Count > 0)
+            if (
+                string.Equals(_settingsSection, section, StringComparison.Ordinal)
+                && SettingsEditor.Children.Count > 0
+            )
                 return;
             _settingsSection = section;
             RefreshSettingsEditor();
         }
     }
 
-    private void ToggleSettings(object? sender, RoutedEventArgs e) => SettingsSplitView.IsPaneOpen = !SettingsSplitView.IsPaneOpen;
+    private void ToggleSettings(object? sender, RoutedEventArgs e)
+    {
+        SettingsSplitView.IsPaneOpen = !SettingsSplitView.IsPaneOpen;
+    }
 
     private void SelectFile(object? sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: FileTabState file })
         {
-            _state.SelectFile(file);
+            State.SelectFile(file);
             _activeViewIndex = 0;
         }
     }
@@ -814,7 +1041,7 @@ public partial class MainWindow : Window
     private async void CloseFile(object? sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: FileTabState file })
-            await _state.CloseFileAsync(file);
+            await State.CloseFileAsync(file);
     }
 
     private void ViewTabChanged(object? sender, SelectionChangedEventArgs e)
@@ -825,16 +1052,21 @@ public partial class MainWindow : Window
 
     private async void AddSearch(object? sender, RoutedEventArgs e)
     {
-        if (_state.SelectedFile is not { } file || string.IsNullOrWhiteSpace(QueryBox.Text))
+        if (State.SelectedFile is not { } file || string.IsNullOrWhiteSpace(QueryBox.Text))
             return;
 
         try
         {
-            _state.AddSearch(file, QueryBox.Text, ModeBox.SelectedItem is MatchMode mode ? mode : MatchMode.Literal,
-                CaseSensitiveBox.IsChecked == true, ColorToHex(SearchColorPicker.Color));
+            State.AddSearch(
+                file,
+                QueryBox.Text,
+                ModeBox.SelectedItem is MatchMode mode ? mode : MatchMode.Literal,
+                CaseSensitiveBox.IsChecked == true,
+                ColorToHex(SearchColorPicker.Color)
+            );
             QueryBox.Text = string.Empty;
             SearchErrorBorder.IsVisible = false;
-            await _state.SaveAsync();
+            await State.SaveAsync();
         }
         catch (ArgumentException ex)
         {
@@ -849,22 +1081,25 @@ public partial class MainWindow : Window
             AddSearch(sender, new RoutedEventArgs());
     }
 
-    private async void SaveSession(object? sender, RoutedEventArgs e) => await _state.SaveAsync();
+    private async void SaveSession(object? sender, RoutedEventArgs e)
+    {
+        await State.SaveAsync();
+    }
 
     private async void FollowAllChanged(object? sender, RoutedEventArgs e)
     {
-        if (_updatingUi || _state.SelectedFile is not { } file)
+        if (_updatingUi || State.SelectedFile is not { } file)
             return;
         file.FollowAll = FollowAllBox.IsChecked == true;
-        await _state.SaveAsync();
+        await State.SaveAsync();
     }
 
     private async void ShowContextChanged(object? sender, RoutedEventArgs e)
     {
-        if (_updatingUi || _state.SelectedFile is not { } file)
+        if (_updatingUi || State.SelectedFile is not { } file)
             return;
         file.ShowContext = ShowContextBox.IsChecked == true;
-        await _state.SaveAsync();
+        await State.SaveAsync();
         await Dispatcher.UIThread.InvokeAsync(RefreshUi);
     }
 
@@ -874,7 +1109,7 @@ public partial class MainWindow : Window
         if (index < 0 || index >= file.FollowSearches.Count)
             return;
         file.FollowSearches[index] = value;
-        _ = _state.SaveAsync();
+        _ = State.SaveAsync();
     }
 
     private void SetFollow(FileTabState file, Search? search, bool value)
@@ -884,7 +1119,7 @@ public partial class MainWindow : Window
         {
             changed = file.FollowAll != value;
             file.FollowAll = value;
-            if (changed && ReferenceEquals(file, _state.SelectedFile))
+            if (changed && ReferenceEquals(file, State.SelectedFile))
             {
                 _updatingUi = true;
                 FollowAllBox.IsChecked = value;
@@ -902,7 +1137,7 @@ public partial class MainWindow : Window
         }
 
         if (changed)
-            _ = _state.SaveAsync();
+            _ = State.SaveAsync();
     }
 
     private static bool IsSearchFollow(FileTabState file, Search search)
@@ -911,23 +1146,27 @@ public partial class MainWindow : Window
         return index >= 0 && index < file.FollowSearches.Count && file.FollowSearches[index];
     }
 
-    private static bool ShouldFollow(ViewEntry view) =>
-        view.Search is null
-            ? view.File.FollowAll
-            : IsSearchFollow(view.File, view.Search);
+    private static bool ShouldFollow(ViewEntry view)
+    {
+        return view.Search is null ? view.File.FollowAll : IsSearchFollow(view.File, view.Search);
+    }
 
     private async void PickFiles(object? sender, RoutedEventArgs e)
     {
         try
         {
-            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-            {
-                AllowMultiple = true,
-                Title = "Open log files",
-            });
+            var files = await StorageProvider.OpenFilePickerAsync(
+                new FilePickerOpenOptions { AllowMultiple = true, Title = "Open log files" }
+            );
             await OpenStorageFilesAsync(files);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException)
+        catch (Exception ex)
+            when (ex
+                    is IOException
+                        or UnauthorizedAccessException
+                        or InvalidOperationException
+                        or NotSupportedException
+            )
         {
             ShowFileError($"Could not pick files: {ex.Message}");
         }
@@ -950,13 +1189,13 @@ public partial class MainWindow : Window
     private async Task OpenStorageFilesAsync(IEnumerable<IStorageItem> files)
     {
         foreach (var file in files)
-        {
             try
             {
                 if (file.Path.IsFile)
-                    await _state.OpenFileAsync(file.Path.LocalPath);
+                    await State.OpenFileAsync(file.Path.LocalPath);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            catch (Exception ex)
+                when (ex is IOException or UnauthorizedAccessException or ArgumentException)
             {
                 ShowFileError($"Could not open {file.Name}: {ex.Message}");
             }
@@ -964,7 +1203,6 @@ public partial class MainWindow : Window
             {
                 file.Dispose();
             }
-        }
     }
 
     private void SaveContextPaneSize(Grid body)
@@ -973,16 +1211,18 @@ public partial class MainWindow : Window
             return;
 
         var size = Math.Max(120, (int)Math.Round(body.RowDefinitions[2].ActualHeight));
-        _state.SetWindowState(new AppWindowState
-        {
-            Width = _state.Window.Width,
-            Height = _state.Window.Height,
-            X = _state.Window.X,
-            Y = _state.Window.Y,
-            ContextPaneSize = size,
-            VerticalFileTabs = _state.Window.VerticalFileTabs,
-        });
-        _ = _state.SaveAsync();
+        State.SetWindowState(
+            new AppWindowState
+            {
+                Width = State.Window.Width,
+                Height = State.Window.Height,
+                X = State.Window.X,
+                Y = State.Window.Y,
+                ContextPaneSize = size,
+                VerticalFileTabs = State.Window.VerticalFileTabs,
+            }
+        );
+        _ = State.SaveAsync();
     }
 
     private void ShowFileError(string message)
@@ -991,7 +1231,10 @@ public partial class MainWindow : Window
         FileErrorBorder.IsVisible = true;
     }
 
-    private void SelectLine(FileTabState file, Line line) => file.SelectedLine = FindLineIndex(file, line);
+    private void SelectLine(FileTabState file, Line line)
+    {
+        file.SelectedLine = FindLineIndex(file, line);
+    }
 
     private void ToggleExpanded(FileTabState file, Line line)
     {
@@ -1008,61 +1251,85 @@ public partial class MainWindow : Window
         return -1;
     }
 
-    private static string Truncate(string value) => value.Length > 24 ? $"{value[..21]}..." : value;
-
-    private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
-
-    private ColorPicker ColorPicker(string value) => new()
+    private static string Truncate(string value)
     {
-        Color = Color.Parse(value),
-        IsAlphaEnabled = false,
-        Width = 46,
-        Height = 36,
-    };
+        return value.Length > 24 ? $"{value[..21]}..." : value;
+    }
 
-    private TextBlock HelpText(string text) => new()
+    private static string ColorToHex(Color color)
     {
-        Text = text,
-        Foreground = Brush("#94A3B8"),
-        FontSize = 12,
-        TextWrapping = TextWrapping.Wrap,
-    };
+        return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+    }
 
-    private static FontFamily LogFont => new("Cascadia Mono,Consolas,Menlo,monospace");
-
-    private Thickness LogRowPadding() => _state.Settings.Density switch
+    private ColorPicker ColorPicker(string value)
     {
-        UiDensity.Compact => new Thickness(12, 1),
-        UiDensity.Cozy => new Thickness(12, 3),
-        _ => new Thickness(12, 4),
-    };
+        return new ColorPicker
+        {
+            Color = Color.Parse(value),
+            IsAlphaEnabled = false,
+            Width = 46,
+            Height = 36,
+        };
+    }
 
-    private static double ToLogFontSize(LogFontSize size) => size switch
+    private TextBlock HelpText(string text)
     {
-        LogFontSize.Small => 12,
-        LogFontSize.Large => 15,
-        LogFontSize.ExtraLarge => 17,
-        _ => 13,
-    };
+        return new TextBlock
+        {
+            Text = text,
+            Foreground = Brush("#94A3B8"),
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+        };
+    }
 
-    private IBrush Brush(string value) => new SolidColorBrush(Color.Parse(_state.Settings.Theme == "light" ? LightColor(value) : value));
-
-    private static string LightColor(string value) => value switch
+    private Thickness LogRowPadding()
     {
-        "#111827" => "#F8FAFC",
-        "#172033" => "#F1F5F9",
-        "#1F2937" => "#FFFFFF",
-        "#334155" => "#CBD5E1",
-        "#263449" => "#E2E8F0",
-        "#94A3B8" => "#475569",
-        "#F8FAFC" => "#0F172A",
-        "#E2E8F0" => "#1E293B",
-        "#CBD5E1" => "#334155",
-        "#451A1A" => "#FEE2E2",
-        "#EF4444" => "#B91C1C",
-        "#FECACA" => "#991B1B",
-        _ => value,
-    };
+        return State.Settings.Density switch
+        {
+            UiDensity.Compact => new Thickness(12, 0.6),
+            UiDensity.Cozy => new Thickness(12, 2),
+            _ => new Thickness(12, 3),
+        };
+    }
+
+    private static double ToLogFontSize(LogFontSize size)
+    {
+        return size switch
+        {
+            LogFontSize.Small => 11,
+            LogFontSize.Large => 14,
+            LogFontSize.ExtraLarge => 17,
+            _ => 13,
+        };
+    }
+
+    private IBrush Brush(string value)
+    {
+        return new SolidColorBrush(
+            Color.Parse(State.Settings.Theme == "light" ? LightColor(value) : value)
+        );
+    }
+
+    private static string LightColor(string value)
+    {
+        return value switch
+        {
+            "#111827" => "#F8FAFC",
+            "#172033" => "#F1F5F9",
+            "#1F2937" => "#FFFFFF",
+            "#334155" => "#CBD5E1",
+            "#263449" => "#E2E8F0",
+            "#94A3B8" => "#475569",
+            "#F8FAFC" => "#0F172A",
+            "#E2E8F0" => "#1E293B",
+            "#CBD5E1" => "#334155",
+            "#451A1A" => "#FEE2E2",
+            "#EF4444" => "#B91C1C",
+            "#FECACA" => "#991B1B",
+            _ => value,
+        };
+    }
 
     private async void OnClosed(object? sender, EventArgs e)
     {
@@ -1070,16 +1337,18 @@ public partial class MainWindow : Window
             return;
         _closed = true;
         _tailerTimer.Stop();
-        _state.SetWindowState(new AppWindowState
-        {
-            Width = Width,
-            Height = Height,
-            X = Position.X,
-            Y = Position.Y,
-            ContextPaneSize = _state.Window.ContextPaneSize,
-            VerticalFileTabs = _state.Window.VerticalFileTabs,
-        });
-        await _state.DisposeAsync();
+        State.SetWindowState(
+            new AppWindowState
+            {
+                Width = Width,
+                Height = Height,
+                X = Position.X,
+                Y = Position.Y,
+                ContextPaneSize = State.Window.ContextPaneSize,
+                VerticalFileTabs = State.Window.VerticalFileTabs,
+            }
+        );
+        await State.DisposeAsync();
     }
 
     private sealed class ViewEntry(
@@ -1090,7 +1359,8 @@ public partial class MainWindow : Window
         ListBox? contextList,
         TextBlock? contextEmpty,
         ObservableCollection<Line> lines,
-        ObservableCollection<Line>? contextLines)
+        ObservableCollection<Line>? contextLines
+    )
     {
         public FileTabState File { get; } = file;
         public Search? Search { get; } = search;

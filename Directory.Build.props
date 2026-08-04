@@ -7,5 +7,7 @@
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
 
     <IsCI>true</IsCI>
+
+    <RepoRootPath>$(MSBuildThisFileDirectory)</RepoRootPath>
   </PropertyGroup>
 </Project>

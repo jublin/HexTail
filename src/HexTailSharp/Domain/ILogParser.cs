@@ -32,12 +32,15 @@ public sealed class LogfmtParser : ILogParser
 
         while (true)
         {
-            while (i < n && rawText[i] == ' ') i++;
-            if (i >= n) break;
+            while (i < n && rawText[i] == ' ')
+                i++;
+            if (i >= n)
+                break;
 
             // Key: up to '=' or space; empty key or missing '=' is malformed.
             var keyStart = i;
-            while (i < n && rawText[i] is not ('=' or ' ')) i++;
+            while (i < n && rawText[i] is not ('=' or ' '))
+                i++;
             if (i >= n || rawText[i] == ' ' || i == keyStart)
                 return Plain(rawText);
             var key = rawText[keyStart..i];
@@ -57,7 +60,8 @@ public sealed class LogfmtParser : ILogParser
                         var next = rawText[i + 1];
                         // Recognized escapes collapse; anything else stays literal.
                         sb.Append(next is '"' or '\\' ? next : c);
-                        if (next is not ('"' or '\\')) sb.Append(next);
+                        if (next is not ('"' or '\\'))
+                            sb.Append(next);
                         i += 2;
                     }
                     else if (c == '"')
@@ -73,15 +77,18 @@ public sealed class LogfmtParser : ILogParser
                     }
                 }
 
-                if (!closed) return Plain(rawText);
+                if (!closed)
+                    return Plain(rawText);
                 // A closing quote must be followed by a space or end of line.
-                if (i < n && rawText[i] != ' ') return Plain(rawText);
+                if (i < n && rawText[i] != ' ')
+                    return Plain(rawText);
                 value = sb.ToString();
             }
             else
             {
                 var valueStart = i;
-                while (i < n && rawText[i] != ' ') i++;
+                while (i < n && rawText[i] != ' ')
+                    i++;
                 value = rawText[valueStart..i];
             }
 

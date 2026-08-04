@@ -47,7 +47,8 @@ public sealed class FileBuffer
         var startIndex = _lines.Count;
         _lines.AddRange(lines);
         var appended = _lines.Count - startIndex;
-        if (appended == 0) return;
+        if (appended == 0)
+            return;
 
         var rolledOut = 0;
         var excess = _lines.Count - MaxLines;
@@ -62,7 +63,8 @@ public sealed class FileBuffer
         var newStart = Math.Max(0, startIndex - rolledOut);
         foreach (var search in _searches)
         {
-            if (rolledOut > 0) search.Rebase(rolledOut);
+            if (rolledOut > 0)
+                search.Rebase(rolledOut);
             search.ScanAppended(this, newStart);
         }
 
@@ -72,9 +74,11 @@ public sealed class FileBuffer
     /// <summary>Empties the buffer and all search results (file truncation/rotation).</summary>
     public void Clear()
     {
-        if (_lines.Count == 0) return;
+        if (_lines.Count == 0)
+            return;
         _lines.Clear();
-        foreach (var search in _searches) search.ClearResults();
+        foreach (var search in _searches)
+            search.ClearResults();
         Changed?.Invoke(new BufferChange(0, 0, Cleared: true));
     }
 

@@ -61,7 +61,11 @@ public sealed record AppSettings
     {
         foreach (var label in GlobalLabels)
         {
-            for (var start = 0; (start = text.IndexOf(label.Text, start, StringComparison.OrdinalIgnoreCase)) >= 0; start += label.Text.Length)
+            for (
+                var start = 0;
+                (start = text.IndexOf(label.Text, start, StringComparison.OrdinalIgnoreCase)) >= 0;
+                start += label.Text.Length
+            )
                 yield return new LabelHighlight(start, label.Text.Length, label.Color);
         }
     }
@@ -73,17 +77,18 @@ public static class ThemeCatalog
 
     public static bool Contains(string theme) => Names.Contains(theme, StringComparer.Ordinal);
 
-    public static string Normalize(string? theme) => theme switch
-    {
-        null => "dark",
-        "system" => "system",
-        "light" => "light",
-        "dark" => "dark",
-        _ when theme.EndsWith("-dark", StringComparison.Ordinal) => "dark",
-        _ when theme.EndsWith("-dark-wcag", StringComparison.Ordinal) => "dark",
-        _ when theme.EndsWith("-wcag", StringComparison.Ordinal) => "light",
-        _ => "dark",
-    };
+    public static string Normalize(string? theme) =>
+        theme switch
+        {
+            null => "dark",
+            "system" => "system",
+            "light" => "light",
+            "dark" => "dark",
+            _ when theme.EndsWith("-dark", StringComparison.Ordinal) => "dark",
+            _ when theme.EndsWith("-dark-wcag", StringComparison.Ordinal) => "dark",
+            _ when theme.EndsWith("-wcag", StringComparison.Ordinal) => "light",
+            _ => "dark",
+        };
 }
 
 public sealed class GlobalLabel

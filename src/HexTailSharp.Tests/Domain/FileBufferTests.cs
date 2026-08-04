@@ -54,7 +54,11 @@ public class FileBufferTests
     {
         var buffer = new FileBuffer(maxLines: 4);
         buffer.Append([L("error a"), L("b"), L("error c"), L("d")]);
-        var search = new Search(new CompiledQuery("error", MatchMode.Literal, caseSensitive: true), "red", buffer);
+        var search = new Search(
+            new CompiledQuery("error", MatchMode.Literal, caseSensitive: true),
+            "red",
+            buffer
+        );
         buffer.AddSearch(search);
         Assert.Equal([0, 2], search.Results);
 
@@ -70,7 +74,11 @@ public class FileBufferTests
     {
         var buffer = new FileBuffer(maxLines: 2);
         buffer.Append([L("error a"), L("error b")]);
-        var search = new Search(new CompiledQuery("error", MatchMode.Literal, caseSensitive: true), "red", buffer);
+        var search = new Search(
+            new CompiledQuery("error", MatchMode.Literal, caseSensitive: true),
+            "red",
+            buffer
+        );
         buffer.AddSearch(search);
 
         buffer.Append([L("c"), L("d")]);
@@ -83,7 +91,11 @@ public class FileBufferTests
     {
         var buffer = new FileBuffer();
         buffer.Append([L("error a"), L("b")]);
-        var search = new Search(new CompiledQuery("error", MatchMode.Literal, caseSensitive: true), "red", buffer);
+        var search = new Search(
+            new CompiledQuery("error", MatchMode.Literal, caseSensitive: true),
+            "red",
+            buffer
+        );
         buffer.AddSearch(search);
 
         buffer.Clear();
@@ -97,7 +109,11 @@ public class FileBufferTests
     {
         var buffer = new FileBuffer();
         buffer.Append(L("error a"));
-        var search = new Search(new CompiledQuery("error", MatchMode.Literal, caseSensitive: true), "red", buffer);
+        var search = new Search(
+            new CompiledQuery("error", MatchMode.Literal, caseSensitive: true),
+            "red",
+            buffer
+        );
         buffer.AddSearch(search);
 
         buffer.Clear();
@@ -143,7 +159,10 @@ public class FileBufferTests
 
         var window = buffer.GetContextWindow(index: 5, above: 2, below: 3);
 
-        Assert.Equal(["line3", "line4", "line5", "line6", "line7", "line8"], window.Select(l => l.Raw));
+        Assert.Equal(
+            ["line3", "line4", "line5", "line6", "line7", "line8"],
+            window.Select(l => l.Raw)
+        );
     }
 
     [Fact]
@@ -173,7 +192,11 @@ public class FileBufferTests
     public void RemovedSearch_NoLongerScans()
     {
         var buffer = new FileBuffer();
-        var search = new Search(new CompiledQuery("error", MatchMode.Literal, caseSensitive: true), "red", buffer);
+        var search = new Search(
+            new CompiledQuery("error", MatchMode.Literal, caseSensitive: true),
+            "red",
+            buffer
+        );
         buffer.AddSearch(search);
         buffer.RemoveSearch(search);
 

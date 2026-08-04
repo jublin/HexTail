@@ -1,5 +1,5 @@
-using HexTailSharp.Tailing;
 using System.Threading.Channels;
+using HexTailSharp.Tailing;
 
 namespace HexTailSharp.Tests.Tailing;
 
@@ -9,20 +9,28 @@ public sealed class TailerServiceTests
     public async Task StartTailer_EmitsInitialAndAppendedCompleteLines()
     {
         var path = CreateTempFile("first\n");
-        await using var service = new TailerService(new TailerOptions
-        {
-            PollInterval = TimeSpan.FromMilliseconds(10),
-            UseFileSystemWatcher = false,
-        });
+        await using var service = new TailerService(
+            new TailerOptions
+            {
+                PollInterval = TimeSpan.FromMilliseconds(10),
+                UseFileSystemWatcher = false,
+            }
+        );
         await using var tailer = service.StartTailer("file-1", path);
 
-        var initial = await ReadEventAsync<NewLines>(service.Events, e => e.Lines.SequenceEqual(["first"]));
+        var initial = await ReadEventAsync<NewLines>(
+            service.Events,
+            e => e.Lines.SequenceEqual(["first"])
+        );
 
         await File.AppendAllTextAsync(path, "partial");
         await AssertNoEventAsync(service.Events, TimeSpan.FromMilliseconds(50));
 
         await File.AppendAllTextAsync(path, " line\nsecond\r\n");
-        var appended = await ReadEventAsync<NewLines>(service.Events, e => e.Lines.SequenceEqual(["partial line", "second"]));
+        var appended = await ReadEventAsync<NewLines>(
+            service.Events,
+            e => e.Lines.SequenceEqual(["partial line", "second"])
+        );
 
         Assert.Equal("file-1", initial.FileId);
         Assert.Equal("file-1", appended.FileId);
@@ -32,18 +40,23 @@ public sealed class TailerServiceTests
     public async Task StartTailer_EmitsTruncated_WhenFileShrinks()
     {
         var path = CreateTempFile("old content\n");
-        await using var service = new TailerService(new TailerOptions
-        {
-            PollInterval = TimeSpan.FromMilliseconds(10),
-            UseFileSystemWatcher = false,
-        });
+        await using var service = new TailerService(
+            new TailerOptions
+            {
+                PollInterval = TimeSpan.FromMilliseconds(10),
+                UseFileSystemWatcher = false,
+            }
+        );
         await using var tailer = service.StartTailer("file-1", path);
 
         await ReadEventAsync<NewLines>(service.Events);
         await File.WriteAllTextAsync(path, "new\n");
 
         var truncated = await ReadEventAsync<FileTruncated>(service.Events);
-        var replacement = await ReadEventAsync<NewLines>(service.Events, e => e.Lines.SequenceEqual(["new"]));
+        var replacement = await ReadEventAsync<NewLines>(
+            service.Events,
+            e => e.Lines.SequenceEqual(["new"])
+        );
 
         Assert.Equal("file-1", truncated.FileId);
         Assert.Equal("file-1", replacement.FileId);
@@ -57,11 +70,13 @@ public sealed class TailerServiceTests
         try
         {
             await File.WriteAllTextAsync(path, "before\n");
-            await using var service = new TailerService(new TailerOptions
-            {
-                PollInterval = TimeSpan.FromMilliseconds(10),
-                UseFileSystemWatcher = false,
-            });
+            await using var service = new TailerService(
+                new TailerOptions
+                {
+                    PollInterval = TimeSpan.FromMilliseconds(10),
+                    UseFileSystemWatcher = false,
+                }
+            );
             await using var tailer = service.StartTailer("file-1", path);
 
             await ReadEventAsync<NewLines>(service.Events);
@@ -71,7 +86,10 @@ public sealed class TailerServiceTests
             await File.WriteAllTextAsync(path, "after\n");
 
             var rotated = await ReadEventAsync<FileRotated>(service.Events);
-            var replacement = await ReadEventAsync<NewLines>(service.Events, e => e.Lines.SequenceEqual(["after"]));
+            var replacement = await ReadEventAsync<NewLines>(
+                service.Events,
+                e => e.Lines.SequenceEqual(["after"])
+            );
 
             Assert.Equal("file-1", rotated.FileId);
             Assert.Equal("file-1", replacement.FileId);
@@ -86,11 +104,13 @@ public sealed class TailerServiceTests
     public async Task DisposeAsync_StopsTailerAndCompletes()
     {
         var path = CreateTempFile("line\n");
-        await using var service = new TailerService(new TailerOptions
-        {
-            PollInterval = TimeSpan.FromMilliseconds(10),
-            UseFileSystemWatcher = false,
-        });
+        await using var service = new TailerService(
+            new TailerOptions
+            {
+                PollInterval = TimeSpan.FromMilliseconds(10),
+                UseFileSystemWatcher = false,
+            }
+        );
         var tailer = service.StartTailer("file-1", path);
 
         await tailer.DisposeAsync();
@@ -99,7 +119,10 @@ public sealed class TailerServiceTests
         Assert.True(tailer.Completion.IsCompletedSuccessfully);
     }
 
-    private static async Task<T> ReadEventAsync<T>(ChannelReader<TailerEvent> reader, Func<T, bool>? predicate = null)
+    private static async Task<T> ReadEventAsync<T>(
+        ChannelReader<TailerEvent> reader,
+        Func<T, bool>? predicate = null
+    )
         where T : TailerEvent
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
@@ -112,7 +135,10 @@ public sealed class TailerServiceTests
         throw new TimeoutException($"Timed out waiting for {typeof(T).Name}.");
     }
 
-    private static async Task AssertNoEventAsync(ChannelReader<TailerEvent> reader, TimeSpan duration)
+    private static async Task AssertNoEventAsync(
+        ChannelReader<TailerEvent> reader,
+        TimeSpan duration
+    )
     {
         await Task.Delay(duration);
         Assert.False(reader.TryRead(out _), "An event was emitted for an incomplete line.");

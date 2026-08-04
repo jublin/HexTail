@@ -29,14 +29,19 @@ public sealed class CompiledQuery
         if (mode is MatchMode.Regex)
         {
             var options = RegexOptions.Compiled;
-            if (!caseSensitive) options |= RegexOptions.IgnoreCase;
+            if (!caseSensitive)
+                options |= RegexOptions.IgnoreCase;
             try
             {
                 _regex = new Regex(query, options);
             }
             catch (ArgumentException ex)
             {
-                throw new ArgumentException($"Invalid regular expression: {ex.Message}", nameof(query), ex);
+                throw new ArgumentException(
+                    $"Invalid regular expression: {ex.Message}",
+                    nameof(query),
+                    ex
+                );
             }
         }
     }
@@ -62,13 +67,16 @@ public sealed class CompiledQuery
 
     private List<HighlightRange> LiteralHighlights(string text)
     {
-        var comparison = CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        var comparison = CaseSensitive
+            ? StringComparison.Ordinal
+            : StringComparison.OrdinalIgnoreCase;
         var ranges = new List<HighlightRange>();
         var start = 0;
         while (start <= text.Length - Query.Length)
         {
             var found = text.IndexOf(Query, start, comparison);
-            if (found < 0) break;
+            if (found < 0)
+                break;
             ranges.Add(new HighlightRange(found, Query.Length));
             start = found + Query.Length;
         }

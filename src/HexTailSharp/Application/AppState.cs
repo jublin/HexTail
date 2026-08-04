@@ -12,7 +12,11 @@ public sealed class AppState : IAsyncDisposable
     private AppSettings _settings;
     private int _nextFileId;
 
-    public AppState(TailerService tailers, IAppPersistence persistence, AppSettings? settings = null)
+    public AppState(
+        TailerService tailers,
+        IAppPersistence persistence,
+        AppSettings? settings = null
+    )
     {
         _tailers = tailers;
         _persistence = persistence;
@@ -35,7 +39,8 @@ public sealed class AppState : IAsyncDisposable
         Window = config.Window ?? new AppWindowState();
         foreach (var persisted in config.OpenFiles)
         {
-            var tab = await OpenFileAsync(persisted.Path, save: false, cancellationToken).ConfigureAwait(false);
+            var tab = await OpenFileAsync(persisted.Path, save: false, cancellationToken)
+                .ConfigureAwait(false);
             tab.FollowAll = persisted.FollowAll;
             tab.ShowContext = persisted.ShowContext;
             tab.SelectedLine = persisted.SelectedLine;
@@ -49,7 +54,8 @@ public sealed class AppState : IAsyncDisposable
                     var active = new Search(
                         new CompiledQuery(search.Query, search.Mode, search.CaseSensitive),
                         search.Color,
-                        tab.Buffer);
+                        tab.Buffer
+                    );
                     tab.AddSearch(active);
                 }
                 catch (ArgumentException)
@@ -63,7 +69,13 @@ public sealed class AppState : IAsyncDisposable
         }
 
         if (config.SelectedFilePath is not null)
-            SelectedFile = _files.FirstOrDefault(file => string.Equals(file.Path, config.SelectedFilePath, StringComparison.OrdinalIgnoreCase));
+            SelectedFile = _files.FirstOrDefault(file =>
+                string.Equals(
+                    file.Path,
+                    config.SelectedFilePath,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            );
         SelectedFile ??= _files.FirstOrDefault();
         NotifyChanged();
     }
@@ -71,11 +83,14 @@ public sealed class AppState : IAsyncDisposable
     public async ValueTask<FileTabState> OpenFileAsync(
         string path,
         bool save = true,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         var fullPath = System.IO.Path.GetFullPath(path);
-        var existing = _files.FirstOrDefault(file => string.Equals(file.Path, fullPath, StringComparison.OrdinalIgnoreCase));
+        var existing = _files.FirstOrDefault(file =>
+            string.Equals(file.Path, fullPath, StringComparison.OrdinalIgnoreCase)
+        );
         if (existing is not null)
         {
             SelectedFile = existing;
@@ -101,7 +116,10 @@ public sealed class AppState : IAsyncDisposable
         return tab;
     }
 
-    public async ValueTask CloseFileAsync(FileTabState tab, CancellationToken cancellationToken = default)
+    public async ValueTask CloseFileAsync(
+        FileTabState tab,
+        CancellationToken cancellationToken = default
+    )
     {
         if (!_files.Remove(tab))
             return;
@@ -112,7 +130,13 @@ public sealed class AppState : IAsyncDisposable
         await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public Search AddSearch(FileTabState tab, string query, MatchMode mode, bool caseSensitive, string color)
+    public Search AddSearch(
+        FileTabState tab,
+        string query,
+        MatchMode mode,
+        bool caseSensitive,
+        string color
+    )
     {
         var search = new Search(new CompiledQuery(query, mode, caseSensitive), color, tab.Buffer);
         tab.AddSearch(search);
@@ -127,7 +151,10 @@ public sealed class AppState : IAsyncDisposable
         NotifyChanged();
     }
 
-    public async ValueTask UpdateSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default)
+    public async ValueTask UpdateSettingsAsync(
+        AppSettings settings,
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(settings);
         _settings = NormalizeSettings(settings);
@@ -182,23 +209,27 @@ public sealed class AppState : IAsyncDisposable
     {
         var config = new AppConfig
         {
-            OpenFiles = _files.Select(tab => new PersistedFileTab
-            {
-                Path = tab.Path,
-                FollowAll = tab.FollowAll,
-                FollowSearches = [.. tab.FollowSearches],
-                ShowContext = tab.ShowContext,
-                SelectedLine = tab.SelectedLine,
-                ContextAbove = tab.ContextAbove,
-                ContextBelow = tab.ContextBelow,
-                Searches = tab.Searches.Select(search => new PersistedSearch
+            OpenFiles = _files
+                .Select(tab => new PersistedFileTab
                 {
-                    Query = search.Query.Query,
-                    Mode = search.Query.Mode,
-                    CaseSensitive = search.Query.CaseSensitive,
-                    Color = search.Color,
-                }).ToList(),
-            }).ToList(),
+                    Path = tab.Path,
+                    FollowAll = tab.FollowAll,
+                    FollowSearches = [.. tab.FollowSearches],
+                    ShowContext = tab.ShowContext,
+                    SelectedLine = tab.SelectedLine,
+                    ContextAbove = tab.ContextAbove,
+                    ContextBelow = tab.ContextBelow,
+                    Searches = tab
+                        .Searches.Select(search => new PersistedSearch
+                        {
+                            Query = search.Query.Query,
+                            Mode = search.Query.Mode,
+                            CaseSensitive = search.Query.CaseSensitive,
+                            Color = search.Color,
+                        })
+                        .ToList(),
+                })
+                .ToList(),
             SelectedFilePath = SelectedFile?.Path,
             Window = Window,
             Settings = _settings,
@@ -221,7 +252,11 @@ public sealed class AppState : IAsyncDisposable
         var labels = (settings.GlobalLabels ?? [])
             .OfType<GlobalLabel>()
             .Where(label => !string.IsNullOrWhiteSpace(label.Text))
-            .Select(label => new GlobalLabel { Text = label.Text.Trim(), Color = NormalizeColor(label.Color) })
+            .Select(label => new GlobalLabel
+            {
+                Text = label.Text.Trim(),
+                Color = NormalizeColor(label.Color),
+            })
             .DistinctBy(label => label.Text, StringComparer.OrdinalIgnoreCase)
             .ToList();
         var exclusions = (settings.GlobalExcludeLabels ?? [])
@@ -239,19 +274,29 @@ public sealed class AppState : IAsyncDisposable
             GlobalExcludeLabels = exclusions,
             Theme = ThemeCatalog.Normalize(settings.Theme),
             Density = Enum.IsDefined(settings.Density) ? settings.Density : UiDensity.Comfortable,
-            LogFontSize = Enum.IsDefined(settings.LogFontSize) ? settings.LogFontSize : LogFontSize.Medium,
-            SettingsMenuAlignment = Enum.IsDefined(settings.SettingsMenuAlignment) ? settings.SettingsMenuAlignment : SettingsMenuAlignment.Right,
+            LogFontSize = Enum.IsDefined(settings.LogFontSize)
+                ? settings.LogFontSize
+                : LogFontSize.Medium,
+            SettingsMenuAlignment = Enum.IsDefined(settings.SettingsMenuAlignment)
+                ? settings.SettingsMenuAlignment
+                : SettingsMenuAlignment.Right,
         };
     }
 
     private static string NormalizeColor(string? color) =>
-        color is { Length: 4 or 7 } && color[0] == '#' && color[1..].All(Uri.IsHexDigit) ? color : "#f59e0b";
+        color is { Length: 4 or 7 } && color[0] == '#' && color[1..].All(Uri.IsHexDigit)
+            ? color
+            : "#f59e0b";
 }
 
 public static class LogParserSelector
 {
     public static ILogParser ForPath(string path) =>
-        string.Equals(System.IO.Path.GetExtension(path), ".logfmt", StringComparison.OrdinalIgnoreCase)
+        string.Equals(
+            System.IO.Path.GetExtension(path),
+            ".logfmt",
+            StringComparison.OrdinalIgnoreCase
+        )
             ? new LogfmtParser()
             : new PlainTextParser();
 }

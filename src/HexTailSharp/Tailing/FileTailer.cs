@@ -1,5 +1,5 @@
-using System.Text;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Channels;
 using Polly;
 using Polly.Retry;
@@ -24,22 +24,31 @@ internal sealed class FileTailer : IFileTailer
     private bool _rotationHint;
     private string? _lastError;
 
-    public FileTailer(string fileId, string path, ChannelWriter<TailerEvent> events, TailerOptions options)
+    public FileTailer(
+        string fileId,
+        string path,
+        ChannelWriter<TailerEvent> events,
+        TailerOptions options
+    )
     {
         FileId = fileId;
         Path = System.IO.Path.GetFullPath(path);
         _events = events;
         _options = options;
         _retryPipeline = new ResiliencePipelineBuilder()
-            .AddRetry(new RetryStrategyOptions
-            {
-                MaxRetryAttempts = Math.Max(0, options.MaxRetryAttempts),
-                Delay = options.InitialRetryDelay,
-                MaxDelay = options.MaxRetryDelay,
-                BackoffType = DelayBackoffType.Exponential,
-                UseJitter = true,
-                ShouldHandle = new PredicateBuilder().Handle<IOException>().Handle<UnauthorizedAccessException>(),
-            })
+            .AddRetry(
+                new RetryStrategyOptions
+                {
+                    MaxRetryAttempts = Math.Max(0, options.MaxRetryAttempts),
+                    Delay = options.InitialRetryDelay,
+                    MaxDelay = options.MaxRetryDelay,
+                    BackoffType = DelayBackoffType.Exponential,
+                    UseJitter = true,
+                    ShouldHandle = new PredicateBuilder()
+                        .Handle<IOException>()
+                        .Handle<UnauthorizedAccessException>(),
+                }
+            )
             .Build();
     }
 
@@ -71,9 +80,7 @@ internal sealed class FileTailer : IFileTailer
             {
                 await _completion.ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (_stop.IsCancellationRequested)
-            {
-            }
+            catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
         }
 
         _stop.Dispose();
@@ -87,9 +94,12 @@ internal sealed class FileTailer : IFileTailer
             {
                 try
                 {
-                    await _retryPipeline.ExecuteAsync(
-                        cancellationToken => PollOnceAsync(cancellationToken),
-                        _stop.Token).ConfigureAwait(false);
+                    await _retryPipeline
+                        .ExecuteAsync(
+                            cancellationToken => PollOnceAsync(cancellationToken),
+                            _stop.Token
+                        )
+                        .ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (_stop.IsCancellationRequested)
                 {
@@ -159,7 +169,8 @@ internal sealed class FileTailer : IFileTailer
                 Share = FileShare.ReadWrite | FileShare.Delete,
                 Options = FileOptions.SequentialScan,
                 BufferSize = 81920,
-            });
+            }
+        );
 
         if (stream.Length < _offset)
         {
@@ -170,7 +181,13 @@ internal sealed class FileTailer : IFileTailer
         stream.Position = _offset;
         var buffer = new byte[81920];
         int read;
-        while ((read = await stream.ReadAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false)) > 0)
+        while (
+            (
+                read = await stream
+                    .ReadAsync(buffer.AsMemory(), cancellationToken)
+                    .ConfigureAwait(false)
+            ) > 0
+        )
         {
             _offset += read;
             AppendCompleteLines(buffer.AsSpan(0, read), lines);
@@ -258,7 +275,8 @@ internal sealed class FileTailer : IFileTailer
 
             _watcher = new FileSystemWatcher(directory, fileName)
             {
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.Size,
+                NotifyFilter =
+                    NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.Size,
             };
             _watcher.Created += OnCreated;
             _watcher.Renamed += OnRenamed;
@@ -266,7 +284,13 @@ internal sealed class FileTailer : IFileTailer
             _watcher.Error += OnWatcherError;
             _watcher.EnableRaisingEvents = true;
         }
-        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        catch (Exception ex)
+            when (ex
+                    is ArgumentException
+                        or IOException
+                        or UnauthorizedAccessException
+                        or PlatformNotSupportedException
+            )
         {
             _watcher?.Dispose();
             _watcher = null;

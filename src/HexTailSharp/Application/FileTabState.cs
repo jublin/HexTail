@@ -5,7 +5,13 @@ namespace HexTailSharp.Application;
 
 public sealed class FileTabState : IAsyncDisposable
 {
-    internal FileTabState(string id, string path, FileBuffer buffer, ILogParser parser, IFileTailer tailer)
+    internal FileTabState(
+        string id,
+        string path,
+        FileBuffer buffer,
+        ILogParser parser,
+        IFileTailer tailer
+    )
     {
         Id = id;
         Path = path;
@@ -29,7 +35,8 @@ public sealed class FileTabState : IAsyncDisposable
     public int ContextBelow { get; set; } = 10;
     public string? Error { get; internal set; }
     public IFileTailer Tailer { get; }
-    public string DisplayName => System.IO.Path.GetFileName(Path) is { Length: > 0 } name ? name : Path;
+    public string DisplayName =>
+        System.IO.Path.GetFileName(Path) is { Length: > 0 } name ? name : Path;
 
     public IReadOnlyList<Line> ContextLines =>
         SelectedLine is int selected && selected >= 0 && selected < Buffer.Count

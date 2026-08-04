@@ -12,16 +12,24 @@ public sealed class AppStateTests
     {
         var path = CreateTempFile("level=info\n", ".logfmt");
         var persistence = new MemoryPersistence();
-        await using var tailers = new TailerService(new TailerOptions
-        {
-            PollInterval = TimeSpan.FromMilliseconds(10),
-            UseFileSystemWatcher = false,
-        });
+        await using var tailers = new TailerService(
+            new TailerOptions
+            {
+                PollInterval = TimeSpan.FromMilliseconds(10),
+                UseFileSystemWatcher = false,
+            }
+        );
         await using var state = new AppState(tailers, persistence);
 
         var tab = await state.OpenFileAsync(path);
         await DrainUntilAsync(state, () => tab.Buffer.Count == 1);
-        var search = state.AddSearch(tab, "info", MatchMode.Literal, caseSensitive: true, "#00ff00");
+        var search = state.AddSearch(
+            tab,
+            "info",
+            MatchMode.Literal,
+            caseSensitive: true,
+            "#00ff00"
+        );
 
         await File.AppendAllTextAsync(path, "level=error\n");
         await DrainUntilAsync(state, () => tab.Buffer.Count == 2);
@@ -80,17 +88,19 @@ public sealed class AppStateTests
         var persistence = new MemoryPersistence();
         await using var state = new AppState(NewTailers(), persistence);
 
-        await state.UpdateSettingsAsync(new AppSettings
-        {
-            GlobalLabels =
-            [
-                new GlobalLabel { Text = " Error ", Color = "#ff0000" },
-                new GlobalLabel { Text = "error", Color = "#00ff00" },
-            ],
-            GlobalExcludeLabels = [" Health ", "health", ""],
-            Theme = "not-a-theme",
-            SettingsMenuAlignment = SettingsMenuAlignment.Left,
-        });
+        await state.UpdateSettingsAsync(
+            new AppSettings
+            {
+                GlobalLabels =
+                [
+                    new GlobalLabel { Text = " Error ", Color = "#ff0000" },
+                    new GlobalLabel { Text = "error", Color = "#00ff00" },
+                ],
+                GlobalExcludeLabels = [" Health ", "health", ""],
+                Theme = "not-a-theme",
+                SettingsMenuAlignment = SettingsMenuAlignment.Left,
+            }
+        );
 
         var settings = Assert.IsType<AppConfig>(persistence.Config).Settings;
         var label = Assert.Single(settings.GlobalLabels);
@@ -144,11 +154,14 @@ public sealed class AppStateTests
         Assert.IsType<PlainTextParser>(LogParserSelector.ForPath("app.log"));
     }
 
-    private static TailerService NewTailers() => new(new TailerOptions
-    {
-        PollInterval = TimeSpan.FromMilliseconds(10),
-        UseFileSystemWatcher = false,
-    });
+    private static TailerService NewTailers() =>
+        new(
+            new TailerOptions
+            {
+                PollInterval = TimeSpan.FromMilliseconds(10),
+                UseFileSystemWatcher = false,
+            }
+        );
 
     private static async Task DrainUntilAsync(AppState state, Func<bool> condition)
     {

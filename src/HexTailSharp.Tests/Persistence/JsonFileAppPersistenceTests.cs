@@ -23,7 +23,13 @@ public sealed class JsonFileAppPersistenceTests
                 },
             ],
             SelectedFilePath = "/tmp/app.log",
-            Window = new AppWindowState { Width = 900, Height = 600, X = 12, Y = 34 },
+            Window = new AppWindowState
+            {
+                Width = 900,
+                Height = 600,
+                X = 12,
+                Y = 34,
+            },
             Settings = new AppSettings { Theme = "light", GlobalExcludeLabels = ["health"] },
         };
 
@@ -53,7 +59,8 @@ public sealed class JsonFileAppPersistenceTests
 
     private sealed class TempDirectory : IDisposable
     {
-        public TempDirectory() => Path = Directory.CreateTempSubdirectory("hextail-persistence-").FullName;
+        public TempDirectory() =>
+            Path = Directory.CreateTempSubdirectory("hextail-persistence-").FullName;
 
         public string Path { get; }
 
