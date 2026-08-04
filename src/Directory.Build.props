@@ -1,5 +1,5 @@
 <Project>
-  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), 'Directory.Build.props'))\Directory.Build.props" />
+  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory).., 'Directory.Build.props'))\Directory.Build.props" />
   <PropertyGroup>
     <BaseOutputPath>$(MSBuildThisFileDirectory)..\build\$(MSBuildProjectName)\</BaseOutputPath>
     <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)..\build\$(MSBuildProjectName)\obj\</BaseIntermediateOutputPath>

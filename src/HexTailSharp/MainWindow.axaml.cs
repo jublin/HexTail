@@ -7,6 +7,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using HexTailSharp.Application;
@@ -34,6 +35,10 @@ public partial class MainWindow : Window
     private bool _updatingUi;
     private int _activeViewIndex;
     private string _settingsSection = "labels";
+
+    public MainWindow() : this(null)
+    {
+    }
 
     public MainWindow(string[]? startupPaths = null)
     {
@@ -116,6 +121,7 @@ public partial class MainWindow : Window
         _updatingUi = true;
         try
         {
+            ApplyTheme();
             FileCountText.Text = $"{_state.Files.Count} file(s)";
             RefreshFileTabs();
             RefreshSettingsEditor();
@@ -209,7 +215,7 @@ public partial class MainWindow : Window
             BorderThickness = new Thickness(0),
             ItemsSource = LinesFor(file, search),
             ItemTemplate = new FuncDataTemplate<Line>((line, _) => BuildLogRow(file, line), supportsRecycling: false),
-            ItemsPanel = new FuncTemplate<Panel>(() => new VirtualizingStackPanel()),
+            ItemsPanel = new FuncTemplate<Panel?>(() => new VirtualizingStackPanel()),
         };
         list.SelectionChanged += (_, _) =>
         {
@@ -253,7 +259,7 @@ public partial class MainWindow : Window
                     TextWrapping = TextWrapping.NoWrap,
                     TextTrimming = TextTrimming.CharacterEllipsis,
                 }, supportsRecycling: false),
-                ItemsPanel = new FuncTemplate<Panel>(() => new VirtualizingStackPanel()),
+                ItemsPanel = new FuncTemplate<Panel?>(() => new VirtualizingStackPanel()),
             };
             Grid.SetRow(contextList, 2);
             body.Children.Add(contextList);
@@ -345,7 +351,7 @@ public partial class MainWindow : Window
         var row = new Border
         {
             Child = content,
-            Padding = new Thickness(12, 4),
+            Padding = LogRowPadding(),
             BorderBrush = Brush("#263449"),
             BorderThickness = new Thickness(0, 0, 0, 1),
             Background = Brushes.Transparent,
@@ -428,6 +434,30 @@ public partial class MainWindow : Window
 
         if (_state.SelectedFile is { } selectedFile)
             LineCountText.Text = $"{selectedFile.Buffer.Count:N0} lines";
+    }
+
+    private void ApplyTheme()
+    {
+        if (Avalonia.Application.Current is not { } application)
+            return;
+
+        application.RequestedThemeVariant = _state.Settings.Theme switch
+        {
+            "light" => ThemeVariant.Light,
+            "system" => ThemeVariant.Default,
+            _ => ThemeVariant.Dark,
+        };
+
+        var light = _state.Settings.Theme == "light";
+        application.Resources["SurfaceBrush"] = new SolidColorBrush(Color.Parse(light ? "#F8FAFC" : "#111827"));
+        application.Resources["RaisedSurfaceBrush"] = new SolidColorBrush(Color.Parse(light ? "#F1F5F9" : "#172033"));
+        application.Resources["ToolbarBrush"] = new SolidColorBrush(Color.Parse(light ? "#FFFFFF" : "#1F2937"));
+        application.Resources["BorderBrush"] = new SolidColorBrush(Color.Parse(light ? "#CBD5E1" : "#334155"));
+        application.Resources["TextBrush"] = new SolidColorBrush(Color.Parse(light ? "#1E293B" : "#E2E8F0"));
+        application.Resources["MutedTextBrush"] = new SolidColorBrush(Color.Parse(light ? "#475569" : "#94A3B8"));
+        application.Resources["ErrorBackgroundBrush"] = new SolidColorBrush(Color.Parse(light ? "#FEE2E2" : "#451A1A"));
+        application.Resources["ErrorBorderBrush"] = new SolidColorBrush(Color.Parse(light ? "#B91C1C" : "#EF4444"));
+        application.Resources["ErrorTextBrush"] = new SolidColorBrush(Color.Parse(light ? "#991B1B" : "#FECACA"));
     }
 
     private void UpdateContextViews(FileTabState file)
@@ -595,14 +625,14 @@ public partial class MainWindow : Window
         Grid.SetColumn(add, 1);
     }
 
-    private void BuildChoiceEditor<T>(string label, IEnumerable<T> values, T selected, Action<object> changed)
+    private void BuildChoiceEditor<T>(string label, IEnumerable<T> values, T selected, Func<object, Task> changed)
     {
         SettingsEditor.Children.Add(new TextBlock { Text = label, Foreground = Brush("#CBD5E1") });
         var combo = new ComboBox { ItemsSource = values.ToList(), SelectedItem = selected, HorizontalAlignment = HorizontalAlignment.Stretch };
         combo.SelectionChanged += (_, _) =>
         {
             if (!_updatingUi && combo.SelectedItem is not null)
-                changed(combo.SelectedItem);
+                _ = changed(combo.SelectedItem);
         };
         SettingsEditor.Children.Add(combo);
     }
@@ -814,7 +844,7 @@ public partial class MainWindow : Window
 
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
 
-    private static ColorPicker ColorPicker(string value) => new()
+    private ColorPicker ColorPicker(string value) => new()
     {
         Color = Color.Parse(value),
         IsAlphaEnabled = false,
@@ -822,7 +852,7 @@ public partial class MainWindow : Window
         Height = 36,
     };
 
-    private static TextBlock HelpText(string text) => new()
+    private TextBlock HelpText(string text) => new()
     {
         Text = text,
         Foreground = Brush("#94A3B8"),
@@ -832,6 +862,13 @@ public partial class MainWindow : Window
 
     private static FontFamily LogFont => new("Cascadia Mono,Consolas,Menlo,monospace");
 
+    private Thickness LogRowPadding() => _state.Settings.Density switch
+    {
+        UiDensity.Compact => new Thickness(12, 1),
+        UiDensity.Cozy => new Thickness(12, 3),
+        _ => new Thickness(12, 4),
+    };
+
     private static double ToLogFontSize(LogFontSize size) => size switch
     {
         LogFontSize.Small => 12,
@@ -840,7 +877,24 @@ public partial class MainWindow : Window
         _ => 13,
     };
 
-    private static IBrush Brush(string value) => new SolidColorBrush(Color.Parse(value));
+    private IBrush Brush(string value) => new SolidColorBrush(Color.Parse(_state.Settings.Theme == "light" ? LightColor(value) : value));
+
+    private static string LightColor(string value) => value switch
+    {
+        "#111827" => "#F8FAFC",
+        "#172033" => "#F1F5F9",
+        "#1F2937" => "#FFFFFF",
+        "#334155" => "#CBD5E1",
+        "#263449" => "#E2E8F0",
+        "#94A3B8" => "#475569",
+        "#F8FAFC" => "#0F172A",
+        "#E2E8F0" => "#1E293B",
+        "#CBD5E1" => "#334155",
+        "#451A1A" => "#FEE2E2",
+        "#EF4444" => "#B91C1C",
+        "#FECACA" => "#991B1B",
+        _ => value,
+    };
 
     private async void OnClosed(object? sender, EventArgs e)
     {

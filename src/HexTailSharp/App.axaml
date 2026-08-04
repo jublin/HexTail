@@ -2,8 +2,32 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="HexTailSharp.App"
              RequestedThemeVariant="Dark">
+  <Application.Resources>
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#111827" />
+    <SolidColorBrush x:Key="RaisedSurfaceBrush" Color="#172033" />
+    <SolidColorBrush x:Key="ToolbarBrush" Color="#1F2937" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#334155" />
+    <SolidColorBrush x:Key="TextBrush" Color="#E2E8F0" />
+    <SolidColorBrush x:Key="MutedTextBrush" Color="#94A3B8" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#F59E0B" />
+    <SolidColorBrush x:Key="ErrorBackgroundBrush" Color="#451A1A" />
+    <SolidColorBrush x:Key="ErrorBorderBrush" Color="#EF4444" />
+    <SolidColorBrush x:Key="ErrorTextBrush" Color="#FECACA" />
+  </Application.Resources>
   <Application.Styles>
     <FluentTheme />
     <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
+    <Style Selector="Button">
+      <Setter Property="Padding" Value="10,6" />
+    </Style>
+    <Style Selector="TextBox">
+      <Setter Property="MinHeight" Value="34" />
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="MinHeight" Value="34" />
+    </Style>
+    <Style Selector="ListBoxItem:selected">
+      <Setter Property="Background" Value="#334155" />
+    </Style>
   </Application.Styles>
 </Application>
