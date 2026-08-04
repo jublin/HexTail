@@ -190,6 +190,9 @@ public sealed class AppState : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(tab);
         ArgumentNullException.ThrowIfNull(search);
+        if (!_files.Contains(tab))
+            return;
+
         var index = tab.Searches.IndexOf(search);
         if (index < 0 || index >= tab.FollowSearches.Count || tab.FollowSearches[index] == value)
             return;
@@ -205,7 +208,8 @@ public sealed class AppState : IAsyncDisposable
         if (!_files.Contains(tab))
             return;
 
-        tab.SelectedLine = line is null ? null : FindLineIndex(tab, line);
+        var index = line is null ? -1 : FindLineIndex(tab, line);
+        tab.SelectedLine = index >= 0 ? index : null;
         NotifyChanged();
     }
 
