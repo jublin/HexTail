@@ -237,6 +237,7 @@ public partial class MainWindow : Window
         var view = BuildView(file, search);
         _views.Add(view);
         ViewTabs.Items.Add(new TabItem { Header = header, Content = view.Root });
+        ScrollContextToSelected(view);
     }
 
     private ViewEntry BuildView(FileTabState file, Search? search)
@@ -542,7 +543,10 @@ public partial class MainWindow : Window
     private void UpdateContextViews(FileTabState file)
     {
         foreach (var view in _views.Where(view => ReferenceEquals(view.File, file)))
+        {
             UpdateContext(view);
+            ScrollContextToSelected(view);
+        }
     }
 
     private void UpdateContext(ViewEntry view, bool resetItems = false)
@@ -559,6 +563,30 @@ public partial class MainWindow : Window
         else
             SyncLines(view.ContextLines, lines);
         view.ContextEmpty.IsVisible = lines.Count == 0;
+        if (resetItems)
+            ScrollContextToSelected(view);
+    }
+
+    private void ScrollContextToSelected(ViewEntry view)
+    {
+        if (view.ContextList is null || view.ContextLines is null ||
+            view.File.SelectedLine is not int selected || selected < 0 || selected >= view.File.Buffer.Count)
+            return;
+
+        var line = view.File.Buffer[selected];
+        var index = view.ContextLines.IndexOf(line);
+        if (index < 0)
+            return;
+
+        view.ContextList.SelectedItem = line;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_closed || view.File.SelectedLine is not int current || current < 0 || current >= view.File.Buffer.Count ||
+                !ReferenceEquals(view.File.Buffer[current], line) || view.ContextLines is null || index >= view.ContextLines.Count ||
+                !ReferenceEquals(view.ContextLines[index], line))
+                return;
+            view.ContextList.ScrollIntoView(index);
+        }, DispatcherPriority.Background);
     }
 
     private static void SyncLines(ObservableCollection<Line> current, IReadOnlyList<Line> desired)
