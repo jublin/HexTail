@@ -218,12 +218,13 @@ public sealed class AppState : IAsyncDisposable
 
     private static AppSettings NormalizeSettings(AppSettings settings)
     {
-        var labels = settings.GlobalLabels
+        var labels = (settings.GlobalLabels ?? [])
+            .OfType<GlobalLabel>()
             .Where(label => !string.IsNullOrWhiteSpace(label.Text))
             .Select(label => new GlobalLabel { Text = label.Text.Trim(), Color = NormalizeColor(label.Color) })
             .DistinctBy(label => label.Text, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var exclusions = settings.GlobalExcludeLabels
+        var exclusions = (settings.GlobalExcludeLabels ?? [])
             .Where(label => !string.IsNullOrWhiteSpace(label))
             .Select(label => label.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -243,8 +244,8 @@ public sealed class AppState : IAsyncDisposable
         };
     }
 
-    private static string NormalizeColor(string color) =>
-        color.Length is 4 or 7 && color[0] == '#' && color[1..].All(Uri.IsHexDigit) ? color : "#f59e0b";
+    private static string NormalizeColor(string? color) =>
+        color is { Length: 4 or 7 } && color[0] == '#' && color[1..].All(Uri.IsHexDigit) ? color : "#f59e0b";
 }
 
 public static class LogParserSelector

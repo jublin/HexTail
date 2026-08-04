@@ -123,6 +123,7 @@ public sealed class AppStateTests
         Assert.Equal("dark", ThemeCatalog.Normalize("material-dark-wcag"));
         Assert.Equal("light", ThemeCatalog.Normalize("material-wcag"));
         Assert.Equal("dark", ThemeCatalog.Normalize("not-a-theme"));
+        Assert.Equal("dark", ThemeCatalog.Normalize(null));
     }
 
     [Fact]

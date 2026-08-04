@@ -73,8 +73,9 @@ public static class ThemeCatalog
 
     public static bool Contains(string theme) => Names.Contains(theme, StringComparer.Ordinal);
 
-    public static string Normalize(string theme) => theme switch
+    public static string Normalize(string? theme) => theme switch
     {
+        null => "dark",
         "system" => "system",
         "light" => "light",
         "dark" => "dark",
