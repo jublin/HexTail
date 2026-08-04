@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
@@ -35,6 +36,9 @@ public partial class MainWindow : Window
     private bool _updatingUi;
     private int _activeViewIndex;
     private string _settingsSection = "labels";
+    private FileTabState? _viewFile;
+    private int _viewSearchCount;
+    private bool _viewShowContext;
 
     public MainWindow() : this(null)
     {
@@ -131,7 +135,10 @@ public partial class MainWindow : Window
             EmptyState.IsVisible = !hasFile;
             FileWorkspace.IsVisible = hasFile;
             if (!hasFile)
+            {
+                ClearViewTabs();
                 return;
+            }
 
             FileErrorBorder.IsVisible = file!.Error is not null;
             FileErrorText.Text = file.Error;
@@ -139,7 +146,10 @@ public partial class MainWindow : Window
             ShowContextBox.IsChecked = file.ShowContext;
             LineCountText.Text = $"{file.Buffer.Count:N0} lines";
             SearchErrorBorder.IsVisible = false;
-            BuildViewTabs(file);
+            if (ViewStructureChanged(file))
+                BuildViewTabs(file);
+            else
+                RefreshVisibleViews(resetItems: true);
         }
         finally
         {
@@ -191,6 +201,9 @@ public partial class MainWindow : Window
     {
         _views.Clear();
         ViewTabs.Items.Clear();
+        _viewFile = file;
+        _viewSearchCount = file.Searches.Count;
+        _viewShowContext = file.ShowContext;
 
         AddViewTab(file, null, "All");
         for (var index = 0; index < file.Searches.Count; index++)
@@ -199,6 +212,20 @@ public partial class MainWindow : Window
         _activeViewIndex = Math.Clamp(_activeViewIndex, 0, Math.Max(0, ViewTabs.Items.Count - 1));
         ViewTabs.SelectedIndex = _activeViewIndex;
     }
+
+    private void ClearViewTabs()
+    {
+        _views.Clear();
+        ViewTabs.Items.Clear();
+        _viewFile = null;
+        _viewSearchCount = 0;
+        _viewShowContext = false;
+    }
+
+    private bool ViewStructureChanged(FileTabState file) =>
+        !ReferenceEquals(_viewFile, file) ||
+        _viewSearchCount != file.Searches.Count ||
+        _viewShowContext != file.ShowContext;
 
     private void AddViewTab(FileTabState file, Search? search, string header)
     {
@@ -209,11 +236,12 @@ public partial class MainWindow : Window
 
     private ViewEntry BuildView(FileTabState file, Search? search)
     {
+        var lineItems = new ObservableCollection<Line>(LinesFor(file, search));
         var list = new ListBox
         {
             Background = Brush("#111827"),
             BorderThickness = new Thickness(0),
-            ItemsSource = LinesFor(file, search),
+            ItemsSource = lineItems,
             ItemTemplate = new FuncDataTemplate<Line>((line, _) => BuildLogRow(file, line), supportsRecycling: false),
             ItemsPanel = new FuncTemplate<Panel?>(() => new VirtualizingStackPanel()),
         };
@@ -225,11 +253,12 @@ public partial class MainWindow : Window
                 UpdateContextViews(file);
             }
         };
-        list.AttachedToVisualTree += (_, _) => AttachScrollHandler(file, search, list);
+        WireScrollHandler(file, search, list);
 
         var body = new Grid { RowDefinitions = new RowDefinitions("*") };
         ListBox? contextList = null;
         TextBlock? contextEmpty = null;
+        ObservableCollection<Line>? contextItems = null;
         if (file.ShowContext)
         {
             body.RowDefinitions = new RowDefinitions($"*,4,{Math.Max(120, _state.Window.ContextPaneSize)}");
@@ -244,11 +273,12 @@ public partial class MainWindow : Window
             Grid.SetRow(splitter, 1);
             body.Children.Add(splitter);
 
+            contextItems = new ObservableCollection<Line>(ContextLines(file));
             contextList = new ListBox
             {
                 Background = Brush("#172033"),
                 BorderThickness = new Thickness(0),
-                ItemsSource = ContextLines(file),
+                ItemsSource = contextItems,
                 ItemTemplate = new FuncDataTemplate<Line>((line, _) => new TextBlock
                 {
                     Text = line.Raw,
@@ -310,7 +340,9 @@ public partial class MainWindow : Window
         }
         root.Children.Add(body);
 
-        return new ViewEntry(file, search, root, list, contextList, contextEmpty);
+        return new ViewEntry(file, search, root, list, contextList, contextEmpty,
+            lineItems,
+            contextItems);
     }
 
     private Control BuildLogRow(FileTabState file, Line? line)
@@ -411,28 +443,47 @@ public partial class MainWindow : Window
         target.Inlines = inlines;
     }
 
-    private void AttachScrollHandler(FileTabState file, Search? search, ListBox list)
+    private void WireScrollHandler(FileTabState file, Search? search, ListBox list)
     {
-        var viewer = list.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
-        if (viewer is null)
-            return;
-
-        viewer.ScrollChanged += (_, _) =>
+        var attached = false;
+        void TryAttach()
         {
-            if (viewer.Extent.Height - viewer.Viewport.Height - viewer.Offset.Y > 8)
-                SetFollow(file, search, false);
-        };
+            if (attached)
+                return;
+
+            var viewer = list.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+            if (viewer is null)
+                return;
+
+            attached = true;
+            viewer.ScrollChanged += (_, _) =>
+            {
+                if (viewer.Extent.Height - viewer.Viewport.Height - viewer.Offset.Y > 8)
+                    SetFollow(file, search, false);
+            };
+        }
+
+        list.TemplateApplied += (_, _) => TryAttach();
+        list.AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(TryAttach, DispatcherPriority.Background);
+        TryAttach();
     }
 
-    private void RefreshVisibleViews(bool followTail = false)
+    private void RefreshVisibleViews(bool followTail = false, bool resetItems = false)
     {
         foreach (var view in _views)
         {
             var selected = view.List.SelectedItem as Line;
-            view.List.ItemsSource = LinesFor(view.File, view.Search);
-            if (selected is not null && view.List.ItemsSource is IEnumerable<Line> lines && lines.Contains(selected))
+            var lines = LinesFor(view.File, view.Search);
+            if (resetItems)
+            {
+                view.Lines = new ObservableCollection<Line>(lines);
+                view.List.ItemsSource = view.Lines;
+            }
+            else
+                SyncLines(view.Lines, lines);
+            if (selected is not null && view.Lines.Contains(selected))
                 view.List.SelectedItem = selected;
-            UpdateContext(view);
+            UpdateContext(view, resetItems);
             if (followTail && ShouldFollow(view))
                 Dispatcher.UIThread.Post(() =>
                 {
@@ -475,14 +526,56 @@ public partial class MainWindow : Window
             UpdateContext(view);
     }
 
-    private void UpdateContext(ViewEntry view)
+    private void UpdateContext(ViewEntry view, bool resetItems = false)
     {
         if (view.ContextList is null || view.ContextEmpty is null)
             return;
 
-        var lines = ContextLines(view.File).ToList();
-        view.ContextList.ItemsSource = lines;
+        var lines = ContextLines(view.File);
+        if (view.ContextLines is not null)
+        {
+            if (resetItems)
+            {
+                view.ContextLines = new ObservableCollection<Line>(lines);
+                view.ContextList.ItemsSource = view.ContextLines;
+            }
+            else
+                SyncLines(view.ContextLines, lines);
+        }
         view.ContextEmpty.IsVisible = lines.Count == 0;
+    }
+
+    private static void SyncLines(ObservableCollection<Line> current, IReadOnlyList<Line> desired)
+    {
+        if (current.Count == desired.Count &&
+            (current.Count == 0 || ReferenceEquals(current[^1], desired[^1])))
+            return;
+
+        if (current.Count < desired.Count &&
+            (current.Count == 0 || ReferenceEquals(current[^1], desired[current.Count - 1])))
+        {
+            for (var index = current.Count; index < desired.Count; index++)
+                current.Add(desired[index]);
+            return;
+        }
+
+        var common = 0;
+        while (common < current.Count && common < desired.Count && ReferenceEquals(current[common], desired[common]))
+            common++;
+
+        if (common < current.Count / 2)
+        {
+            current.Clear();
+            common = 0;
+        }
+        else
+        {
+            while (current.Count > common)
+                current.RemoveAt(current.Count - 1);
+        }
+
+        for (var index = common; index < desired.Count; index++)
+            current.Add(desired[index]);
     }
 
     private IReadOnlyList<Line> LinesFor(FileTabState file, Search? search)
@@ -491,7 +584,7 @@ public partial class MainWindow : Window
             ? file.Buffer.Lines
             : search.Results.Where(index => index >= 0 && index < file.Buffer.Count).Select(index => file.Buffer[index]);
         return _state.Settings.GlobalExcludeLabels.Count == 0
-            ? lines.ToList()
+            ? lines as IReadOnlyList<Line> ?? lines.ToList()
             : lines.Where(line => !_state.Settings.Excludes(line.Raw)).ToList();
     }
 
@@ -736,14 +829,30 @@ public partial class MainWindow : Window
 
     private void SetFollow(FileTabState file, Search? search, bool value)
     {
+        var changed = false;
         if (search is null)
+        {
+            changed = file.FollowAll != value;
             file.FollowAll = value;
+            if (changed && ReferenceEquals(file, _state.SelectedFile))
+            {
+                _updatingUi = true;
+                FollowAllBox.IsChecked = value;
+                _updatingUi = false;
+            }
+        }
         else
         {
             var index = file.Searches.IndexOf(search);
             if (index >= 0 && index < file.FollowSearches.Count)
+            {
+                changed = file.FollowSearches[index] != value;
                 file.FollowSearches[index] = value;
+            }
         }
+
+        if (changed)
+            _ = _state.SaveAsync();
     }
 
     private static bool IsSearchFollow(FileTabState file, Search search)
@@ -838,7 +947,7 @@ public partial class MainWindow : Window
     {
         var index = FindLineIndex(file, line);
         file.ExpandedLine = file.ExpandedLine == index ? null : index;
-        RefreshVisibleViews();
+        RefreshVisibleViews(resetItems: true);
     }
 
     private static int FindLineIndex(FileTabState file, Line line)
@@ -929,7 +1038,9 @@ public partial class MainWindow : Window
         Grid root,
         ListBox list,
         ListBox? contextList,
-        TextBlock? contextEmpty)
+        TextBlock? contextEmpty,
+        ObservableCollection<Line> lines,
+        ObservableCollection<Line>? contextLines)
     {
         public FileTabState File { get; } = file;
         public Search? Search { get; } = search;
@@ -937,5 +1048,7 @@ public partial class MainWindow : Window
         public ListBox List { get; } = list;
         public ListBox? ContextList { get; } = contextList;
         public TextBlock? ContextEmpty { get; } = contextEmpty;
+        public ObservableCollection<Line> Lines { get; set; } = lines;
+        public ObservableCollection<Line>? ContextLines { get; set; } = contextLines;
     }
 }
