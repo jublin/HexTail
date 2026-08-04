@@ -34,6 +34,7 @@ public partial class MainWindow : Window
     private bool _closed;
     private bool _drainingTailer;
     private bool _updatingUi;
+    private int _refreshQueued;
     private int _activeViewIndex;
     private string _settingsSection = "labels";
     private FileTabState? _viewFile;
@@ -72,7 +73,6 @@ public partial class MainWindow : Window
 
         _started = true;
         await _state.RestoreAsync();
-        ApplyWindowState();
         foreach (var path in _startupPaths.Where(path => !string.IsNullOrWhiteSpace(path)))
         {
             try
@@ -84,7 +84,12 @@ public partial class MainWindow : Window
                 ShowFileError($"Could not open {path}: {ex.Message}");
             }
         }
-        RefreshUi();
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            ApplyWindowState();
+            RefreshSettingsEditor();
+            RefreshUi();
+        });
     }
 
     private void ApplyWindowState()
@@ -99,13 +104,14 @@ public partial class MainWindow : Window
 
     private void OnStateChanged()
     {
-        if (_drainingTailer)
+        if (_drainingTailer || _closed || Interlocked.Exchange(ref _refreshQueued, 1) != 0)
             return;
 
-        if (Dispatcher.UIThread.CheckAccess())
+        Dispatcher.UIThread.Post(() =>
+        {
+            Interlocked.Exchange(ref _refreshQueued, 0);
             RefreshUi();
-        else
-            Dispatcher.UIThread.Post(RefreshUi);
+        }, DispatcherPriority.Background);
     }
 
     private void DrainTailerEvents(object? sender, EventArgs e)
@@ -128,7 +134,6 @@ public partial class MainWindow : Window
             ApplyTheme();
             FileCountText.Text = $"{_state.Files.Count} file(s)";
             RefreshFileTabs();
-            RefreshSettingsEditor();
 
             var file = _state.SelectedFile;
             var hasFile = file is not null;
@@ -630,12 +635,12 @@ public partial class MainWindow : Window
             var label = _state.Settings.GlobalLabels[index];
             var text = new TextBox { Text = label.Text, PlaceholderText = "Text to highlight", HorizontalAlignment = HorizontalAlignment.Stretch };
             var color = ColorPicker(label.Color);
-            text.TextChanged += (_, _) =>
+            text.LostFocus += (_, _) =>
             {
                 var labels = _state.Settings.GlobalLabels.Select((item, current) => current == labelIndex
                     ? new GlobalLabel { Text = text.Text ?? string.Empty, Color = ColorToHex(color.Color) }
                     : item).ToList();
-                _ = UpdateSettings(_state.Settings with { GlobalLabels = labels });
+                _ = UpdateSettings(_state.Settings with { GlobalLabels = labels }, refreshEditor: true);
             };
             color.ColorChanged += (_, args) =>
             {
@@ -649,7 +654,7 @@ public partial class MainWindow : Window
             remove.Click += (_, _) => _ = UpdateSettings(_state.Settings with
             {
                 GlobalLabels = _state.Settings.GlobalLabels.Where((_, current) => current != labelIndex).ToList(),
-            });
+            }, refreshEditor: true);
             SettingsEditor.Children.Add(new Grid
             {
                 ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
@@ -670,7 +675,7 @@ public partial class MainWindow : Window
             _ = UpdateSettings(_state.Settings with
             {
                 GlobalLabels = [.. _state.Settings.GlobalLabels, new GlobalLabel { Text = newText.Text, Color = ColorToHex(newColor.Color) }],
-            });
+            }, refreshEditor: true);
         };
         SettingsEditor.Children.Add(new Grid
         {
@@ -688,17 +693,17 @@ public partial class MainWindow : Window
         {
             var exclusionIndex = index;
             var text = new TextBox { Text = _state.Settings.GlobalExcludeLabels[index], PlaceholderText = "Text to hide" };
-            text.TextChanged += (_, _) =>
+            text.LostFocus += (_, _) =>
             {
                 var values = _state.Settings.GlobalExcludeLabels.Select((item, current) => current == exclusionIndex ? text.Text ?? string.Empty : item).ToList();
-                _ = UpdateSettings(_state.Settings with { GlobalExcludeLabels = values });
+                _ = UpdateSettings(_state.Settings with { GlobalExcludeLabels = values }, refreshEditor: true);
             };
             var remove = new Button { Content = "×" };
             ToolTip.SetTip(remove, "Remove exclusion");
             remove.Click += (_, _) => _ = UpdateSettings(_state.Settings with
             {
                 GlobalExcludeLabels = _state.Settings.GlobalExcludeLabels.Where((_, current) => current != exclusionIndex).ToList(),
-            });
+            }, refreshEditor: true);
             SettingsEditor.Children.Add(new Grid
             {
                 ColumnDefinitions = new ColumnDefinitions("*,Auto"),
@@ -717,7 +722,7 @@ public partial class MainWindow : Window
             _ = UpdateSettings(_state.Settings with
             {
                 GlobalExcludeLabels = [.. _state.Settings.GlobalExcludeLabels, newText.Text],
-            });
+            }, refreshEditor: true);
         };
         SettingsEditor.Children.Add(new Grid
         {
@@ -739,12 +744,19 @@ public partial class MainWindow : Window
         SettingsEditor.Children.Add(combo);
     }
 
-    private async Task UpdateSettings(AppSettings settings) => await _state.UpdateSettingsAsync(settings);
+    private async Task UpdateSettings(AppSettings settings, bool refreshEditor = false)
+    {
+        await _state.UpdateSettingsAsync(settings);
+        if (refreshEditor && !_closed)
+            await Dispatcher.UIThread.InvokeAsync(RefreshSettingsEditor);
+    }
 
     private void SettingsSectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (SettingsSections.SelectedItem is ListBoxItem item && item.Tag is string section)
         {
+            if (string.Equals(_settingsSection, section, StringComparison.Ordinal) && SettingsEditor.Children.Count > 0)
+                return;
             _settingsSection = section;
             RefreshSettingsEditor();
         }
