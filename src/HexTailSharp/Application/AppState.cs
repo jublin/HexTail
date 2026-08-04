@@ -161,6 +161,12 @@ public sealed class AppState : IAsyncDisposable
                     tab.Error = null;
                     tab.Buffer.Clear();
                     break;
+                case TailerError error:
+                    tab.Error = $"Tailer error: {error.Message}";
+                    break;
+                case TailerRecovered:
+                    tab.Error = null;
+                    break;
             }
 
             changed = true;

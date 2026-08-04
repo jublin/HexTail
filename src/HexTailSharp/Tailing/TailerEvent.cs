@@ -25,3 +25,7 @@ public sealed record FileRotated(string FileId) : TailerEvent(FileId);
 /// tailing resumes from the start of the truncated file.
 /// </summary>
 public sealed record FileTruncated(string FileId) : TailerEvent(FileId);
+
+public sealed record TailerError(string FileId, string Message) : TailerEvent(FileId);
+
+public sealed record TailerRecovered(string FileId) : TailerEvent(FileId);

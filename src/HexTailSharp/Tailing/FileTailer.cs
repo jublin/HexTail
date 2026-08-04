@@ -22,6 +22,7 @@ internal sealed class FileTailer : IFileTailer
     private bool _hasObservedFile;
     private bool _missing;
     private bool _rotationHint;
+    private string? _lastError;
 
     public FileTailer(string fileId, string path, ChannelWriter<TailerEvent> events, TailerOptions options)
     {
@@ -96,11 +97,11 @@ internal sealed class FileTailer : IFileTailer
                 }
                 catch (IOException)
                 {
-                    // The next poll retries after a transient read failure.
+                    ReportError("The file could not be read; retrying.");
                 }
-                catch (UnauthorizedAccessException)
+                catch (UnauthorizedAccessException exception)
                 {
-                    // The next poll retries after a transient access failure.
+                    ReportError(exception.Message);
                 }
 
                 await WaitForWakeOrPollAsync(_stop.Token).ConfigureAwait(false);
@@ -139,6 +140,11 @@ internal sealed class FileTailer : IFileTailer
 
         _hasObservedFile = true;
         await ReadAvailableBytesAsync(cancellationToken).ConfigureAwait(false);
+        if (_lastError is not null)
+        {
+            _lastError = null;
+            Write(new TailerRecovered(FileId));
+        }
     }
 
     private async ValueTask ReadAvailableBytesAsync(CancellationToken cancellationToken)
@@ -198,6 +204,14 @@ internal sealed class FileTailer : IFileTailer
     }
 
     private void Write(TailerEvent tailerEvent) => _events.TryWrite(tailerEvent);
+
+    private void ReportError(string message)
+    {
+        if (string.Equals(_lastError, message, StringComparison.Ordinal))
+            return;
+        _lastError = message;
+        Write(new TailerError(FileId, message));
+    }
 
     private async Task WaitForWakeOrPollAsync(CancellationToken cancellationToken)
     {
