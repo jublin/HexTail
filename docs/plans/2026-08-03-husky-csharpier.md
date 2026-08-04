@@ -1,7 +1,7 @@
 # Husky.Net CSharpier hook plan
 
 Date: 2026-08-03  
-Status: Planned
+Status: Implemented
 
 ## Outcome
 
@@ -14,6 +14,8 @@ re-staged so the commit contains the formatter output.
 1. Add a local tool manifest pinning Husky.Net and CSharpier.
 2. Attach Husky.Net through MSBuild and configure a staged-C# formatting task.
 3. Document setup/usage and verify the hook, tests, and build.
+
+Implementation commits: `ddd5a17`, `b2c5e85`, and this documentation commit.
 
 ## Constraints
 

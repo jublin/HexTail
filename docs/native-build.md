@@ -25,6 +25,21 @@ dotnet publish src/HexTailSharp/HexTailSharp.csproj \
 
 Replace `linux-x64` with the required RID, such as `win-x64` or `osx-arm64`. The publish directory is under `build/HexTailSharp/Release/net10.0/<rid>/publish`.
 
+## Formatting and commit hooks
+
+The repository pins Husky.Net and CSharpier as local tools. Restore them and
+install the Git hook with:
+
+```bash
+dotnet tool restore
+dotnet husky install
+```
+
+The `pre-commit` hook formats staged `*.cs` files with CSharpier and re-stages
+the formatter output. Run it manually with `dotnet husky run --group
+pre-commit`. Set `HUSKY=0` for CI or another environment where hooks should be
+skipped.
+
 ## Session data
 
 Session state is stored as `HexTailSharp/session.json` in the OS application-data directory. It includes open paths, searches, settings, window geometry, and context-pane size. Delete that file to start with a clean session.
