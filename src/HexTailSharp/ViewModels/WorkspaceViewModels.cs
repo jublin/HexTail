@@ -366,14 +366,16 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         if (_closed)
             return;
 
+        var files = _state.Files;
+
         for (var index = Files.Count - 1; index >= 0; index--)
         {
-            if (_state.Files.Contains(Files[index].Model))
+            if (files.Contains(Files[index].Model))
                 continue;
             Files.RemoveAt(index);
         }
 
-        foreach (var file in _state.Files)
+        foreach (var file in files)
         {
             var viewModel = Files.FirstOrDefault(item => ReferenceEquals(item.Model, file));
             if (viewModel is null)

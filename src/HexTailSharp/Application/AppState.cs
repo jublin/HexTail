@@ -8,6 +8,7 @@ public sealed class AppState : IAsyncDisposable
 {
     private readonly TailerService _tailers;
     private readonly IAppPersistence _persistence;
+    private readonly object _gate = new();
     private readonly List<FileTabState> _files = [];
     private AppSettings _settings;
     private int _nextFileId;
@@ -23,7 +24,14 @@ public sealed class AppState : IAsyncDisposable
         _settings = NormalizeSettings(settings ?? new AppSettings());
     }
 
-    public IReadOnlyList<FileTabState> Files => _files;
+    public IReadOnlyList<FileTabState> Files
+    {
+        get
+        {
+            lock (_gate)
+                return _files.ToArray();
+        }
+    }
     public FileTabState? SelectedFile { get; private set; }
     public AppWindowState Window { get; private set; } = new();
     public AppSettings Settings => _settings;
@@ -35,8 +43,11 @@ public sealed class AppState : IAsyncDisposable
         if (config is null)
             return;
 
-        _settings = NormalizeSettings(config.Settings ?? new AppSettings());
-        Window = config.Window ?? new AppWindowState();
+        lock (_gate)
+        {
+            _settings = NormalizeSettings(config.Settings ?? new AppSettings());
+            Window = config.Window ?? new AppWindowState();
+        }
         foreach (var persisted in config.OpenFiles)
         {
             var tab = await OpenFileAsync(persisted.Path, save: false, cancellationToken)
@@ -68,15 +79,18 @@ public sealed class AppState : IAsyncDisposable
                 tab.FollowSearches[i] = persisted.FollowSearches[i];
         }
 
-        if (config.SelectedFilePath is not null)
-            SelectedFile = _files.FirstOrDefault(file =>
-                string.Equals(
-                    file.Path,
-                    config.SelectedFilePath,
-                    StringComparison.OrdinalIgnoreCase
-                )
-            );
-        SelectedFile ??= _files.FirstOrDefault();
+        lock (_gate)
+        {
+            if (config.SelectedFilePath is not null)
+                SelectedFile = _files.FirstOrDefault(file =>
+                    string.Equals(
+                        file.Path,
+                        config.SelectedFilePath,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                );
+            SelectedFile ??= _files.FirstOrDefault();
+        }
         NotifyChanged();
     }
 
@@ -88,32 +102,40 @@ public sealed class AppState : IAsyncDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         var fullPath = System.IO.Path.GetFullPath(path);
-        var existing = _files.FirstOrDefault(file =>
-            string.Equals(file.Path, fullPath, StringComparison.OrdinalIgnoreCase)
-        );
-        if (existing is not null)
+        FileTabState? existing;
+        FileTabState? tab = null;
+        lock (_gate)
         {
-            SelectedFile = existing;
-            NotifyChanged();
-            return existing;
+            existing = _files.FirstOrDefault(file =>
+                string.Equals(file.Path, fullPath, StringComparison.OrdinalIgnoreCase)
+            );
+            if (existing is not null)
+                SelectedFile = existing;
+            else
+            {
+                var id = $"file-{++_nextFileId}";
+                var buffer = new FileBuffer(_settings.MaxLines);
+                var parser = LogParserSelector.ForPath(fullPath);
+                var tailer = _tailers.StartTailer(id, fullPath);
+                tab = new FileTabState(id, fullPath, buffer, parser, tailer)
+                {
+                    ContextAbove = _settings.ContextAbove,
+                    ContextBelow = _settings.ContextBelow,
+                    Error = File.Exists(fullPath) ? null : "File missing",
+                };
+                _files.Add(tab);
+                SelectedFile = tab;
+            }
         }
 
-        var id = $"file-{++_nextFileId}";
-        var buffer = new FileBuffer(_settings.MaxLines);
-        var parser = LogParserSelector.ForPath(fullPath);
-        var tailer = _tailers.StartTailer(id, fullPath);
-        var tab = new FileTabState(id, fullPath, buffer, parser, tailer)
-        {
-            ContextAbove = _settings.ContextAbove,
-            ContextBelow = _settings.ContextBelow,
-            Error = File.Exists(fullPath) ? null : "File missing",
-        };
-        _files.Add(tab);
-        SelectedFile = tab;
         NotifyChanged();
+        if (existing is not null)
+            return existing;
+
+        var opened = tab!;
         if (save)
             await SaveAsync(cancellationToken).ConfigureAwait(false);
-        return tab;
+        return opened;
     }
 
     public async ValueTask CloseFileAsync(
@@ -121,11 +143,14 @@ public sealed class AppState : IAsyncDisposable
         CancellationToken cancellationToken = default
     )
     {
-        if (!_files.Remove(tab))
-            return;
+        lock (_gate)
+        {
+            if (!_files.Remove(tab))
+                return;
 
+            SelectedFile = _files.FirstOrDefault();
+        }
         await tab.DisposeAsync().ConfigureAwait(false);
-        SelectedFile = _files.FirstOrDefault();
         NotifyChanged();
         await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -138,16 +163,25 @@ public sealed class AppState : IAsyncDisposable
         string color
     )
     {
-        var search = new Search(new CompiledQuery(query, mode, caseSensitive), color, tab.Buffer);
-        tab.AddSearch(search);
+        Search search;
+        lock (_gate)
+        {
+            if (!_files.Contains(tab))
+                throw new InvalidOperationException("The file is not open.");
+            search = new Search(new CompiledQuery(query, mode, caseSensitive), color, tab.Buffer);
+            tab.AddSearch(search);
+        }
         NotifyChanged();
         return search;
     }
 
     public void SelectFile(FileTabState? tab)
     {
-        if (tab is null || _files.Contains(tab))
-            SelectedFile = tab;
+        lock (_gate)
+        {
+            if (tab is null || _files.Contains(tab))
+                SelectedFile = tab;
+        }
         NotifyChanged();
     }
 
@@ -158,10 +192,12 @@ public sealed class AppState : IAsyncDisposable
     )
     {
         ArgumentNullException.ThrowIfNull(tab);
-        if (!_files.Contains(tab) || tab.FollowAll == value)
-            return;
-
-        tab.FollowAll = value;
+        lock (_gate)
+        {
+            if (!_files.Contains(tab) || tab.FollowAll == value)
+                return;
+            tab.FollowAll = value;
+        }
         NotifyChanged();
         await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -173,10 +209,12 @@ public sealed class AppState : IAsyncDisposable
     )
     {
         ArgumentNullException.ThrowIfNull(tab);
-        if (!_files.Contains(tab) || tab.ShowContext == value)
-            return;
-
-        tab.ShowContext = value;
+        lock (_gate)
+        {
+            if (!_files.Contains(tab) || tab.ShowContext == value)
+                return;
+            tab.ShowContext = value;
+        }
         NotifyChanged();
         await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -190,14 +228,21 @@ public sealed class AppState : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(tab);
         ArgumentNullException.ThrowIfNull(search);
-        if (!_files.Contains(tab))
-            return;
+        lock (_gate)
+        {
+            if (!_files.Contains(tab))
+                return;
 
-        var index = tab.Searches.IndexOf(search);
-        if (index < 0 || index >= tab.FollowSearches.Count || tab.FollowSearches[index] == value)
-            return;
+            var index = tab.Searches.IndexOf(search);
+            if (
+                index < 0
+                || index >= tab.FollowSearches.Count
+                || tab.FollowSearches[index] == value
+            )
+                return;
 
-        tab.FollowSearches[index] = value;
+            tab.FollowSearches[index] = value;
+        }
         NotifyChanged();
         await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -205,11 +250,14 @@ public sealed class AppState : IAsyncDisposable
     public void SelectLine(FileTabState tab, Line? line)
     {
         ArgumentNullException.ThrowIfNull(tab);
-        if (!_files.Contains(tab))
-            return;
+        lock (_gate)
+        {
+            if (!_files.Contains(tab))
+                return;
 
-        var index = line is null ? -1 : FindLineIndex(tab, line);
-        tab.SelectedLine = index >= 0 ? index : null;
+            var index = line is null ? -1 : FindLineIndex(tab, line);
+            tab.SelectedLine = index >= 0 ? index : null;
+        }
         NotifyChanged();
     }
 
@@ -217,14 +265,17 @@ public sealed class AppState : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(tab);
         ArgumentNullException.ThrowIfNull(line);
-        if (!_files.Contains(tab))
-            return;
+        lock (_gate)
+        {
+            if (!_files.Contains(tab))
+                return;
 
-        var index = FindLineIndex(tab, line);
-        if (index < 0)
-            return;
+            var index = FindLineIndex(tab, line);
+            if (index < 0)
+                return;
 
-        tab.ExpandedLine = tab.ExpandedLine == index ? null : index;
+            tab.ExpandedLine = tab.ExpandedLine == index ? null : index;
+        }
         NotifyChanged();
     }
 
@@ -234,7 +285,8 @@ public sealed class AppState : IAsyncDisposable
     )
     {
         ArgumentNullException.ThrowIfNull(settings);
-        _settings = NormalizeSettings(settings);
+        lock (_gate)
+            _settings = NormalizeSettings(settings);
         NotifyChanged();
         await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -242,7 +294,8 @@ public sealed class AppState : IAsyncDisposable
     public void SetWindowState(AppWindowState window)
     {
         ArgumentNullException.ThrowIfNull(window);
-        Window = window;
+        lock (_gate)
+            Window = window;
     }
 
     private static int FindLineIndex(FileTabState tab, Line line)
@@ -258,7 +311,9 @@ public sealed class AppState : IAsyncDisposable
         var changed = false;
         while (_tailers.Events.TryRead(out var tailerEvent))
         {
-            var tab = _files.FirstOrDefault(file => file.Id == tailerEvent.FileId);
+            FileTabState? tab;
+            lock (_gate)
+                tab = _files.FirstOrDefault(file => file.Id == tailerEvent.FileId);
             if (tab is null)
                 continue;
 
@@ -292,40 +347,47 @@ public sealed class AppState : IAsyncDisposable
 
     public async ValueTask SaveAsync(CancellationToken cancellationToken = default)
     {
-        var config = new AppConfig
+        AppConfig config;
+        lock (_gate)
         {
-            OpenFiles = _files
-                .Select(tab => new PersistedFileTab
-                {
-                    Path = tab.Path,
-                    FollowAll = tab.FollowAll,
-                    FollowSearches = [.. tab.FollowSearches],
-                    ShowContext = tab.ShowContext,
-                    SelectedLine = tab.SelectedLine,
-                    ContextAbove = tab.ContextAbove,
-                    ContextBelow = tab.ContextBelow,
-                    Searches = tab
-                        .Searches.Select(search => new PersistedSearch
-                        {
-                            Query = search.Query.Query,
-                            Mode = search.Query.Mode,
-                            CaseSensitive = search.Query.CaseSensitive,
-                            Color = search.Color,
-                        })
-                        .ToList(),
-                })
-                .ToList(),
-            SelectedFilePath = SelectedFile?.Path,
-            Window = Window,
-            Settings = _settings,
-        };
+            config = new AppConfig
+            {
+                OpenFiles = _files
+                    .Select(tab => new PersistedFileTab
+                    {
+                        Path = tab.Path,
+                        FollowAll = tab.FollowAll,
+                        FollowSearches = [.. tab.FollowSearches],
+                        ShowContext = tab.ShowContext,
+                        SelectedLine = tab.SelectedLine,
+                        ContextAbove = tab.ContextAbove,
+                        ContextBelow = tab.ContextBelow,
+                        Searches = tab
+                            .Searches.Select(search => new PersistedSearch
+                            {
+                                Query = search.Query.Query,
+                                Mode = search.Query.Mode,
+                                CaseSensitive = search.Query.CaseSensitive,
+                                Color = search.Color,
+                            })
+                            .ToList(),
+                    })
+                    .ToList(),
+                SelectedFilePath = SelectedFile?.Path,
+                Window = Window,
+                Settings = _settings,
+            };
+        }
         await _persistence.SaveAsync(config, cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()
     {
         await SaveAsync().ConfigureAwait(false);
-        foreach (var file in _files)
+        FileTabState[] files;
+        lock (_gate)
+            files = _files.ToArray();
+        foreach (var file in files)
             await file.DisposeAsync().ConfigureAwait(false);
         await _tailers.DisposeAsync().ConfigureAwait(false);
     }

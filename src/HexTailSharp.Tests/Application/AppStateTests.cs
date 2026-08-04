@@ -148,6 +148,19 @@ public sealed class AppStateTests
     }
 
     [Fact]
+    public async Task Files_ReturnsSnapshotWhileWorkspaceChanges()
+    {
+        var path = CreateTempFile(string.Empty);
+        await using var state = new AppState(NewTailers(), new MemoryPersistence());
+
+        var beforeOpen = state.Files;
+        await state.OpenFileAsync(path, save: false);
+
+        Assert.Empty(beforeOpen);
+        Assert.Single(state.Files);
+    }
+
+    [Fact]
     public void LogParserSelector_UsesLogfmtOnlyForLogfmtExtension()
     {
         Assert.IsType<LogfmtParser>(LogParserSelector.ForPath("app.logfmt"));
