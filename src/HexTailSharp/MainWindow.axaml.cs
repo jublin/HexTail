@@ -284,16 +284,18 @@ public partial class MainWindow : Window
                 Background = Brush("#172033"),
                 BorderThickness = new Thickness(0),
                 ItemsSource = contextItems,
-                ItemTemplate = new FuncDataTemplate<Line>((line, _) => new TextBlock
-                {
-                    Text = line.Raw,
-                    FontFamily = LogFont,
-                    FontSize = ToLogFontSize(_state.Settings.LogFontSize),
-                    Foreground = Brush("#CBD5E1"),
-                    Padding = new Thickness(12, 4),
-                    TextWrapping = TextWrapping.NoWrap,
-                    TextTrimming = TextTrimming.CharacterEllipsis,
-                }, supportsRecycling: false),
+                ItemTemplate = new FuncDataTemplate<Line>((line, _) => line is null
+                    ? new Border()
+                    : new TextBlock
+                    {
+                        Text = line.Raw,
+                        FontFamily = LogFont,
+                        FontSize = ToLogFontSize(_state.Settings.LogFontSize),
+                        Foreground = Brush("#CBD5E1"),
+                        Padding = new Thickness(12, 4),
+                        TextWrapping = TextWrapping.NoWrap,
+                        TextTrimming = TextTrimming.CharacterEllipsis,
+                    }, supportsRecycling: false),
                 ItemsPanel = new FuncTemplate<Panel?>(() => new VirtualizingStackPanel()),
             };
             Grid.SetRow(contextList, 2);
