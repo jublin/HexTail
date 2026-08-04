@@ -1,7 +1,7 @@
 # Full-file context navigation plan
 
 Date: 2026-08-03
-Status: Planned
+Status: Implemented
 
 ## Outcome
 
@@ -18,6 +18,8 @@ free scrolling there.
    view selection changes or the context source is rebuilt.
 3. Verify the domain/application tests, Release build, and a live context
    streaming smoke test.
+
+Implementation commits: `283af02`, `078d3a1`
 
 ## Constraints
 
