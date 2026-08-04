@@ -97,7 +97,7 @@ public sealed class AppStateTests
         Assert.Equal("Error", label.Text);
         Assert.Equal("#ff0000", label.Color);
         Assert.Equal(["Health"], settings.GlobalExcludeLabels);
-        Assert.Equal("material-dark", settings.Theme);
+        Assert.Equal("dark", settings.Theme);
         Assert.Equal(SettingsMenuAlignment.Left, settings.SettingsMenuAlignment);
     }
 
@@ -117,21 +117,12 @@ public sealed class AppStateTests
     }
 
     [Fact]
-    public void ThemeCatalog_ListsAllRadzenThemes()
+    public void ThemeCatalog_UsesNativeThemeVariants()
     {
-        Assert.Equal(
-        [
-            "dark", "dark-wcag",
-            "default", "default-wcag",
-            "humanistic", "humanistic-dark", "humanistic-dark-wcag", "humanistic-wcag",
-            "material", "material-dark", "material-dark-wcag", "material-wcag",
-            "software", "software-dark", "software-dark-wcag", "software-wcag",
-            "standard", "standard-dark", "standard-dark-wcag", "standard-wcag",
-        ],
-        ThemeCatalog.Names);
-        Assert.Equal("material-dark", ThemeCatalog.BaseName("material-dark-wcag"));
-        Assert.True(ThemeCatalog.IsWcag("material-dark-wcag"));
-        Assert.False(ThemeCatalog.IsWcag("material-dark"));
+        Assert.Equal(["system", "light", "dark"], ThemeCatalog.Names);
+        Assert.Equal("dark", ThemeCatalog.Normalize("material-dark-wcag"));
+        Assert.Equal("light", ThemeCatalog.Normalize("material-wcag"));
+        Assert.Equal("dark", ThemeCatalog.Normalize("not-a-theme"));
     }
 
     [Fact]

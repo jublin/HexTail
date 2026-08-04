@@ -36,6 +36,10 @@ public sealed class AppWindowState
 {
     public bool VerticalFileTabs { get; init; }
     public int ContextPaneSize { get; init; } = 300;
+    public double Width { get; init; } = 1280;
+    public double Height { get; init; } = 800;
+    public int? X { get; init; }
+    public int? Y { get; init; }
 }
 
 public sealed record AppSettings
@@ -45,7 +49,7 @@ public sealed record AppSettings
     public int ContextBelow { get; init; } = 10;
     public List<GlobalLabel> GlobalLabels { get; init; } = [];
     public List<string> GlobalExcludeLabels { get; init; } = [];
-    public string Theme { get; init; } = "material-dark";
+    public string Theme { get; init; } = "dark";
     public UiDensity Density { get; init; } = UiDensity.Comfortable;
     public LogFontSize LogFontSize { get; init; } = LogFontSize.Medium;
     public SettingsMenuAlignment SettingsMenuAlignment { get; init; } = SettingsMenuAlignment.Right;
@@ -65,21 +69,20 @@ public sealed record AppSettings
 
 public static class ThemeCatalog
 {
-    public static readonly string[] Names =
-    [
-        "dark", "dark-wcag",
-        "default", "default-wcag",
-        "humanistic", "humanistic-dark", "humanistic-dark-wcag", "humanistic-wcag",
-        "material", "material-dark", "material-dark-wcag", "material-wcag",
-        "software", "software-dark", "software-dark-wcag", "software-wcag",
-        "standard", "standard-dark", "standard-dark-wcag", "standard-wcag",
-    ];
+    public static readonly string[] Names = ["system", "light", "dark"];
 
     public static bool Contains(string theme) => Names.Contains(theme, StringComparer.Ordinal);
 
-    public static bool IsWcag(string theme) => theme.EndsWith("-wcag", StringComparison.Ordinal);
-
-    public static string BaseName(string theme) => IsWcag(theme) ? theme[..^5] : theme;
+    public static string Normalize(string theme) => theme switch
+    {
+        "system" => "system",
+        "light" => "light",
+        "dark" => "dark",
+        _ when theme.EndsWith("-dark", StringComparison.Ordinal) => "dark",
+        _ when theme.EndsWith("-dark-wcag", StringComparison.Ordinal) => "dark",
+        _ when theme.EndsWith("-wcag", StringComparison.Ordinal) => "light",
+        _ => "dark",
+    };
 }
 
 public sealed class GlobalLabel
