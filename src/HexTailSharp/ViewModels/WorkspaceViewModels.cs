@@ -425,7 +425,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             "dark" => Avalonia.Styling.ThemeVariant.Dark,
             _ => null,
         };
-        var light = application.ActualThemeVariant != Avalonia.Styling.ThemeVariant.Dark;
+        var light = theme switch
+        {
+            "light" => true,
+            "dark" => false,
+            _ => application.ActualThemeVariant != Avalonia.Styling.ThemeVariant.Dark,
+        };
         application.Resources["SurfaceBrush"] = new SolidColorBrush(
             Color.Parse(light ? "#F8FAFC" : "#111827")
         );
@@ -559,6 +564,9 @@ internal sealed class LogViewViewModel : ReactiveObject
     public string Header => Search is null ? "All" : Truncate(Search.Query.Query);
     public string MatchSummary =>
         Search is null ? string.Empty : $"{Search.Results.Count:N0} matches";
+
+    public override string ToString() => Header;
+
     public ObservableCollection<Line> Lines { get; } = [];
     public ObservableCollection<Line> ContextLines { get; } = [];
     public ReactiveCommand<Line, Unit> SelectLineCommand { get; }

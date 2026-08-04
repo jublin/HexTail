@@ -16,10 +16,10 @@
       />
     </StackPanel>
     <Grid Grid.Row="1" RowDefinitions="*,4,*">
-      <ListBox
+      <atom:ListBox
         x:Name="LogList"
         Grid.Row="0"
-        Background="#111827"
+        Background="{DynamicResource SurfaceBrush}"
         BorderThickness="0"
         ItemsSource="{Binding Lines}"
       >
@@ -28,19 +28,19 @@
             <VirtualizingStackPanel />
           </ItemsPanelTemplate>
         </ListBox.ItemsPanel>
-      </ListBox>
+      </atom:ListBox>
       <GridSplitter
         Grid.Row="1"
-        Background="#334155"
+        Background="{DynamicResource BorderBrush}"
         ResizeDirection="Rows"
         ResizeBehavior="PreviousAndNext"
         ShowsPreview="False"
         IsVisible="{Binding ShowContext}"
       />
-      <ListBox
+      <atom:ListBox
         x:Name="ContextList"
         Grid.Row="2"
-        Background="#172033"
+        Background="{DynamicResource RaisedSurfaceBrush}"
         BorderThickness="0"
         ItemsSource="{Binding ContextLines}"
         IsVisible="{Binding ShowContext}"
@@ -50,11 +50,11 @@
             <VirtualizingStackPanel />
           </ItemsPanelTemplate>
         </ListBox.ItemsPanel>
-      </ListBox>
+      </atom:ListBox>
       <TextBlock
         Grid.Row="2"
         Text="No lines to show."
-        Foreground="#94A3B8"
+        Foreground="{DynamicResource MutedTextBrush}"
         FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
         Margin="12,8"
         IsVisible="{Binding ContextEmpty}"

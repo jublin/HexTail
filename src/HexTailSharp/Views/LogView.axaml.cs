@@ -320,9 +320,17 @@ public partial class LogView : UserControl
 
     private IBrush Brush(string value)
     {
-        var light = _viewModel?.Settings.Theme == "light";
+        var light = IsLightTheme;
         return new SolidColorBrush(Color.Parse(light ? LightColor(value) : value));
     }
+
+    private bool IsLightTheme =>
+        _viewModel?.Settings.Theme == "light"
+        || (
+            _viewModel?.Settings.Theme == "system"
+            && Avalonia.Application.Current?.ActualThemeVariant
+                != Avalonia.Styling.ThemeVariant.Dark
+        );
 
     private static string LightColor(string value) =>
         value switch

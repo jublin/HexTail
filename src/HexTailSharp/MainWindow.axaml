@@ -105,13 +105,13 @@
             <DataTemplate x:DataType="vm:FileTabViewModel">
               <Grid RowDefinitions="Auto,Auto,Auto,*" Background="{DynamicResource SurfaceBrush}">
                 <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="12,10">
-                  <TextBox
+                  <atom:TextBox
                     Text="{Binding Workspace.Query, Mode=TwoWay}"
                     PlaceholderText="Search this file"
                     MinWidth="240"
                     KeyDown="QueryKeyDown"
                   />
-                  <ComboBox
+                  <atom:ComboBox
                     Width="110"
                     ItemsSource="{Binding Workspace.MatchModes}"
                     SelectedItem="{Binding Workspace.MatchMode, Mode=TwoWay}"
@@ -170,11 +170,6 @@
                   SelectedIndex="{Binding SelectedViewIndex, Mode=TwoWay}"
                   ContentPadding="0"
                 >
-                  <atom:TabControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:LogViewViewModel">
-                      <TextBlock Text="{Binding Header}" />
-                    </DataTemplate>
-                  </atom:TabControl.ItemTemplate>
                   <atom:TabControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:LogViewViewModel">
                       <views:LogView />
@@ -208,7 +203,7 @@
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:LabelSettingViewModel">
                     <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2">
-                      <TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to highlight" />
+                      <atom:TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to highlight" />
                       <atom:ColorPicker
                         Grid.Column="1"
                         Value="{Binding Color, Mode=TwoWay}"
@@ -227,7 +222,7 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
               <Grid ColumnDefinitions="*,Auto,Auto">
-                <TextBox Text="{Binding Settings.NewLabelText, Mode=TwoWay}" PlaceholderText="Text to highlight" />
+                <atom:TextBox Text="{Binding Settings.NewLabelText, Mode=TwoWay}" PlaceholderText="Text to highlight" />
                 <atom:ColorPicker
                   Grid.Column="1"
                   Value="{Binding Settings.NewLabelColor, Mode=TwoWay}"
@@ -254,7 +249,7 @@
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:ExclusionSettingViewModel">
                     <Grid ColumnDefinitions="*,Auto" Margin="0,2">
-                      <TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to hide" />
+                      <atom:TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to hide" />
                       <atom:Button
                         Grid.Column="1"
                         Content="×"
@@ -267,7 +262,7 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
               <Grid ColumnDefinitions="*,Auto">
-                <TextBox Text="{Binding Settings.NewExclusionText, Mode=TwoWay}" PlaceholderText="Text to hide" />
+                <atom:TextBox Text="{Binding Settings.NewExclusionText, Mode=TwoWay}" PlaceholderText="Text to hide" />
                 <atom:Button
                   Grid.Column="1"
                   Content="+"
@@ -280,22 +275,22 @@
           <atom:TabItem Header="Appearance">
             <StackPanel Spacing="10">
               <TextBlock Text="Theme" />
-              <ComboBox
+              <atom:ComboBox
                 ItemsSource="{Binding Settings.ThemeOptions}"
                 SelectedItem="{Binding Settings.Theme, Mode=TwoWay}"
               />
               <TextBlock Text="UI spacing" />
-              <ComboBox
+              <atom:ComboBox
                 ItemsSource="{Binding Settings.DensityOptions}"
                 SelectedItem="{Binding Settings.Density, Mode=TwoWay}"
               />
               <TextBlock Text="Log font size" />
-              <ComboBox
+              <atom:ComboBox
                 ItemsSource="{Binding Settings.FontSizeOptions}"
                 SelectedItem="{Binding Settings.FontSize, Mode=TwoWay}"
               />
               <TextBlock Text="Menu alignment" />
-              <ComboBox
+              <atom:ComboBox
                 ItemsSource="{Binding Settings.MenuAlignmentOptions}"
                 SelectedItem="{Binding Settings.MenuAlignment, Mode=TwoWay}"
               />
