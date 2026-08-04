@@ -28,7 +28,7 @@ public partial class MainWindow : AtomUI.Desktop.Controls.Window
         Closed += OnClosed;
     }
 
-    public MainWindowViewModel ViewModel { get; }
+    internal MainWindowViewModel ViewModel { get; }
 
     private async Task HandlePickFilesAsync(
         IInteractionContext<System.Reactive.Unit, IReadOnlyList<string>> context

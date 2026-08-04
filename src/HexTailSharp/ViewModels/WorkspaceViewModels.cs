@@ -15,7 +15,7 @@ using ReactiveUI;
 
 namespace HexTailSharp.ViewModels;
 
-public sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
+internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 {
     private readonly AppState _state;
     private readonly string[] _startupPaths;
@@ -447,7 +447,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
 }
 
-public sealed class FileTabViewModel : ReactiveObject
+internal sealed class FileTabViewModel : ReactiveObject
 {
     private readonly MainWindowViewModel _owner;
     private int _selectedViewIndex;
@@ -536,7 +536,7 @@ public sealed class FileTabViewModel : ReactiveObject
         _owner.SetSearchFollowAsync(this, search, value);
 }
 
-public sealed class LogViewViewModel : ReactiveObject
+internal sealed class LogViewViewModel : ReactiveObject
 {
     private readonly MainWindowViewModel _owner;
     private readonly FileTabViewModel _file;
@@ -677,7 +677,7 @@ public sealed class LogViewViewModel : ReactiveObject
     private static string Truncate(string value) => value.Length > 24 ? $"{value[..21]}..." : value;
 }
 
-public sealed class SettingsViewModel : ReactiveObject
+internal sealed class SettingsViewModel : ReactiveObject
 {
     private readonly MainWindowViewModel _owner;
     private string _theme = "dark";
@@ -915,7 +915,7 @@ public sealed class SettingsViewModel : ReactiveObject
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
 }
 
-public sealed class LabelSettingViewModel : ReactiveObject
+internal sealed class LabelSettingViewModel : ReactiveObject
 {
     private readonly SettingsViewModel _owner;
     private string _text = string.Empty;
@@ -971,7 +971,7 @@ public sealed class LabelSettingViewModel : ReactiveObject
     }
 }
 
-public sealed class ExclusionSettingViewModel : ReactiveObject
+internal sealed class ExclusionSettingViewModel : ReactiveObject
 {
     private readonly SettingsViewModel _owner;
     private string _text = string.Empty;
