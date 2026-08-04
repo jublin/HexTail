@@ -1,6 +1,10 @@
 # Native desktop build
 
-HexTail targets .NET 10 and Avalonia 12.1.1. It is a native desktop executable; running it does not start a browser or listen on a port.
+HexTail targets .NET 10, Avalonia 12.1.1, and AtomUI 6.1.2. It is a native desktop executable; running it does not start a browser or listen on a port.
+
+The interactive shell uses AtomUI's Ant Design controls and theme manager. ReactiveUI view models own state projection, commands, persistence orchestration, and tail refresh. `MainWindow` only adapts platform events (storage picker, drag/drop, window geometry, and keyboard input). The log and context surfaces intentionally retain Avalonia's virtualized `ListBox` because they render the hot 100,000-line path.
+
+AtomUI is consumed as published LGPL-3.0 binaries; its source is not modified or vendored.
 
 ## Build and run
 
