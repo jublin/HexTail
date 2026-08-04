@@ -1,23 +1,20 @@
-<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+<Project Sdk="Microsoft.NET.Sdk">
 <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), 'Directory.Build.props'))\Directory.Build.props" />
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
+        <OutputType>Exe</OutputType>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
-        <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
-        <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" PrivateAssets="all" />
+        <PackageReference Include="Avalonia" />
+        <PackageReference Include="Avalonia.Controls.ColorPicker" />
+        <PackageReference Include="Avalonia.Desktop" />
+        <PackageReference Include="Avalonia.Themes.Fluent" />
         <PackageReference Include="Polly" />
-        <PackageReference Include="Radzen.Blazor" />
         <PackageReference Include="System.IO.Pipelines" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <ServiceWorkerAssetsManifestItem Include="wwwroot/service-worker.published.js" RelativePath="service-worker.published.js" AssetUrl="service-worker.published.js" />
     </ItemGroup>
 
 </Project>

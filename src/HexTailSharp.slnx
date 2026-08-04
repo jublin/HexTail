@@ -13,6 +13,5 @@
     <File Path="../docs/specs/2026-07-26-search-toggles-design.md" />
   </Folder>
   <Project Path="HexTailSharp.Tests/HexTailSharp.Tests.csproj" />
-  <Project Path="HexTailSharp.Tool/HexTailSharp.Tool.csproj" />
   <Project Path="HexTailSharp/HexTailSharp.csproj" />
 </Solution>

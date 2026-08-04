@@ -22,7 +22,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HexTailSharp\HexTailSharp.csproj" />
-    <ProjectReference Include="..\HexTailSharp.Tool\HexTailSharp.Tool.csproj" />
   </ItemGroup>
 
 </Project>

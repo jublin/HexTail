@@ -1,0 +1,16 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="HexTailSharp.MainWindow"
+        Title="HexTail"
+        Width="1280"
+        Height="800"
+        MinWidth="720"
+        MinHeight="480">
+  <Grid Background="#111827">
+    <TextBlock Text="HexTail"
+               HorizontalAlignment="Center"
+               VerticalAlignment="Center"
+               FontSize="24"
+               Foreground="#F8FAFC" />
+  </Grid>
+</Window>

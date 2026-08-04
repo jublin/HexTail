@@ -2,15 +2,11 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "HexTail: Debug PWA",
-      "type": "blazorwasm",
+      "name": "HexTail: Debug Avalonia",
+      "type": "coreclr",
       "request": "launch",
-      "cwd": "${workspaceFolder}/src/HexTailSharp",
-      "url": "http://localhost:5062",
-      "browser": "chrome",
-      "browserConfig": {
-        "runtimeExecutable": "/usr/bin/helium-browser"
-      },
+      "program": "${workspaceFolder}/build/HexTailSharp/Debug/net10.0/HexTailSharp.dll",
+      "cwd": "${workspaceFolder}",
       "preLaunchTask": "dotnet: build"
     }
   ]

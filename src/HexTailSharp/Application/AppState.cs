@@ -1,7 +1,6 @@
 using HexTailSharp.Domain;
 using HexTailSharp.Persistence;
 using HexTailSharp.Tailing;
-using System.Text;
 
 namespace HexTailSharp.Application;
 
@@ -102,71 +101,6 @@ public sealed class AppState : IAsyncDisposable
         return tab;
     }
 
-    public async ValueTask<FileTabState> OpenSnapshotAsync(string fileName, Stream content)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
-        ArgumentNullException.ThrowIfNull(content);
-
-        var id = $"file-{++_nextFileId}";
-        var parser = LogParserSelector.ForPath(fileName);
-        var tab = new FileTabState(id, fileName, new FileBuffer(_settings.MaxLines), parser, new SnapshotFileTailer(id, fileName), true)
-        {
-            ContextAbove = _settings.ContextAbove,
-            ContextBelow = _settings.ContextBelow,
-        };
-
-        using var reader = new StreamReader(content, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096, leaveOpen: true);
-        var text = await reader.ReadToEndAsync().ConfigureAwait(false);
-        var lines = text.Split('\n').Select(line => line.EndsWith('\r') ? line[..^1] : line).ToList();
-        if (text.EndsWith('\n'))
-            lines.RemoveAt(lines.Count - 1);
-
-        tab.Buffer.Append(lines.Select(parser.Parse));
-        _files.Add(tab);
-        SelectedFile = tab;
-        NotifyChanged();
-        return tab;
-    }
-
-    public FileTabState OpenBrowserFile(string fileId, string fileName, IEnumerable<string> lines)
-    {
-        var existing = _files.FirstOrDefault(file => file.Id == fileId);
-        if (existing is not null)
-            return existing;
-
-        var parser = LogParserSelector.ForPath(fileName);
-        var tab = new FileTabState(fileId, fileName, new FileBuffer(_settings.MaxLines), parser, new SnapshotFileTailer(fileId, fileName), true)
-        {
-            ContextAbove = _settings.ContextAbove,
-            ContextBelow = _settings.ContextBelow,
-        };
-        tab.Buffer.Append(lines.Select(parser.Parse));
-        _files.Add(tab);
-        SelectedFile = tab;
-        NotifyChanged();
-        return tab;
-    }
-
-    public void AppendBrowserLines(string fileId, IEnumerable<string> lines)
-    {
-        var tab = _files.FirstOrDefault(file => file.Id == fileId);
-        if (tab is null)
-            return;
-
-        tab.Buffer.Append(lines.Select(tab.Parser.Parse));
-        NotifyChanged();
-    }
-
-    public void TruncateBrowserFile(string fileId)
-    {
-        var tab = _files.FirstOrDefault(file => file.Id == fileId);
-        if (tab is null)
-            return;
-
-        tab.Buffer.Clear();
-        NotifyChanged();
-    }
-
     public async ValueTask CloseFileAsync(FileTabState tab, CancellationToken cancellationToken = default)
     {
         if (!_files.Remove(tab))
@@ -236,7 +170,7 @@ public sealed class AppState : IAsyncDisposable
     {
         var config = new AppConfig
         {
-            OpenFiles = _files.Where(tab => !tab.IsSnapshot).Select(tab => new PersistedFileTab
+            OpenFiles = _files.Select(tab => new PersistedFileTab
             {
                 Path = tab.Path,
                 FollowAll = tab.FollowAll,

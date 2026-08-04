@@ -102,14 +102,6 @@ internal sealed class FileTailer : IFileTailer
                 {
                     // The next poll retries after a transient access failure.
                 }
-                catch (PlatformNotSupportedException)
-                {
-                    // Standalone browser WASM cannot access arbitrary OS paths.
-                }
-                catch (NotSupportedException)
-                {
-                    // Standalone browser WASM cannot access arbitrary OS paths.
-                }
 
                 await WaitForWakeOrPollAsync(_stop.Token).ConfigureAwait(false);
             }
@@ -239,7 +231,7 @@ internal sealed class FileTailer : IFileTailer
 
     private void TryCreateWatcher()
     {
-        if (!_options.UseFileSystemWatcher || OperatingSystem.IsBrowser())
+        if (!_options.UseFileSystemWatcher)
             return;
 
         try

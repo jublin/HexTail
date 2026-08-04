@@ -21,10 +21,17 @@
       "problemMatcher": "$msCompile"
     },
     {
-      "label": "dotnet: pack tool",
+      "label": "dotnet: publish desktop",
       "type": "process",
       "command": "dotnet",
-      "args": ["pack", "${workspaceFolder}/src/HexTailSharp.Tool/HexTailSharp.Tool.csproj", "-c", "Release", "-o", "${workspaceFolder}/artifacts/nupkg"],
+      "args": ["publish", "${workspaceFolder}/src/HexTailSharp/HexTailSharp.csproj", "-c", "Release"],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "dotnet: run desktop",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["run", "--project", "${workspaceFolder}/src/HexTailSharp/HexTailSharp.csproj"],
       "problemMatcher": "$msCompile"
     }
   ]
