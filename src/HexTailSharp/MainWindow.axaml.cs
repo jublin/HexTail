@@ -313,8 +313,11 @@ public partial class MainWindow : Window
         return new ViewEntry(file, search, root, list, contextList, contextEmpty);
     }
 
-    private Control BuildLogRow(FileTabState file, Line line)
+    private Control BuildLogRow(FileTabState file, Line? line)
     {
+        if (line is null)
+            return new Border();
+
         var lineIndex = FindLineIndex(file, line);
         var text = new TextBlock
         {
@@ -426,7 +429,6 @@ public partial class MainWindow : Window
         foreach (var view in _views)
         {
             var selected = view.List.SelectedItem as Line;
-            view.List.ItemsSource = null;
             view.List.ItemsSource = LinesFor(view.File, view.Search);
             if (selected is not null && view.List.ItemsSource is IEnumerable<Line> lines && lines.Contains(selected))
                 view.List.SelectedItem = selected;
@@ -489,7 +491,7 @@ public partial class MainWindow : Window
             ? file.Buffer.Lines
             : search.Results.Where(index => index >= 0 && index < file.Buffer.Count).Select(index => file.Buffer[index]);
         return _state.Settings.GlobalExcludeLabels.Count == 0
-            ? lines as IReadOnlyList<Line> ?? lines.ToList()
+            ? lines.ToList()
             : lines.Where(line => !_state.Settings.Excludes(line.Raw)).ToList();
     }
 
