@@ -1,199 +1,70 @@
-# HexTail — Blazor Standalone WebAssembly with Radzen Components
+# HexTail — native Avalonia desktop
 
-Date: 2026-07-22  
-Status: Approved
+Date: 2026-08-03  
+Status: Implemented
 
-## 1. Overview
+## Overview
 
-HexTail is a cross-platform desktop GUI application for tailing log files. It supports plaintext and logfmt logs, multiple simultaneous file tabs, multiple active searches per file, and a context pane for inspecting matches.
+HexTail is a native .NET 10 desktop application built with Avalonia 12.1.1. It tails plaintext and logfmt files, supports multiple files and searches, highlights matches, and shows an optional inline context pane. The UI is rendered by Avalonia controls and XAML; it does not host a browser, WebView, JavaScript runtime, or HTTP server.
 
-The UI is built with **Blazor Standalone WebAssembly** and **Radzen Components**. The file-watching backend uses **Polly** for resilience and **System.IO.Pipelines** for efficient stream processing. All state lives on the UI thread; tailers communicate through a message channel.
+## Goals
 
-## 2. Goals
+- Tail multiple files simultaneously, each in its own file tab.
+- Parse plaintext and logfmt lines without changing the raw log display.
+- Support literal and regular-expression searches with case sensitivity and per-search colors.
+- Highlight active searches and global labels in the All view.
+- Show a configurable context window for the selected line.
+- Open files from the native file picker, OS drag-and-drop, and command-line paths.
+- Restore open files, searches, settings, window geometry, and pane size on restart.
 
-- Tail multiple files at the same time, each in its own tab.
-- Parse and display plaintext and logfmt logs.
-- Support multiple active searches per file, each with its own color, result sub-tab, and independent "follow tail" behavior.
-- Highlight matching lines in the main "All" view with each search's color.
-- Provide a configurable, scrollable inline context pane for the selected match.
-- Open files via CLI arguments, file picker, and drag-and-drop.
-- Restore the previous session (open files and searches) on launch.
+## Non-goals
 
-## 3. Non-goals
+- Browser/PWA delivery, embedded web content, or a local HTTP server.
+- Native installers, signing, auto-update, tray integration, or platform-specific menus.
+- A third-party control suite or an MVVM framework.
+- Writing log files or collecting remote logs.
 
-- Microsoft Enterprise Library logging parser in v1.
-- Structured table view as the default logfmt rendering.
-- Queryable historical search history across sessions.
-- Full Radzen component snapshot tests.
-- Log file writing or remote log collection.
+## Architecture
 
-## 4. Architecture
+- **Avalonia window** — `Window`/XAML code-behind owns the single visible workspace and dispatcher timer.
+- **Application state** — `AppState` owns file tabs, settings, searches, and persistence; it publishes a simple `Changed` event.
+- **Tailer layer** — one background `FileTailer` per open path watches appends, truncation, rotation, and missing-file recovery through an event channel.
+- **Domain layer** — `FileBuffer`, `Line`, parser, and search types are UI-independent and enforce the line cap and result rebasing.
+- **Persistence** — `JsonFileAppPersistence` writes `AppConfig` atomically under the OS application-data directory.
 
-The application is a single-page Blazor WebAssembly app with three layers:
+## Controls
 
-- **UI layer (Blazor WebAssembly)** — main thread, owns user-visible state, renders tabs, search panels, log views, and context panes using Radzen components.
-- **Tailer layer** — one async task per open file on a `ThreadPool` background service. Reads files, watches for changes, and sends immutable events to the UI layer.
-- **Domain layer** — pure C# modules for parsing, searching, buffer management, and persistence. No UI or async code.
+The workspace uses documented Avalonia controls:
 
-The UI thread owns a single `AppState`. Tailers never touch `AppState` directly; they push events into an unbounded channel that `AppState` drains each frame.
+- `SplitView` for the settings pane.
+- `TabControl`/`TabItem` for file and search views.
+- `TextBox`, `ComboBox`, `CheckBox`, `ColorPicker`, and `Button` for input.
+- Virtualized `ListBox`/`VirtualizingStackPanel` for log and context rows.
+- `GridSplitter` for the context pane.
+- `StorageProvider` and `DragDrop` for native file operations.
 
-## 5. Components
+Log rows are `TextBlock` instances containing `Run` inlines, so matching ranges are drawn without HTML markup.
 
-### `AppState`
+## Data flow
 
-Top-level Blazor app state. Holds:
-- List of open `FileTab`s.
-- Currently selected file tab.
-- Global settings and window geometry.
-- Background service factory for tailers.
-- Receiver for tailer events.
+1. The desktop lifetime creates `MainWindow`, `TailerService`, `JsonFileAppPersistence`, and `AppState`.
+2. Startup paths and restored paths are opened through `AppState.OpenFileAsync`.
+3. Each tailer reads complete lines and pushes immutable events to the channel.
+4. The Avalonia dispatcher drains events, parses/appends lines, updates searches, and refreshes visible virtualized lists.
+5. Selecting a row records its buffer index; the context view derives its window from `FileBuffer.GetContextWindow`.
+6. Closing the window saves state and disposes every tailer.
 
-### `FileTab`
+## Search and filtering
 
-One per open file. Contains:
-- `FileBuffer`: all lines for the file.
-- `SearchPanel`: UI state for adding/editing searches.
-- `List<Search>`: active searches.
+- Empty queries are ignored.
+- Invalid regular expressions stay in the search form and show an inline error.
+- Search result indices are buffer-relative and are rebased when old lines roll out.
+- Global exclusions hide matching rows from every visible log/context list but do not remove them from the buffer.
+- Global labels produce additional case-insensitive highlight ranges.
 
-The first sub-tab, named **"All"**, is implicit and always present. Additional sub-tabs are derived from active searches.
+## Limits and errors
 
-### `FileBuffer`
-
-Owns `List<Line>` with a configurable maximum line count. A `Line` stores:
-- Raw text.
-- Optional parsed representation (e.g., logfmt key-value map).
-
-It appends new lines, applies rollover when the cap is exceeded, and notifies searches when lines change.
-
-### `Search`
-
-Compiled query plus results. Fields:
-- Query string.
-- Match mode: literal or regex.
-- Case-sensitivity toggle.
-- Highlight color.
-- Result list: indices of matching lines in the parent `FileBuffer`.
-- Per-line highlight ranges for the "All" view.
-
-When created, it scans the entire existing buffer. When new lines arrive, it scans only those lines.
-
-### `Tailer`
-
-Background service per file. Uses `FileSystemWatcher` with fallback to polling. Sends these events to the UI channel:
-- `NewLines { file_id, lines }`
-- `FileRotated { file_id }`
-- `FileTruncated { file_id }`
-
-### `LogView` component
-
-Custom Radzen `DataGrid` or `ListView` component that renders a slice of lines. It virtualizes rendering so only visible rows are drawn. It applies highlight colors from active searches.
-
-### `ContextPane` component
-
-Horizontal `Radzen Splitter` pane for the "show-inline" feature. Displays the selected match plus a configurable number of lines above and below from the full buffer. It is scrollable and never follows tail.
-
-### `Persistence`
-
-Loads and saves `AppConfig` as a JSON file in the browser's `localStorage`. Stores:
-- Recently open files.
-- Active searches per file (query, mode, color).
-- Window geometry and split-pane sizes.
-
-## 6. Data flow
-
-### Opening a file
-
-1. User supplies a path via CLI argument, file dialog, or drag-and-drop.
-2. `AppState` creates a `FileTab`, selects the parser based on extension or content sniffing, and starts a `Tailer` background service.
-3. The tailer reads the current file contents, sends the initial `NewLines` batch, then watches for appended data.
-
-### Tailing
-
-1. The tailer detects new bytes, splits them into lines, and sends `NewLines` to the UI channel.
-2. Each Blazor frame, `AppState` drains the channel and appends lines to the matching `FileBuffer`.
-3. `FileBuffer` runs each active `Search` over the new lines and appends matching indices.
-4. If a search tab has "follow tail" enabled and gained new matches, it scrolls to the newest match.
-
-### Searching
-
-1. User enters a query, chooses a color, and sets match mode (literal/regex) and case sensitivity.
-2. `AppState` compiles the query into a `Search` and scans the entire `FileBuffer`.
-3. A new sub-tab appears with the query as its title, showing only matching lines.
-4. The same search's highlight ranges are applied in the "All" tab.
-
-### Show-inline context
-
-1. User selects a match in any search tab.
-2. If "show-inline" is enabled, the `ContextPane` opens as a horizontal split and displays the matched line plus configured lines above and below.
-3. Selecting a different match updates the pane. Scrolling inside the pane does not affect the main view.
-
-### Persistence
-
-1. On exit and periodically, `AppState` serializes open files, searches, and window state to `localStorage`.
-2. On startup, it restores the previous session. Missing files are opened as error tabs and can be closed by the user.
-
-## 7. UI behavior
-
-### Tabs
-
-- File tabs are shown at the top by default; orientation can be switched between horizontal and vertical in settings.
-- Each file tab has sub-tabs: "All" plus one per active search.
-- Search tab titles are the query string, truncated if necessary.
-
-### Follow tail
-
-- The "All" tab and each search tab have independent follow-tail toggles.
-- When enabled, the view scrolls to the newest line ("All") or newest match (search tab) as data arrives.
-- Scrolling up with the mouse disables follow for that view.
-
-### Inline context pane
-
-- Toggled per file tab.
-- Horizontal, resizable `Radzen Splitter`.
-- Shows the selected match plus `context_above` lines above and `context_below` lines below.
-- Default values: 3 above, 10 below. Configurable in settings.
-- Never follows tail.
-
-## 8. Parsers
-
-### Plain text
-
-No transformation. Each line becomes a `Line` with no parsed fields.
-
-### logfmt
-
-- Render raw text in the main views by default.
-- Parse key-value pairs into a map stored on the `Line`.
-- Provide a structured expansion action (e.g., double-click or expand button) that formats the parsed fields for reading.
-
-Parser behavior for malformed logfmt lines: treat as plain text for display, store an empty parsed map.
-
-## 9. Search
-
-- Supported modes: literal keyword, regular expression.
-- Options: case sensitive/insensitive.
-- Highlight ranges are computed per line and rendered in the "All" view using Radzen's `highlight` class.
-- Result sub-tabs list only matching lines.
-- Multiple searches can overlap on the same line; their highlight ranges are rendered stacked or side-by-side.
-
-## 10. Error handling
-
-- **File open/read errors** — show a non-blocking toast/notification using `Radzen ToastService` and mark the file tab with an error icon.
-- **Tailer failures** — retry with exponential backoff using Polly. Missing files show "File missing"; if the file reappears, tailing resumes.
-- **Rotation/truncation** — detected by inode/size changes or `FileSystemWatcher` events. The UI clears the buffer and restarts from the new file state on `FileRotated`/`FileTruncated`.
-- **Invalid regex** — compile errors shown inline in the search box using `Radzen ValidationMessage`; the search is not created until valid.
-- **Memory bounds** — configurable max-line cap per file (default 100,000 lines). Oldest lines roll out of the main buffer. Search results pointing to rolled-out lines are removed from result lists.
-
-## 11. Testing
-
-- **Parser tests** — plain text no-op behavior and logfmt edge cases (empty values, quoted values, escapes, malformed lines).
-- **Search tests** — literal/regex matching, case sensitivity, highlight range generation, and multi-search overlap.
-- **Buffer tests** — append, rollover, truncation, and context-window retrieval.
-- **Tailer integration tests** — write to temp files in another task, verify line batches and rotation handling.
-- **UI smoke tests** — minimal startup test with a mocked tailer verifying that adding a search updates the view using Radzen's `MockData`.
-
-## 12. Future work
-
-- Microsoft Enterprise Library logging parser as an additional parser implementation.
-- `localStorage`-backed session/history store if queryable history becomes necessary.
-- Additional structured views for logfmt (table/column mode) using Radzen `DataGrid`.
+- The default buffer cap is 100,000 lines per file; `AppSettings.MaxLines` controls it.
+- Missing files are represented by error tabs and recover when the path reappears.
+- Truncation and rotation clear the affected buffer before new lines arrive.
+- Malformed or inaccessible session JSON is treated as a first launch; the last good file remains intact during atomic saves.

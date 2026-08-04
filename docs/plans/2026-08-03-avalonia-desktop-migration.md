@@ -1,7 +1,7 @@
 # Native Avalonia desktop migration plan
 
 Date: 2026-08-03  
-Status: Proposed
+Status: Implemented
 
 ## Outcome
 
