@@ -5,20 +5,20 @@
   x:Class="HexTailSharp.Views.LogView"
   x:DataType="vm:LogViewViewModel"
 >
-  <Grid RowDefinitions="Auto,*" Background="{DynamicResource SurfaceBrush}">
+  <Grid RowDefinitions="Auto,*" Background="{DynamicResource CyberSurfaceBrush}">
     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="12" Margin="12,7">
       <CheckBox Content="Follow" IsChecked="{Binding IsFollowing, Mode=TwoWay}" />
       <TextBlock
         Text="{Binding MatchSummary}"
         VerticalAlignment="Center"
-        Foreground="{DynamicResource MutedTextBrush}"
+        Foreground="{DynamicResource CyberMutedBrush}"
       />
     </StackPanel>
     <Grid Grid.Row="1" RowDefinitions="*,4,*">
       <ListBox
         x:Name="LogList"
         Grid.Row="0"
-        Background="{DynamicResource SurfaceBrush}"
+        Background="{DynamicResource CyberSurfaceBrush}"
         BorderThickness="0"
         ItemsSource="{Binding Lines}"
       >
@@ -30,7 +30,7 @@
       </ListBox>
       <GridSplitter
         Grid.Row="1"
-        Background="{DynamicResource BorderBrush}"
+        Background="{DynamicResource CyberBorderBrush}"
         ResizeDirection="Rows"
         ResizeBehavior="PreviousAndNext"
         ShowsPreview="False"
@@ -39,7 +39,7 @@
       <ListBox
         x:Name="ContextList"
         Grid.Row="2"
-        Background="{DynamicResource RaisedSurfaceBrush}"
+        Background="{DynamicResource CyberRaisedBrush}"
         BorderThickness="0"
         ItemsSource="{Binding ContextLines}"
         IsVisible="{Binding ShowContext}"
@@ -53,7 +53,7 @@
       <TextBlock
         Grid.Row="2"
         Text="No lines to show."
-        Foreground="{DynamicResource MutedTextBrush}"
+        Foreground="{DynamicResource CyberMutedBrush}"
         FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
         Margin="12,8"
         IsVisible="{Binding ContextEmpty}"

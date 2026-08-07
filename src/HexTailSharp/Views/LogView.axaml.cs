@@ -126,7 +126,7 @@ public partial class LogView : UserControl
         {
             FontFamily = LogFont,
             FontSize = ToLogFontSize(_viewModel.Settings.LogFontSize),
-            Foreground = Brush("#CBD5E1"),
+            Foreground = ResourceBrush("CyberMutedBrush", Brushes.Gray),
             TextWrapping = TextWrapping.NoWrap,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
@@ -135,8 +135,9 @@ public partial class LogView : UserControl
         {
             Child = text,
             Padding = LogRowPadding(),
-            BorderBrush = Brush("#263449"),
+            BorderBrush = ResourceBrush("CyberBorderBrush", Brushes.Transparent),
             BorderThickness = new Thickness(0, 0, 0, 1),
+            Background = ResourceBrush("CyberRaisedBrush", Brushes.Transparent),
         };
     }
 
@@ -151,7 +152,7 @@ public partial class LogView : UserControl
         {
             FontFamily = LogFont,
             FontSize = ToLogFontSize(_viewModel.Settings.LogFontSize),
-            Foreground = Brush("#E2E8F0"),
+            Foreground = ResourceBrush("CyberTextBrush", Brushes.White),
             TextWrapping = TextWrapping.NoWrap,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
@@ -173,7 +174,7 @@ public partial class LogView : UserControl
                         ),
                         FontFamily = LogFont,
                         FontSize = ToLogFontSize(_viewModel.Settings.LogFontSize),
-                        Foreground = Brush("#CBD5E1"),
+                        Foreground = ResourceBrush("CyberMutedBrush", Brushes.Gray),
                         TextWrapping = TextWrapping.Wrap,
                         Padding = new Thickness(16, 2, 0, 6),
                     },
@@ -184,9 +185,9 @@ public partial class LogView : UserControl
         {
             Child = content,
             Padding = LogRowPadding(),
-            BorderBrush = Brush("#263449"),
+            BorderBrush = ResourceBrush("CyberBorderBrush", Brushes.Transparent),
             BorderThickness = new Thickness(0, 0, 0, 1),
-            Background = Brushes.Transparent,
+            Background = ResourceBrush("CyberSurfaceBrush", Brushes.Transparent),
             Focusable = true,
         };
         row.Tapped += (_, e) =>
@@ -247,8 +248,8 @@ public partial class LogView : UserControl
                 new Run
                 {
                     Text = line.Raw.Substring(range.Start, range.Length),
-                    Background = Brush(range.Color),
-                    Foreground = Brush("#111827"),
+                    Background = ColorBrush(range.Color),
+                    Foreground = ResourceBrush("CyberSurfaceBrush", Brushes.Black),
                 }
             );
             cursor = range.Start + range.Length;
@@ -318,5 +319,8 @@ public partial class LogView : UserControl
             _ => new Thickness(12, 3),
         };
 
-    private static IBrush Brush(string value) => new SolidColorBrush(Color.Parse(value));
+    private IBrush ResourceBrush(string key, IBrush fallback) =>
+        this.TryFindResource(key, out var value) && value is IBrush brush ? brush : fallback;
+
+    private static IBrush ColorBrush(string value) => new SolidColorBrush(Color.Parse(value));
 }
