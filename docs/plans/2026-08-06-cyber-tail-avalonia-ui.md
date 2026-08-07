@@ -6,14 +6,14 @@
 
 **Architecture:** Keep the current explicit `AppState`/`TailerService`/persistence composition and ReactiveUI view-model boundary. Use Avalonia Fluent controls and one small Cyber Tail resource dictionary; retain code-behind only for native picker/drop, responsive window geometry, and virtualized row mechanics. The existing bounded `ObservableCollection<Line>` remains the UI source until the separately approved whole-file engine phase.
 
-**Tech Stack:** .NET 10, Avalonia 12.1.1, Avalonia Fluent, ReactiveUI.Avalonia.Reactive 12.1.1, System.Reactive 6.1.0, Xaml.Behaviors 12.0.5 event packages, FluentIcons.Avalonia, xUnit v3, Avalonia.Headless.XUnit 12.1.1.
+**Tech Stack:** .NET 10, Avalonia 12.1.1, Avalonia Fluent, ReactiveUI.Avalonia.Reactive 12.1.1, System.Reactive 7.0.0, Xaml.Behaviors 12.0.5 event packages, FluentIcons.Avalonia, xUnit v3, Avalonia.Headless.XUnit 12.1.1.
 
 ## Global Constraints
 
 - Preserve the user's current uncommitted edits in `Directory.Packages.props`, `src/HexTailSharp/HexTailSharp.csproj`, and `src/HexTailSharp/MainWindow.axaml`; treat them as migration input rather than reverting them.
 - Remove every AtomUI namespace, bootstrap call, type, resource, and package reference.
 - Use only `FluentIcons.Avalonia`; remove Material Icons and both draggable packages.
-- Use `ReactiveUI.Avalonia.Reactive`, not `ReactiveUI.Avalonia`. The former is the Avalonia 12.1.1 distribution that preserves the existing `Unit` and `IScheduler` System.Reactive API. Rewriting the application to `RxVoid` and `ISequencer` provides no product value.
+- Use `ReactiveUI.Avalonia.Reactive`, not `ReactiveUI.Avalonia`. The former is the Avalonia 12.1.1 distribution that preserves the existing `Unit` and `IScheduler` System.Reactive API and requires System.Reactive 7.0.0. Rewriting the application to `RxVoid` and `ISequencer` provides no product value.
 - Use only `Xaml.Behaviors.Interactivity`, `Xaml.Behaviors.Interactions`, and `Xaml.Behaviors.Interactions.Events`. Native `Command` binding remains the default; keep file-drop disposal and virtualized scroll attachment in code-behind.
 - Do not replace `Lines` collections during ordinary appends, recreate file tabs for settings changes, add a DI container, add speculative paging abstractions, or add pixel-baseline tests.
 - Each task ends in one Conventional Commit. Do not push.
@@ -49,6 +49,7 @@ In `Directory.Packages.props`, replace the package version entry:
 
 ```xml
 <PackageVersion Include="ReactiveUI.Avalonia.Reactive" Version="12.1.1" />
+<PackageVersion Include="System.Reactive" Version="7.0.0" />
 ```
 
 In `src/HexTailSharp/HexTailSharp.csproj`, replace the reference:
@@ -57,7 +58,7 @@ In `src/HexTailSharp/HexTailSharp.csproj`, replace the reference:
 <PackageReference Include="ReactiveUI.Avalonia.Reactive" />
 ```
 
-Do not change existing C# command or scheduler types.
+Remove the obsolete `<PackageReference Include="Xaml.Behaviors.Interactions.ReactiveUI" />` and its central version in this task; it is unused and introduces ReactiveUI 23 beside ReactiveUI 24. Do not change existing C# command or scheduler types.
 
 - [ ] **Step 3: Restore and verify the compatibility fix**
 
