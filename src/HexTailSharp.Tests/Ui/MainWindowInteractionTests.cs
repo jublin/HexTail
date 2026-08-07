@@ -29,6 +29,10 @@ public sealed class MainWindowInteractionTests
         window.Show();
 
         Assert.True(pane.IsPaneOpen);
+        Dispatcher.UIThread.RunJobs();
+        var colorPickers = pane.GetVisualDescendants().OfType<ColorPicker>().ToArray();
+        Assert.NotEmpty(colorPickers);
+        Assert.All(colorPickers, picker => Assert.NotNull(picker.Template));
         foreach (var name in new[] { "MatchModeBox", "DensityBox", "FontSizeBox" })
         {
             var combo = window.FindControl<ComboBox>(name)!;
@@ -85,9 +89,12 @@ public sealed class MainWindowInteractionTests
             .GetVisualDescendants()
             .Where(control => ReferenceEquals(control.DataContext, label))
             .ToArray();
-        labelControls.OfType<TextBox>().Single().Text = "WARN";
+        labelControls
+            .OfType<TextBox>()
+            .Single(textBox => textBox.PlaceholderText == "Text to highlight")
+            .Text = "WARN";
         await WaitFor(() => viewModel.State.Settings.GlobalLabels[0].Text == "WARN");
-        Click(labelControls.OfType<Button>().Single());
+        Click(labelControls.OfType<Button>().Single(button => Equals(button.Content, "×")));
         await WaitFor(() => viewModel.Settings.Labels.Count == 0);
 
         viewModel.Settings.SectionIndex = 1;
