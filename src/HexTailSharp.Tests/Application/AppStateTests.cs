@@ -126,7 +126,6 @@ public sealed class AppStateTests
         Assert.Equal(4, highlight.Length);
     }
 
-    [Fact]
     [Theory]
     [InlineData(null)]
     [InlineData("system")]
