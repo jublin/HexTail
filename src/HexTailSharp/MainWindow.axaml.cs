@@ -75,10 +75,15 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnOpened(object? sender, EventArgs e)
+    private async void OnOpened(object? sender, EventArgs e) => await InitializeOnUiThreadAsync();
+
+    private async Task InitializeOnUiThreadAsync()
     {
         await ViewModel.InitializeAsync();
-        ApplyWindowState();
+        if (Dispatcher.UIThread.CheckAccess())
+            ApplyWindowState();
+        else
+            await Dispatcher.UIThread.InvokeAsync(ApplyWindowState);
     }
 
     private async void OnClosed(object? sender, EventArgs e)

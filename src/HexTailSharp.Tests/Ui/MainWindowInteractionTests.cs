@@ -379,6 +379,25 @@ public sealed class MainWindowInteractionTests
         window.Close();
     }
 
+    [AvaloniaFact]
+    public async Task DelayedRestoreAppliesWindowStateOnUiThread()
+    {
+        var persistence = new DelayedPersistence
+        {
+            Config = new AppConfig { Window = new AppWindowState { Width = 1234 } },
+        };
+        var viewModel = new MainWindowViewModel(
+            new AppState(new TailerService(), persistence),
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        var window = new MainWindow(viewModel);
+
+        window.Show();
+        await WaitFor(() => window.Width == 1234);
+        window.Close();
+    }
+
     private static void Click(Button button)
     {
         Assert.NotNull(button.Command);
@@ -412,5 +431,21 @@ public sealed class MainWindowInteractionTests
             OnKeyDown(args);
             return args;
         }
+    }
+
+    private sealed class DelayedPersistence : IAppPersistence
+    {
+        public AppConfig? Config { get; init; }
+
+        public async ValueTask<AppConfig?> LoadAsync(CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(1, cancellationToken).ConfigureAwait(false);
+            return Config;
+        }
+
+        public ValueTask SaveAsync(
+            AppConfig config,
+            CancellationToken cancellationToken = default
+        ) => ValueTask.CompletedTask;
     }
 }
