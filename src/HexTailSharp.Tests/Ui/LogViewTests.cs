@@ -64,4 +64,39 @@ public sealed class LogViewTests
             File.Delete(path);
         }
     }
+
+    [AvaloniaFact]
+    public async Task ContextPanelRequiresToggleAndSelectedLine()
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllTextAsync(path, "line");
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            await viewModel.OpenPathsCommand.Execute([path]);
+            window.Show();
+            var file = viewModel.SelectedFile;
+            Assert.NotNull(file);
+            var view = window.GetVisualDescendants().OfType<LogView>().Single();
+            var contextList = view.FindControl<ListBox>("ContextList")!;
+
+            file.ShowContext = true;
+            file.Model.SelectedLine = null;
+            file.SyncViews();
+            Assert.False(contextList.IsVisible);
+
+            file.Model.SelectedLine = 0;
+            file.SyncViews();
+            Assert.True(contextList.IsVisible);
+
+            file.ShowContext = false;
+            file.SyncViews();
+            Assert.False(contextList.IsVisible);
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }
