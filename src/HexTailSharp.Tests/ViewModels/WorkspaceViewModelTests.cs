@@ -1,11 +1,45 @@
 using System.Collections.ObjectModel;
+using System.Reactive.Concurrency;
+using HexTailSharp.Application;
 using HexTailSharp.Domain;
+using HexTailSharp.Tailing;
+using HexTailSharp.Tests.Support;
 using HexTailSharp.ViewModels;
+using ReactiveUI;
+using ReactiveUI.Reactive;
+using ReactiveUI.Reactive.Builder;
 
 namespace HexTailSharp.Tests.ViewModels;
 
 public sealed class WorkspaceViewModelTests
 {
+    [Fact]
+    public async Task SetShowContext_PersistsOnce()
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var persistence = new TestPersistence();
+        var state = new AppState(new TailerService(), persistence);
+        await using var viewModel = new MainWindowViewModel(
+            state,
+            scheduler: ImmediateScheduler.Instance
+        );
+        var path = Path.GetTempFileName();
+        try
+        {
+            await state.OpenFileAsync(path);
+            var file = Assert.Single(viewModel.Files);
+            var savesBeforeToggle = persistence.SaveCount;
+
+            await viewModel.SetShowContextAsync(file, true);
+
+            Assert.Equal(savesBeforeToggle + 1, persistence.SaveCount);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void SyncCollection_AppendRetainsCollectionIdentity()
     {
