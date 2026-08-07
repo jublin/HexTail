@@ -66,11 +66,10 @@ Run:
 
 ```bash
 rtk dotnet restore src/HexTailSharp.slnx
-rtk dotnet build src/HexTailSharp.slnx --no-restore
 rtk dotnet test src/HexTailSharp.Tests/HexTailSharp.Tests.csproj --no-build
 ```
 
-Expected: PASS.
+Expected: restore and tests PASS. The full solution build remains blocked until Task 5 removes AtomUI's transitive ReactiveUI 23 assembly; Task 5 owns that atomic shell/package cutover and is the first full-build gate.
 
 - [ ] **Step 4: Commit the isolated build fix**
 
