@@ -1,0 +1,38 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTailSharp.ViewModels"
+  xmlns:icons="using:FluentIcons.Avalonia"
+  x:Class="HexTailSharp.Views.FileStrip"
+  x:DataType="vm:MainWindowViewModel"
+>
+  <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+    <StackPanel Orientation="Horizontal" Background="{DynamicResource CyberRaisedBrush}">
+      <Button Command="{Binding OpenCommand}" ToolTip.Tip="Open log files" Margin="4,2">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <icons:FluentIcon Icon="FolderOpen" />
+          <TextBlock Text="Open Files" />
+        </StackPanel>
+      </Button>
+      <ItemsControl ItemsSource="{Binding Files}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:FileTabViewModel">
+            <Border Classes="file-tab" Classes.selected="{Binding IsSelected}" ToolTip.Tip="{Binding Path}" BorderBrush="{DynamicResource CyberBorderBrush}" BorderThickness="0,0,1,0">
+              <Grid ColumnDefinitions="*,Auto">
+                <Button Command="{Binding $parent[UserControl].DataContext.SelectFileCommand}" CommandParameter="{Binding}" HorizontalContentAlignment="Left">
+                  <TextBlock Text="{Binding DisplayName}" />
+                </Button>
+                <Button Grid.Column="1" Classes="icon" ToolTip.Tip="{Binding Path, StringFormat='Close {0}'}" AutomationProperties.Name="{Binding Path, StringFormat='Close {0}'}" Command="{Binding $parent[UserControl].DataContext.CloseFileCommand}" CommandParameter="{Binding}">
+                  <icons:FluentIcon Icon="Dismiss" />
+                </Button>
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
