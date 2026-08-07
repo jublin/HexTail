@@ -40,7 +40,9 @@ internal sealed class LogViewViewModel : ReactiveObject
     public ReactiveCommand<Line, Unit> SelectLineCommand { get; }
     public ReactiveCommand<Line, Unit> ToggleExpandedCommand { get; }
     public bool ShowContext => _file.Model.ShowContext;
+    public bool ContextVisible => ShowContext && _file.Model.SelectedLine is not null;
     public bool ContextEmpty => ContextLines.Count == 0;
+    public bool ContextEmptyVisible => ContextVisible && ContextEmpty;
     public bool IsFollowing
     {
         get => Search is null ? _file.Model.FollowAll : IsSearchFollow();
@@ -67,7 +69,9 @@ internal sealed class LogViewViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(Header));
         this.RaisePropertyChanged(nameof(MatchSummary));
         this.RaisePropertyChanged(nameof(ShowContext));
+        this.RaisePropertyChanged(nameof(ContextVisible));
         this.RaisePropertyChanged(nameof(ContextEmpty));
+        this.RaisePropertyChanged(nameof(ContextEmptyVisible));
         this.RaisePropertyChanged(nameof(IsFollowing));
     }
 
