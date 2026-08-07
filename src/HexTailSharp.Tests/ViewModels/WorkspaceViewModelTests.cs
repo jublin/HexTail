@@ -7,6 +7,31 @@ namespace HexTailSharp.Tests.ViewModels;
 public sealed class WorkspaceViewModelTests
 {
     [Fact]
+    public void SyncCollection_AppendRetainsCollectionIdentity()
+    {
+        var rows = new ObservableCollection<Line>();
+        var original = rows;
+
+        LogViewViewModel.SyncCollection(rows, [new Line("one"), new Line("two")]);
+
+        Assert.Same(original, rows);
+        Assert.Equal(2, rows.Count);
+    }
+
+    [Fact]
+    public void SyncCollection_UnchangedTailDoesNotRaiseReset()
+    {
+        var line = new Line("one");
+        var rows = new ObservableCollection<Line> { line };
+        var changes = 0;
+        rows.CollectionChanged += (_, _) => changes++;
+
+        LogViewViewModel.SyncCollection(rows, [line]);
+
+        Assert.Equal(0, changes);
+    }
+
+    [Fact]
     public void SyncCollection_AppendKeepsExistingRowsAndCollection()
     {
         var first = new Line("first");
