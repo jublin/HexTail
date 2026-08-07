@@ -107,7 +107,7 @@ public sealed class AppStateTests
         Assert.Equal("Error", label.Text);
         Assert.Equal("#ff0000", label.Color);
         Assert.Equal(["Health"], settings.GlobalExcludeLabels);
-        Assert.Equal("dark", settings.Theme);
+        Assert.Equal("cyber-tail", settings.Theme);
         Assert.Equal(SettingsMenuAlignment.Right, settings.SettingsMenuAlignment);
     }
 
@@ -132,10 +132,13 @@ public sealed class AppStateTests
     [InlineData("light")]
     [InlineData("material-wcag")]
     [InlineData("dark")]
-    public void ThemeCatalog_NormalizesEveryLegacyValueToDark(string? value)
+    public void ThemeCatalog_NormalizesEveryLegacyValueToCyberTail(string? value)
     {
-        Assert.Equal(["dark"], ThemeCatalog.Names);
-        Assert.Equal("dark", ThemeCatalog.Normalize(value));
+        Assert.Equal(["cyber-tail", "catppuccin-mocha", "spotify"], ThemeCatalog.Names);
+        Assert.Equal(
+            value is "catppuccin-mocha" or "spotify" ? value : "cyber-tail",
+            ThemeCatalog.Normalize(value)
+        );
     }
 
     [Fact]

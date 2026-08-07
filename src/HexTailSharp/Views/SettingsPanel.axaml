@@ -5,13 +5,13 @@
   x:Class="HexTailSharp.Views.SettingsPanel"
   x:DataType="vm:MainWindowViewModel"
 >
-  <Grid RowDefinitions="Auto,*,Auto,Auto" Background="{DynamicResource CyberRaisedBrush}" Margin="16">
+  <Grid RowDefinitions="Auto,*,Auto,Auto" Background="{DynamicResource RaisedBrush}" Margin="16">
     <TextBlock Text="Settings" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12" />
     <TabControl Grid.Row="1" SelectedIndex="{Binding Settings.SectionIndex, Mode=TwoWay}">
       <TabItem Header="Labels">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel Spacing="10" Margin="0,12,0,0">
-            <TextBlock Text="Highlight case-insensitive text across every log view." Foreground="{DynamicResource CyberMutedBrush}" TextWrapping="Wrap" />
+            <TextBlock Text="Highlight case-insensitive text across every log view." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
             <ItemsControl ItemsSource="{Binding Settings.Labels}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:LabelSettingViewModel">
@@ -34,7 +34,7 @@
       <TabItem Header="Exclusions">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel Spacing="10" Margin="0,12,0,0">
-            <TextBlock Text="Matching lines remain buffered but stay hidden from log and context views." Foreground="{DynamicResource CyberMutedBrush}" TextWrapping="Wrap" />
+            <TextBlock Text="Matching lines remain buffered but stay hidden from log and context views." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
             <ItemsControl ItemsSource="{Binding Settings.Exclusions}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:ExclusionSettingViewModel">
@@ -60,8 +60,20 @@
           <ComboBox x:Name="FontSizeBox" Name="FontSizeBox" ItemsSource="{Binding Settings.FontSizeOptions}" SelectedItem="{Binding Settings.FontSize, Mode=TwoWay}" />
         </StackPanel>
       </TabItem>
+      <TabItem Header="Appearance">
+        <StackPanel Spacing="12" Margin="0,12,0,0">
+          <TextBlock Text="Theme" />
+          <ComboBox
+            x:Name="ThemeBox"
+            Name="ThemeBox"
+            ItemsSource="{Binding Settings.ThemeOptions}"
+            SelectedItem="{Binding Settings.SelectedTheme, Mode=TwoWay}"
+            DisplayMemberBinding="{Binding DisplayName}"
+          />
+        </StackPanel>
+      </TabItem>
     </TabControl>
     <TextBlock x:Name="SettingsSaveError" Grid.Row="2" Classes="error" Margin="0,12,0,0" TextWrapping="Wrap" IsVisible="{Binding Settings.HasSaveError}" Text="{Binding Settings.SaveError}" />
-    <TextBlock Grid.Row="3" Margin="0,8,0,0" Foreground="{DynamicResource CyberMutedBrush}" IsVisible="{Binding Settings.IsSaving}" Text="Saving…" />
+    <TextBlock Grid.Row="3" Margin="0,8,0,0" Foreground="{DynamicResource MutedBrush}" IsVisible="{Binding Settings.IsSaving}" Text="Saving…" />
   </Grid>
 </UserControl>

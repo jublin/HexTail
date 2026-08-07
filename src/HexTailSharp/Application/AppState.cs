@@ -419,7 +419,7 @@ public sealed class AppState : IAsyncDisposable
             ContextBelow = settings.ContextBelow,
             GlobalLabels = labels,
             GlobalExcludeLabels = exclusions,
-            Theme = "dark",
+            Theme = ThemeCatalog.Normalize(settings.Theme),
             Density = Enum.IsDefined(settings.Density) ? settings.Density : UiDensity.Comfortable,
             LogFontSize = Enum.IsDefined(settings.LogFontSize)
                 ? settings.LogFontSize

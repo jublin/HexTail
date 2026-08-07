@@ -90,6 +90,23 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
+    public async Task AppearanceThemeCanBeSelected()
+    {
+        var persistence = new TestPersistence();
+        var window = TestWindow.Create(persistence, out var viewModel);
+        await viewModel.InitializeAsync();
+        viewModel.SettingsOpen = true;
+        viewModel.Settings.SectionIndex = 3;
+        window.Show();
+
+        var theme = viewModel.Settings.ThemeOptions.Single(option => option.Id == "spotify");
+        FindVisual<ComboBox>(window, "ThemeBox").SelectedItem = theme;
+        await WaitFor(() => viewModel.State.Settings.Theme == "spotify");
+        Assert.Equal("spotify", viewModel.State.Settings.Theme);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task LabelsAndExclusionsAddEditAndRemove()
     {
         var persistence = new TestPersistence();

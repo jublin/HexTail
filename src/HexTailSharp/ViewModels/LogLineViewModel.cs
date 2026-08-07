@@ -3,6 +3,7 @@ using System.Reactive;
 using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Media;
+using HexTailSharp;
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
 using HexTailSharp.Persistence;
@@ -68,8 +69,10 @@ internal sealed class LogLineViewModel : ReactiveObject
             UiDensity.Cozy => new Thickness(12, 2),
             _ => new Thickness(12, 3),
         };
-        Foreground = IsContext ? Brush("#91A0B5") : Brush("#E6EDF7");
-        Background = IsContext ? Brush("#101722") : Brush("#090D12");
+        Foreground = IsContext ? ThemeManager.Brush("MutedBrush") : ThemeManager.Brush("TextBrush");
+        Background = IsContext
+            ? ThemeManager.Brush("RaisedBrush")
+            : ThemeManager.Brush("SurfaceBrush");
         ParsedFieldsText = Line.ParsedFields is { Count: > 0 }
             ? string.Join("  ", Line.ParsedFields.Select(field => $"{field.Key}={field.Value}"))
             : string.Empty;
@@ -111,7 +114,7 @@ internal sealed class LogLineViewModel : ReactiveObject
                 new LogTextSegmentViewModel(
                     Line.Raw.Substring(range.Start, range.Length),
                     Brush(color),
-                    Brush("#090D12")
+                    ThemeManager.Brush("SurfaceBrush")
                 )
             );
             cursor = range.Start + range.Length;

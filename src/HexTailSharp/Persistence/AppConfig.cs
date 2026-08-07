@@ -49,7 +49,7 @@ public sealed record AppSettings
     public int ContextBelow { get; init; } = 10;
     public List<GlobalLabel> GlobalLabels { get; init; } = [];
     public List<string> GlobalExcludeLabels { get; init; } = [];
-    public string Theme { get; init; } = "dark";
+    public string Theme { get; init; } = "cyber-tail";
     public UiDensity Density { get; init; } = UiDensity.Comfortable;
     public LogFontSize LogFontSize { get; init; } = LogFontSize.Medium;
     public SettingsMenuAlignment SettingsMenuAlignment { get; init; } = SettingsMenuAlignment.Right;
@@ -73,13 +73,25 @@ public sealed record AppSettings
 
 public static class ThemeCatalog
 {
-    public static readonly string[] Names = ["dark"];
+    public static readonly string[] Names = ["cyber-tail", "catppuccin-mocha", "spotify"];
+
+    public static readonly IReadOnlyDictionary<string, string> DisplayNames = new Dictionary<
+        string,
+        string
+    >(StringComparer.Ordinal)
+    {
+        ["cyber-tail"] = "Cyber Tail",
+        ["catppuccin-mocha"] = "Catppuccin Mocha",
+        ["spotify"] = "Open Design · Spotify",
+    };
 
     public static bool Contains(string? theme) =>
-        string.Equals(theme, "dark", StringComparison.Ordinal);
+        theme is "cyber-tail" or "catppuccin-mocha" or "spotify";
 
-    public static string Normalize(string? theme) => "dark";
+    public static string Normalize(string? theme) => Contains(theme) ? theme! : "cyber-tail";
 }
+
+public sealed record ThemeOption(string Id, string DisplayName);
 
 public sealed class GlobalLabel
 {

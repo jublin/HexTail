@@ -4,16 +4,17 @@
   x:Class="HexTailSharp.App"
 >
   <Application.Resources>
-    <SolidColorBrush x:Key="SurfaceBrush" Color="#111827" />
-    <SolidColorBrush x:Key="RaisedSurfaceBrush" Color="#172033" />
-    <SolidColorBrush x:Key="ToolbarBrush" Color="#1F2937" />
-    <SolidColorBrush x:Key="BorderBrush" Color="#334155" />
-    <SolidColorBrush x:Key="TextBrush" Color="#E2E8F0" />
-    <SolidColorBrush x:Key="MutedTextBrush" Color="#94A3B8" />
-    <SolidColorBrush x:Key="AccentBrush" Color="#F59E0B" />
-    <SolidColorBrush x:Key="ErrorBackgroundBrush" Color="#451A1A" />
-    <SolidColorBrush x:Key="ErrorBorderBrush" Color="#EF4444" />
-    <SolidColorBrush x:Key="ErrorTextBrush" Color="#FECACA" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#090D12" />
+    <SolidColorBrush x:Key="RaisedBrush" Color="#101722" />
+    <SolidColorBrush x:Key="ToolbarBrush" Color="#0D141E" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#263449" />
+    <SolidColorBrush x:Key="TextBrush" Color="#E6EDF7" />
+    <SolidColorBrush x:Key="MutedBrush" Color="#91A0B5" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#28D7FE" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="#39E58C" />
+    <SolidColorBrush x:Key="ErrorBrush" Color="#FF667A" />
+    <SolidColorBrush x:Key="ErrorBackgroundBrush" Color="#2A1118" />
+    <SolidColorBrush x:Key="ErrorTextBrush" Color="#FFD5DC" />
   </Application.Resources>
   <Application.Styles>
     <FluentTheme DensityStyle="Compact" />
@@ -29,7 +30,7 @@
       <Setter Property="MinHeight" Value="34" />
     </Style>
     <Style Selector="ListBoxItem:selected">
-      <Setter Property="Background" Value="#334155" />
+      <Setter Property="Background" Value="{DynamicResource BorderBrush}" />
     </Style>
   </Application.Styles>
 </Application>
