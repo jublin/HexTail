@@ -1,7 +1,6 @@
-using AtomUI;
 using Avalonia;
 using HexTailSharp;
-using ReactiveUI.Avalonia;
+using ReactiveUI.Avalonia.Reactive;
 
 internal static class Program
 {
@@ -10,9 +9,5 @@ internal static class Program
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
 
     public static AppBuilder BuildAvaloniaApp() =>
-        AppBuilder
-            .Configure<App>()
-            .UseReactiveUI(_ => { })
-            .UseAtomUIPlatformDetect()
-            .WithAtomUIDefaultOptions();
+        AppBuilder.Configure<App>().UsePlatformDetect().UseReactiveUI(_ => { });
 }

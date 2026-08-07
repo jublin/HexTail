@@ -1,32 +1,24 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
-using System.Reactive.Concurrency;
-using System.Reactive.Disposables;
-using System.Reactive.Linq;
-using AtomUI.Controls;
-using AtomUI.Desktop.Controls;
-using AtomUI.Theme;
-using Avalonia;
 using Avalonia.Media;
-using HexTailSharp.Application;
-using HexTailSharp.Domain;
 using HexTailSharp.Persistence;
 using ReactiveUI;
+using ReactiveUI.Reactive;
 
 namespace HexTailSharp.ViewModels;
 
 internal sealed class SettingsViewModel : ReactiveObject
 {
     private readonly MainWindowViewModel _owner;
-    private string _theme = "dark";
     private UiDensity _density;
     private LogFontSize _fontSize;
-    private SettingsMenuAlignment _menuAlignment;
     private string _newLabelText = string.Empty;
     private Color _newLabelColor = Color.Parse("#F59E0B");
     private string _newExclusionText = string.Empty;
     private string _section = "labels";
+    private string? _saveError;
     private int _sectionIndex;
+    private bool _isSaving;
     private bool _syncing;
 
     internal SettingsViewModel(MainWindowViewModel owner)
@@ -40,13 +32,10 @@ internal sealed class SettingsViewModel : ReactiveObject
 
     public ObservableCollection<LabelSettingViewModel> Labels { get; } = [];
     public ObservableCollection<ExclusionSettingViewModel> Exclusions { get; } = [];
-    public IReadOnlyList<string> ThemeOptions { get; } = ThemeCatalog.Names;
     public IReadOnlyList<UiDensity> DensityOptions { get; } =
     [UiDensity.Comfortable, UiDensity.Cozy, UiDensity.Compact];
     public IReadOnlyList<LogFontSize> FontSizeOptions { get; } =
     [LogFontSize.Small, LogFontSize.Medium, LogFontSize.Large, LogFontSize.ExtraLarge];
-    public IReadOnlyList<SettingsMenuAlignment> MenuAlignmentOptions { get; } =
-    [SettingsMenuAlignment.Left, SettingsMenuAlignment.Right];
     public ReactiveCommand<Unit, Unit> AddLabelCommand { get; }
     public ReactiveCommand<LabelSettingViewModel, Unit> RemoveLabelCommand { get; }
     public ReactiveCommand<Unit, Unit> AddExclusionCommand { get; }
@@ -70,23 +59,28 @@ internal sealed class SettingsViewModel : ReactiveObject
             _section = index switch
             {
                 1 => "exclusions",
-                2 => "appearance",
+                2 => "display",
                 _ => "labels",
             };
         }
     }
 
-    public string Theme
+    public string? SaveError
     {
-        get => _theme;
-        set
+        get => _saveError;
+        private set
         {
-            if (string.Equals(_theme, value, StringComparison.Ordinal))
-                return;
-            this.RaiseAndSetIfChanged(ref _theme, value);
-            if (!_syncing && ThemeCatalog.Contains(value))
-                _ = CommitAsync(_owner.State.Settings with { Theme = value });
+            this.RaiseAndSetIfChanged(ref _saveError, value);
+            this.RaisePropertyChanged(nameof(HasSaveError));
         }
+    }
+
+    public bool HasSaveError => !string.IsNullOrWhiteSpace(SaveError);
+
+    public bool IsSaving
+    {
+        get => _isSaving;
+        private set => this.RaiseAndSetIfChanged(ref _isSaving, value);
     }
 
     public UiDensity Density
@@ -115,19 +109,6 @@ internal sealed class SettingsViewModel : ReactiveObject
         }
     }
 
-    public SettingsMenuAlignment MenuAlignment
-    {
-        get => _menuAlignment;
-        set
-        {
-            if (_menuAlignment == value)
-                return;
-            this.RaiseAndSetIfChanged(ref _menuAlignment, value);
-            if (!_syncing)
-                _ = CommitAsync(_owner.State.Settings with { SettingsMenuAlignment = value });
-        }
-    }
-
     public string NewLabelText
     {
         get => _newLabelText;
@@ -151,10 +132,8 @@ internal sealed class SettingsViewModel : ReactiveObject
         _syncing = true;
         try
         {
-            Theme = settings.Theme;
             Density = settings.Density;
             FontSize = settings.LogFontSize;
-            MenuAlignment = settings.SettingsMenuAlignment;
         }
         finally
         {
@@ -248,7 +227,23 @@ internal sealed class SettingsViewModel : ReactiveObject
         _ = CommitAsync(_owner.State.Settings with { GlobalExcludeLabels = exclusions });
     }
 
-    private Task CommitAsync(AppSettings settings) => _owner.UpdateSettingsAsync(settings);
+    internal async Task CommitAsync(AppSettings settings)
+    {
+        IsSaving = true;
+        SaveError = null;
+        try
+        {
+            await _owner.UpdateSettingsAsync(settings);
+        }
+        catch (Exception ex)
+        {
+            SaveError = ex.Message;
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
 
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
 }

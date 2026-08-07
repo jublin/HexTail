@@ -3,15 +3,13 @@ using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
-using AtomUI.Controls;
-using AtomUI.Desktop.Controls;
-using AtomUI.Theme;
-using Avalonia;
+using Avalonia.Input;
 using Avalonia.Media;
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
 using HexTailSharp.Persistence;
 using ReactiveUI;
+using ReactiveUI.Reactive;
 
 namespace HexTailSharp.ViewModels;
 
@@ -20,6 +18,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private readonly AppState _state;
     private readonly string[] _startupPaths;
     private readonly IScheduler _scheduler;
+    private readonly bool _startPolling;
     private readonly CompositeDisposable _subscriptions = new();
     private FileTabViewModel? _selectedFile;
     private string _query = string.Empty;
@@ -36,31 +35,50 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public MainWindowViewModel(
         AppState state,
         IEnumerable<string>? startupPaths = null,
-        IScheduler? scheduler = null
+        IScheduler? scheduler = null,
+        bool startPolling = true
     )
     {
         _state = state;
         _startupPaths = startupPaths?.ToArray() ?? [];
         _scheduler = scheduler ?? RxSchedulers.MainThreadScheduler;
+        _startPolling = startPolling;
         Settings = new SettingsViewModel(this);
-        PickFiles = new Interaction<Unit, IReadOnlyList<string>>();
+        PickFiles = new Interaction<Unit, IReadOnlyList<string>>(_scheduler);
 
-        OpenCommand = ReactiveCommand.CreateFromTask(OpenFilesAsync);
-        OpenPathsCommand = ReactiveCommand.CreateFromTask<IEnumerable<string>>(OpenPathsAsync);
-        SaveCommand = ReactiveCommand.CreateFromTask(SaveAsync);
-        ToggleSettingsCommand = ReactiveCommand.Create(() =>
-        {
-            SettingsOpen = !SettingsOpen;
-        });
-        SelectFileCommand = ReactiveCommand.Create<FileTabViewModel>(SelectFile);
-        CloseFileCommand = ReactiveCommand.CreateFromTask<FileTabViewModel>(CloseFileAsync);
+        OpenCommand = ReactiveCommand.CreateFromTask(OpenFilesAsync, _scheduler);
+        OpenPathsCommand = ReactiveCommand.CreateFromTask<IEnumerable<string>>(
+            OpenPathsAsync,
+            _scheduler
+        );
+        SaveCommand = ReactiveCommand.CreateFromTask(SaveAsync, _scheduler);
+        ToggleSettingsCommand = ReactiveCommand.Create(
+            () =>
+            {
+                SettingsOpen = !SettingsOpen;
+            },
+            _scheduler
+        );
+        SelectFileCommand = ReactiveCommand.Create<FileTabViewModel>(SelectFile, _scheduler);
+        CloseFileCommand = ReactiveCommand.CreateFromTask<FileTabViewModel>(
+            CloseFileAsync,
+            _scheduler
+        );
 
         var canAddSearch = this.WhenAnyValue(
             viewModel => viewModel.Query,
             viewModel => viewModel.SelectedFile,
             (query, file) => !string.IsNullOrWhiteSpace(query) && file is not null
         );
-        AddSearchCommand = ReactiveCommand.CreateFromTask(AddSearchAsync, canAddSearch);
+        AddSearchCommand = ReactiveCommand.CreateFromTask(AddSearchAsync, canAddSearch, _scheduler);
+        AddSearchOnKeyCommand = ReactiveCommand.Create<KeyEventArgs>(
+            args =>
+            {
+                if (args.Key == Key.Enter)
+                    AddSearchCommand.Execute().Subscribe();
+            },
+            _scheduler
+        );
 
         _subscriptions.Add(
             Observable
@@ -74,11 +92,17 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 .Subscribe(_ => SyncFromState())
         );
 
-        _subscriptions.Add(OpenCommand.ThrownExceptions.Subscribe(ex => SetFileError(ex.Message)));
         _subscriptions.Add(
-            OpenPathsCommand.ThrownExceptions.Subscribe(ex => SetFileError(ex.Message))
+            Observable
+                .Merge(
+                    OpenCommand.ThrownExceptions,
+                    OpenPathsCommand.ThrownExceptions,
+                    SaveCommand.ThrownExceptions,
+                    CloseFileCommand.ThrownExceptions,
+                    AddSearchCommand.ThrownExceptions
+                )
+                .Subscribe(ex => SetFileError(ex.Message))
         );
-        _subscriptions.Add(SaveCommand.ThrownExceptions.Subscribe(ex => SetFileError(ex.Message)));
     }
 
     public AppState State => _state;
@@ -92,6 +116,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<FileTabViewModel, Unit> SelectFileCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> CloseFileCommand { get; }
     public ReactiveCommand<Unit, Unit> AddSearchCommand { get; }
+    public ReactiveCommand<KeyEventArgs, Unit> AddSearchOnKeyCommand { get; }
 
     public FileTabViewModel? SelectedFile
     {
@@ -160,11 +185,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         set => this.RaiseAndSetIfChanged(ref _settingsOpen, value);
     }
 
-    public DrawerPlacement SettingsPlacement =>
-        _state.Settings.SettingsMenuAlignment == SettingsMenuAlignment.Left
-            ? DrawerPlacement.Left
-            : DrawerPlacement.Right;
-
     public int SelectedViewIndex
     {
         get => _selectedViewIndex;
@@ -180,16 +200,16 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         try
         {
             await _state.RestoreAsync();
-            await ApplyThemeAsync(_state.Settings.Theme);
             foreach (var path in _startupPaths.Where(path => !string.IsNullOrWhiteSpace(path)))
                 await TryOpenPathAsync(path);
 
             SyncFromState();
-            _subscriptions.Add(
-                Observable
-                    .Interval(TimeSpan.FromMilliseconds(100), _scheduler)
-                    .Subscribe(_ => DrainTailer())
-            );
+            if (_startPolling)
+                _subscriptions.Add(
+                    Observable
+                        .Interval(TimeSpan.FromMilliseconds(100), _scheduler)
+                        .Subscribe(_ => DrainTailer())
+                );
         }
         catch (Exception ex)
             when (ex is IOException or UnauthorizedAccessException or ArgumentException)
@@ -209,21 +229,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         await _state.DisposeAsync();
     }
 
-    internal async Task UpdateSettingsAsync(AppSettings settings)
-    {
-        try
-        {
-            await _state.UpdateSettingsAsync(settings);
-            if (Avalonia.Application.Current is not null)
-                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
-                    ApplyThemeAsync(settings.Theme)
-                );
-        }
-        catch (Exception ex)
-        {
-            SetFileError(ex.Message);
-        }
-    }
+    internal async Task UpdateSettingsAsync(AppSettings settings) =>
+        await _state.UpdateSettingsAsync(settings);
 
     internal void SelectLine(FileTabViewModel file, Line line) =>
         _state.SelectLine(file.Model, line);
@@ -397,58 +404,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         this.RaisePropertyChanged(nameof(FileError));
         this.RaisePropertyChanged(nameof(HasFileError));
         this.RaisePropertyChanged(nameof(HasSearchError));
-        this.RaisePropertyChanged(nameof(SettingsPlacement));
-    }
-
-    private async Task ApplyThemeAsync(string theme)
-    {
-        if (Avalonia.Application.Current is not { } application)
-            return;
-
-        var manager = application.GetThemeManager();
-        if (manager is not null)
-        {
-            var result = await manager.ApplyThemeAsync(
-                new ThemeRequest(
-                    IThemeManager.DEFAULT_THEME_ID,
-                    null,
-                    ThemeTransitionReason.UserRequest
-                )
-            );
-            if (result.Status == ThemeTransitionStatus.Failed)
-                throw new InvalidOperationException("AtomUI could not apply the selected theme.");
-        }
-
-        application.RequestedThemeVariant = theme switch
-        {
-            "light" => Avalonia.Styling.ThemeVariant.Light,
-            "dark" => Avalonia.Styling.ThemeVariant.Dark,
-            _ => null,
-        };
-        var light = theme switch
-        {
-            "light" => true,
-            "dark" => false,
-            _ => application.ActualThemeVariant != Avalonia.Styling.ThemeVariant.Dark,
-        };
-        application.Resources["SurfaceBrush"] = new SolidColorBrush(
-            Color.Parse(light ? "#F8FAFC" : "#111827")
-        );
-        application.Resources["RaisedSurfaceBrush"] = new SolidColorBrush(
-            Color.Parse(light ? "#F1F5F9" : "#172033")
-        );
-        application.Resources["ToolbarBrush"] = new SolidColorBrush(
-            Color.Parse(light ? "#FFFFFF" : "#1F2937")
-        );
-        application.Resources["BorderBrush"] = new SolidColorBrush(
-            Color.Parse(light ? "#CBD5E1" : "#334155")
-        );
-        application.Resources["TextBrush"] = new SolidColorBrush(
-            Color.Parse(light ? "#1E293B" : "#E2E8F0")
-        );
-        application.Resources["MutedTextBrush"] = new SolidColorBrush(
-            Color.Parse(light ? "#475569" : "#94A3B8")
-        );
     }
 
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";

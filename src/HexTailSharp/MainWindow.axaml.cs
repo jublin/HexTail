@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using HexTailSharp.Application;
 using HexTailSharp.Persistence;
 using HexTailSharp.Tailing;
@@ -10,22 +11,35 @@ using ReactiveUI;
 
 namespace HexTailSharp;
 
-public partial class MainWindow : AtomUI.Desktop.Controls.Window
+public partial class MainWindow : Window
 {
     public MainWindow()
-        : this(null) { }
+        : this((string[]?)null) { }
 
-    public MainWindow(string[]? startupPaths = null)
+    public MainWindow(string[]? startupPaths)
+        : this(
+            new MainWindowViewModel(
+                new AppState(new TailerService(), new JsonFileAppPersistence()),
+                startupPaths
+            )
+        ) { }
+
+    internal MainWindow(MainWindowViewModel viewModel)
+        : this(viewModel, registerNativePicker: true) { }
+
+    internal MainWindow(MainWindowViewModel viewModel, bool registerNativePicker)
     {
         InitializeComponent();
-
-        var state = new AppState(new TailerService(), new JsonFileAppPersistence());
-        ViewModel = new MainWindowViewModel(state, startupPaths);
+        ViewModel = viewModel;
         DataContext = ViewModel;
-        ViewModel.PickFiles.RegisterHandler(context => _ = HandlePickFilesAsync(context));
-
+        if (registerNativePicker)
+            ViewModel.PickFiles.RegisterHandler(context => _ = HandlePickFilesAsync(context));
+        AddHandler(DragDrop.DragOverEvent, OnDragOver);
+        AddHandler(DragDrop.DropEvent, OnDrop);
         Opened += OnOpened;
         Closed += OnClosed;
+        SizeChanged += (_, args) => UpdateResponsiveLayout(args.NewSize.Width);
+        UpdateResponsiveLayout(Width);
     }
 
     internal MainWindowViewModel ViewModel { get; }
@@ -122,11 +136,38 @@ public partial class MainWindow : AtomUI.Desktop.Controls.Window
         ViewModel.OpenPathsCommand.Execute(paths).Subscribe();
     }
 
-    private void QueryKeyDown(object? sender, KeyEventArgs e)
+    protected override void OnKeyDown(KeyEventArgs e)
     {
-        if (e.Key != Key.Enter)
+        base.OnKeyDown(e);
+        if (e.Key == Key.Escape && ViewModel.SettingsOpen)
+        {
+            ViewModel.SettingsOpen = false;
+            e.Handled = true;
             return;
-        ViewModel.AddSearchCommand.Execute().Subscribe();
+        }
+
+        if ((e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) == 0)
+            return;
+
+        switch (e.Key)
+        {
+            case Key.O:
+                Dispatcher.UIThread.Post(() => ViewModel.OpenCommand.Execute().Subscribe());
+                break;
+            case Key.F:
+                QueryBox.Focus();
+                break;
+            case Key.S:
+                ViewModel.SaveCommand.Execute().Subscribe();
+                break;
+            default:
+                return;
+        }
+
         e.Handled = true;
     }
+
+    private void UpdateResponsiveLayout(double width) =>
+        SettingsSplitView.DisplayMode =
+            width < 960 ? SplitViewDisplayMode.Overlay : SplitViewDisplayMode.Inline;
 }

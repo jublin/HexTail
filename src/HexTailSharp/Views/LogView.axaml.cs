@@ -318,29 +318,5 @@ public partial class LogView : UserControl
             _ => new Thickness(12, 3),
         };
 
-    private IBrush Brush(string value)
-    {
-        var light = IsLightTheme;
-        return new SolidColorBrush(Color.Parse(light ? LightColor(value) : value));
-    }
-
-    private bool IsLightTheme =>
-        _viewModel?.Settings.Theme == "light"
-        || (
-            _viewModel?.Settings.Theme == "system"
-            && Avalonia.Application.Current?.ActualThemeVariant
-                != Avalonia.Styling.ThemeVariant.Dark
-        );
-
-    private static string LightColor(string value) =>
-        value switch
-        {
-            "#111827" => "#F8FAFC",
-            "#172033" => "#F1F5F9",
-            "#263449" => "#E2E8F0",
-            "#94A3B8" => "#475569",
-            "#E2E8F0" => "#1E293B",
-            "#CBD5E1" => "#334155",
-            _ => value,
-        };
+    private static IBrush Brush(string value) => new SolidColorBrush(Color.Parse(value));
 }

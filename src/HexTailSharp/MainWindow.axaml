@@ -1,68 +1,203 @@
-<atom:Window
+<Window
   xmlns="https://github.com/avaloniaui"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-  xmlns:atom="https://atomui.net"
   xmlns:vm="using:HexTailSharp.ViewModels"
   xmlns:views="using:HexTailSharp.Views"
+  xmlns:icons="using:FluentIcons.Avalonia"
+  xmlns:i="using:Avalonia.Xaml.Interactivity"
+  xmlns:core="using:Avalonia.Xaml.Interactions.Core"
+  xmlns:events="using:Avalonia.Xaml.Interactions.Events"
   x:Class="HexTailSharp.MainWindow"
   x:DataType="vm:MainWindowViewModel"
-  Title="HexTail"
+  Title="Cyber Tail"
   Width="1280"
   Height="800"
   MinWidth="720"
   MinHeight="480"
-  Background="{DynamicResource SurfaceBrush}"
+  Background="{DynamicResource CyberSurfaceBrush}"
+  DragDrop.AllowDrop="True"
 >
-  <Grid
-    Background="{DynamicResource SurfaceBrush}"
-    RowDefinitions="Auto,*"
-    DragDrop.AllowDrop="True"
-    DragDrop.DragOver="OnDragOver"
-    DragDrop.Drop="OnDrop"
+  <SplitView
+    x:Name="SettingsSplitView"
+    PanePlacement="Right"
+    OpenPaneLength="380"
+    IsPaneOpen="{Binding SettingsOpen, Mode=TwoWay}"
+    DisplayMode="Inline"
   >
-    <Border
-      Grid.Row="0"
-      Background="{DynamicResource ToolbarBrush}"
-      BorderBrush="{DynamicResource BorderBrush}"
-      BorderThickness="0,0,0,1"
-      Padding="16,10"
-    >
-      <StackPanel Orientation="Horizontal" Spacing="10">
-        <atom:Button
-          Content="☰"
-          ToolTip.Tip="Open settings"
-          Command="{Binding ToggleSettingsCommand}"
+    <SplitView.Pane>
+      <Grid
+        RowDefinitions="Auto,*,Auto,Auto"
+        Background="{DynamicResource CyberRaisedBrush}"
+        Margin="16"
+      >
+        <TextBlock Text="Settings" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12" />
+        <TabControl Grid.Row="1" SelectedIndex="{Binding Settings.SectionIndex, Mode=TwoWay}">
+          <TabItem Header="Labels">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+              <StackPanel Spacing="10" Margin="0,12,0,0">
+                <TextBlock
+                  Text="Highlight case-insensitive text across every log view."
+                  Foreground="{DynamicResource CyberMutedBrush}"
+                  TextWrapping="Wrap"
+                />
+                <ItemsControl ItemsSource="{Binding Settings.Labels}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LabelSettingViewModel">
+                      <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2">
+                        <TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to highlight" />
+                        <ColorPicker
+                          Grid.Column="1"
+                          Color="{Binding Color, Mode=TwoWay}"
+                          Width="48"
+                          IsAlphaEnabled="False"
+                        />
+                        <Button
+                          Grid.Column="2"
+                          Content="×"
+                          ToolTip.Tip="Remove label"
+                          Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveLabelCommand}"
+                          CommandParameter="{Binding}"
+                        />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Grid ColumnDefinitions="*,Auto,Auto">
+                  <TextBox
+                    Text="{Binding Settings.NewLabelText, Mode=TwoWay}"
+                    PlaceholderText="Text to highlight"
+                  />
+                  <ColorPicker
+                    Grid.Column="1"
+                    Color="{Binding Settings.NewLabelColor, Mode=TwoWay}"
+                    Width="48"
+                    IsAlphaEnabled="False"
+                  />
+                  <Button
+                    x:Name="AddLabelButton"
+                    Grid.Column="2"
+                    Content="+"
+                    ToolTip.Tip="Add label"
+                    Command="{Binding Settings.AddLabelCommand}"
+                  />
+                </Grid>
+              </StackPanel>
+            </ScrollViewer>
+          </TabItem>
+          <TabItem Header="Exclusions">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+              <StackPanel Spacing="10" Margin="0,12,0,0">
+                <TextBlock
+                  Text="Matching lines remain buffered but stay hidden from log and context views."
+                  Foreground="{DynamicResource CyberMutedBrush}"
+                  TextWrapping="Wrap"
+                />
+                <ItemsControl ItemsSource="{Binding Settings.Exclusions}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ExclusionSettingViewModel">
+                      <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                        <TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to hide" />
+                        <Button
+                          Grid.Column="1"
+                          Content="×"
+                          ToolTip.Tip="Remove exclusion"
+                          Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveExclusionCommand}"
+                          CommandParameter="{Binding}"
+                        />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBox
+                    Text="{Binding Settings.NewExclusionText, Mode=TwoWay}"
+                    PlaceholderText="Text to hide"
+                  />
+                  <Button
+                    x:Name="AddExclusionButton"
+                    Grid.Column="1"
+                    Content="+"
+                    ToolTip.Tip="Add exclusion"
+                    Command="{Binding Settings.AddExclusionCommand}"
+                  />
+                </Grid>
+              </StackPanel>
+            </ScrollViewer>
+          </TabItem>
+          <TabItem Header="Display">
+            <StackPanel Spacing="12" Margin="0,12,0,0">
+              <TextBlock Text="Density" />
+              <ComboBox
+                x:Name="DensityBox"
+                ItemsSource="{Binding Settings.DensityOptions}"
+                SelectedItem="{Binding Settings.Density, Mode=TwoWay}"
+              />
+              <TextBlock Text="Log font size" />
+              <ComboBox
+                x:Name="FontSizeBox"
+                ItemsSource="{Binding Settings.FontSizeOptions}"
+                SelectedItem="{Binding Settings.FontSize, Mode=TwoWay}"
+              />
+            </StackPanel>
+          </TabItem>
+        </TabControl>
+        <TextBlock
+          x:Name="SettingsSaveError"
+          Grid.Row="2"
+          Classes="error"
+          Margin="0,12,0,0"
+          TextWrapping="Wrap"
+          IsVisible="{Binding Settings.HasSaveError}"
+          Text="{Binding Settings.SaveError}"
         />
         <TextBlock
-          Text="HexTail"
-          VerticalAlignment="Center"
-          FontSize="18"
-          FontWeight="Bold"
-          Foreground="{DynamicResource TextBrush}"
-          Margin="4,0,12,0"
+          Grid.Row="3"
+          Margin="0,8,0,0"
+          Foreground="{DynamicResource CyberMutedBrush}"
+          IsVisible="{Binding Settings.IsSaving}"
+          Text="Saving…"
         />
-        <atom:Button
-          ButtonType="Primary"
-          Content="Open log files"
-          Command="{Binding OpenCommand}"
-        />
-        <atom:Button Content="Save session" Command="{Binding SaveCommand}" />
-        <TextBlock
-          Text="{Binding FileCount, StringFormat='{}{0} file(s)'}"
-          VerticalAlignment="Center"
-          Foreground="{DynamicResource MutedTextBrush}"
-          FontSize="12"
-        />
-      </StackPanel>
-    </Border>
+      </Grid>
+    </SplitView.Pane>
 
-    <Grid Grid.Row="1" RowDefinitions="Auto,*">
+    <Grid RowDefinitions="Auto,Auto,Auto,*" Background="{DynamicResource CyberSurfaceBrush}">
+      <Border Grid.Row="0" Classes="command-bar" BorderBrush="{DynamicResource CyberBorderBrush}" BorderThickness="0,0,0,1">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button
+            x:Name="SettingsButton"
+            Command="{Binding ToggleSettingsCommand}"
+            Content="Settings"
+            ToolTip.Tip="Open settings"
+          />
+          <TextBlock
+            Text="Cyber Tail"
+            VerticalAlignment="Center"
+            FontSize="18"
+            FontWeight="Bold"
+            Foreground="{DynamicResource CyberTextBrush}"
+            Margin="4,0,12,0"
+          />
+          <Button Command="{Binding OpenCommand}" ToolTip.Tip="Open log files">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <icons:FluentIcon Icon="FolderOpen" />
+              <TextBlock Text="Open Files" />
+            </StackPanel>
+          </Button>
+          <Button Command="{Binding SaveCommand}" Content="Save Session" />
+          <TextBlock
+            Text="{Binding FileCount, StringFormat='{}{0} file(s)'}"
+            VerticalAlignment="Center"
+            Foreground="{DynamicResource CyberMutedBrush}"
+          />
+        </StackPanel>
+      </Border>
+
       <ScrollViewer
-        Grid.Row="0"
+        Grid.Row="1"
         HorizontalScrollBarVisibility="Auto"
         VerticalScrollBarVisibility="Disabled"
       >
-        <ItemsControl ItemsSource="{Binding Files}" Background="{DynamicResource RaisedSurfaceBrush}">
+        <ItemsControl ItemsSource="{Binding Files}" Background="{DynamicResource CyberRaisedBrush}">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
               <StackPanel Orientation="Horizontal" />
@@ -70,18 +205,21 @@
           </ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:FileTabViewModel">
-              <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
+              <Border BorderBrush="{DynamicResource CyberBorderBrush}" BorderThickness="0,0,1,0">
                 <Grid ColumnDefinitions="*,Auto">
-                  <atom:Button
-                    Content="{Binding DisplayName}"
-                    Command="{Binding SelectCommand}"
+                  <Button
+                    Command="{Binding $parent[Window].DataContext.SelectFileCommand}"
+                    CommandParameter="{Binding}"
                     HorizontalContentAlignment="Left"
-                  />
-                  <atom:Button
+                  >
+                    <TextBlock Text="{Binding DisplayName}" />
+                  </Button>
+                  <Button
                     Grid.Column="1"
                     Content="×"
                     ToolTip.Tip="Close file"
-                    Command="{Binding CloseCommand}"
+                    Command="{Binding $parent[Window].DataContext.CloseFileCommand}"
+                    CommandParameter="{Binding}"
                   />
                 </Grid>
               </Border>
@@ -90,214 +228,101 @@
         </ItemsControl>
       </ScrollViewer>
 
-      <Grid Grid.Row="1" Background="{DynamicResource SurfaceBrush}">
-        <atom:Empty
-          PresetImage="Simple"
-          Description="Open a file to start tailing."
+      <Grid
+        Grid.Row="2"
+        ColumnDefinitions="*,Auto,Auto,Auto,Auto"
+        Margin="12,10"
+        IsVisible="{Binding HasFile}"
+      >
+        <TextBox x:Name="QueryBox" Text="{Binding Query, Mode=TwoWay}" PlaceholderText="Search this file" MinWidth="240">
+          <i:Interaction.Behaviors>
+            <events:KeyDownEventTrigger>
+              <core:InvokeCommandAction
+                Command="{Binding AddSearchOnKeyCommand}"
+                PassEventArgsToCommand="True"
+              />
+            </events:KeyDownEventTrigger>
+          </i:Interaction.Behaviors>
+        </TextBox>
+        <ComboBox
+          x:Name="MatchModeBox"
+          Grid.Column="1"
+          Width="110"
+          ItemsSource="{Binding MatchModes}"
+          SelectedItem="{Binding MatchMode, Mode=TwoWay}"
+        />
+        <CheckBox
+          Grid.Column="2"
+          Content="Case"
+          IsChecked="{Binding CaseSensitive, Mode=TwoWay}"
+          VerticalAlignment="Center"
+        />
+        <ColorPicker
+          Grid.Column="3"
+          Color="{Binding SearchColor, Mode=TwoWay}"
+          Width="48"
+          IsAlphaEnabled="False"
+          ToolTip.Tip="Search highlight color"
+        />
+        <Button
+          x:Name="AddSearchButton"
+          Grid.Column="4"
+          Classes="primary"
+          Content="Add Search"
+          Command="{Binding AddSearchCommand}"
+        />
+      </Grid>
+
+      <Grid Grid.Row="3">
+        <TextBlock
+          Text="Open a file to start tailing."
+          HorizontalAlignment="Center"
+          VerticalAlignment="Center"
+          Foreground="{DynamicResource CyberMutedBrush}"
           IsVisible="{Binding ShowEmpty}"
         />
-
-        <ContentControl
-          IsVisible="{Binding HasFile}"
-          Content="{Binding SelectedFile}"
-        >
+        <ContentControl IsVisible="{Binding HasFile}" Content="{Binding SelectedFile}">
           <ContentControl.ContentTemplate>
             <DataTemplate x:DataType="vm:FileTabViewModel">
-              <Grid RowDefinitions="Auto,Auto,Auto,*" Background="{DynamicResource SurfaceBrush}">
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="12,10">
-                  <atom:TextBox
-                    Text="{Binding Workspace.Query, Mode=TwoWay}"
-                    PlaceholderText="Search this file"
-                    MinWidth="240"
-                    KeyDown="QueryKeyDown"
-                  />
-                  <atom:ComboBox
-                    Width="110"
-                    ItemsSource="{Binding Workspace.MatchModes}"
-                    SelectedItem="{Binding Workspace.MatchMode, Mode=TwoWay}"
-                  />
-                  <atom:CheckBox
-                    Content="Case sensitive"
-                    IsChecked="{Binding Workspace.CaseSensitive, Mode=TwoWay}"
-                    VerticalAlignment="Center"
-                  />
-                  <atom:ColorPicker
-                    Value="{Binding Workspace.SearchColor, Mode=TwoWay}"
-                    Width="48"
-                    IsAlphaEnabled="False"
-                    ToolTip.Tip="Search highlight color"
-                  />
-                  <atom:Button
-                    ButtonType="Primary"
-                    Content="Add search"
-                    Command="{Binding Workspace.AddSearchCommand}"
-                  />
-                </StackPanel>
-                <atom:Alert
-                  Grid.Row="1"
-                  Type="Error"
-                  Message="{Binding Workspace.SearchError}"
-                  IsVisible="{Binding Workspace.HasSearchError}"
-                  Margin="12,0"
-                />
-                <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="12" Margin="12,8">
-                  <atom:CheckBox
-                    Content="Follow All"
-                    IsChecked="{Binding FollowAll, Mode=TwoWay}"
-                    VerticalAlignment="Center"
-                  />
-                  <atom:CheckBox
-                    Content="Show inline context"
-                    IsChecked="{Binding ShowContext, Mode=TwoWay}"
-                    VerticalAlignment="Center"
-                  />
+              <Grid RowDefinitions="Auto,*" Background="{DynamicResource CyberSurfaceBrush}">
+                <StackPanel Orientation="Horizontal" Spacing="12" Margin="12,8">
+                  <CheckBox Content="Follow All" IsChecked="{Binding FollowAll, Mode=TwoWay}" />
+                  <CheckBox Content="Show inline context" IsChecked="{Binding ShowContext, Mode=TwoWay}" />
                   <TextBlock
                     Text="{Binding Workspace.LineCount, StringFormat='{}{0:N0} lines'}"
                     VerticalAlignment="Center"
-                    Foreground="{DynamicResource MutedTextBrush}"
-                    FontSize="12"
+                    Foreground="{DynamicResource CyberMutedBrush}"
                   />
                   <TextBlock
                     Text="{Binding SearchCount}"
                     VerticalAlignment="Center"
-                    Foreground="{DynamicResource MutedTextBrush}"
-                    FontSize="12"
+                    Foreground="{DynamicResource CyberMutedBrush}"
                   />
                 </StackPanel>
-                <atom:TabControl
-                  Grid.Row="3"
+                <TabControl
+                  Grid.Row="1"
                   ItemsSource="{Binding Views}"
                   SelectedIndex="{Binding SelectedViewIndex, Mode=TwoWay}"
-                  ContentPadding="0"
                 >
-                  <atom:TabControl.ContentTemplate>
+                  <TabControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:LogViewViewModel">
                       <views:LogView />
                     </DataTemplate>
-                  </atom:TabControl.ContentTemplate>
-                </atom:TabControl>
+                  </TabControl.ContentTemplate>
+                </TabControl>
               </Grid>
             </DataTemplate>
           </ContentControl.ContentTemplate>
         </ContentControl>
+        <TextBlock
+          x:Name="SearchError"
+          Classes="error"
+          Margin="12,0"
+          VerticalAlignment="Top"
+          IsVisible="{Binding HasSearchError}"
+          Text="{Binding SearchError}"
+        />
       </Grid>
     </Grid>
-
-    <atom:Drawer
-      IsOpen="{Binding SettingsOpen, Mode=TwoWay}"
-      Placement="{Binding SettingsPlacement}"
-      Title="Settings"
-      DialogSize="360"
-      ContentPadding="16"
-    >
-      <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <atom:TabControl SelectedIndex="{Binding Settings.SectionIndex, Mode=TwoWay}">
-          <atom:TabItem Header="Labels">
-            <StackPanel Spacing="10">
-              <TextBlock
-                Text="Highlight case-insensitive text across every log view."
-                Foreground="{DynamicResource MutedTextBrush}"
-                TextWrapping="Wrap"
-              />
-              <ItemsControl ItemsSource="{Binding Settings.Labels}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:LabelSettingViewModel">
-                    <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2">
-                      <atom:TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to highlight" />
-                      <atom:ColorPicker
-                        Grid.Column="1"
-                        Value="{Binding Color, Mode=TwoWay}"
-                        Width="48"
-                        IsAlphaEnabled="False"
-                      />
-                      <atom:Button
-                        Grid.Column="2"
-                        Content="×"
-                        ToolTip.Tip="Remove label"
-                        Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveLabelCommand}"
-                        CommandParameter="{Binding}"
-                      />
-                    </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <Grid ColumnDefinitions="*,Auto,Auto">
-                <atom:TextBox Text="{Binding Settings.NewLabelText, Mode=TwoWay}" PlaceholderText="Text to highlight" />
-                <atom:ColorPicker
-                  Grid.Column="1"
-                  Value="{Binding Settings.NewLabelColor, Mode=TwoWay}"
-                  Width="48"
-                  IsAlphaEnabled="False"
-                />
-                <atom:Button
-                  Grid.Column="2"
-                  Content="+"
-                  ToolTip.Tip="Add label"
-                  Command="{Binding Settings.AddLabelCommand}"
-                />
-              </Grid>
-            </StackPanel>
-          </atom:TabItem>
-          <atom:TabItem Header="Exclusions">
-            <StackPanel Spacing="10">
-              <TextBlock
-                Text="Matching lines remain buffered but stay hidden from log and context views."
-                Foreground="{DynamicResource MutedTextBrush}"
-                TextWrapping="Wrap"
-              />
-              <ItemsControl ItemsSource="{Binding Settings.Exclusions}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:ExclusionSettingViewModel">
-                    <Grid ColumnDefinitions="*,Auto" Margin="0,2">
-                      <atom:TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to hide" />
-                      <atom:Button
-                        Grid.Column="1"
-                        Content="×"
-                        ToolTip.Tip="Remove exclusion"
-                        Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveExclusionCommand}"
-                        CommandParameter="{Binding}"
-                      />
-                    </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <Grid ColumnDefinitions="*,Auto">
-                <atom:TextBox Text="{Binding Settings.NewExclusionText, Mode=TwoWay}" PlaceholderText="Text to hide" />
-                <atom:Button
-                  Grid.Column="1"
-                  Content="+"
-                  ToolTip.Tip="Add exclusion"
-                  Command="{Binding Settings.AddExclusionCommand}"
-                />
-              </Grid>
-            </StackPanel>
-          </atom:TabItem>
-          <atom:TabItem Header="Appearance">
-            <StackPanel Spacing="10">
-              <TextBlock Text="Theme" />
-              <atom:ComboBox
-                ItemsSource="{Binding Settings.ThemeOptions}"
-                SelectedItem="{Binding Settings.Theme, Mode=TwoWay}"
-              />
-              <TextBlock Text="UI spacing" />
-              <atom:ComboBox
-                ItemsSource="{Binding Settings.DensityOptions}"
-                SelectedItem="{Binding Settings.Density, Mode=TwoWay}"
-              />
-              <TextBlock Text="Log font size" />
-              <atom:ComboBox
-                ItemsSource="{Binding Settings.FontSizeOptions}"
-                SelectedItem="{Binding Settings.FontSize, Mode=TwoWay}"
-              />
-              <TextBlock Text="Menu alignment" />
-              <atom:ComboBox
-                ItemsSource="{Binding Settings.MenuAlignmentOptions}"
-                SelectedItem="{Binding Settings.MenuAlignment, Mode=TwoWay}"
-              />
-            </StackPanel>
-          </atom:TabItem>
-        </atom:TabControl>
-      </ScrollViewer>
-    </atom:Drawer>
-  </Grid>
-</atom:Window>
+  </SplitView>
+</Window>

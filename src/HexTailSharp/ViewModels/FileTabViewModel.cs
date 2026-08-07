@@ -1,17 +1,8 @@
 using System.Collections.ObjectModel;
-using System.Reactive;
-using System.Reactive.Concurrency;
-using System.Reactive.Disposables;
-using System.Reactive.Linq;
-using AtomUI.Controls;
-using AtomUI.Desktop.Controls;
-using AtomUI.Theme;
-using Avalonia;
-using Avalonia.Media;
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
-using HexTailSharp.Persistence;
 using ReactiveUI;
+using ReactiveUI.Reactive;
 
 namespace HexTailSharp.ViewModels;
 
@@ -25,8 +16,6 @@ internal sealed class FileTabViewModel : ReactiveObject
     {
         _owner = owner;
         Model = model;
-        SelectCommand = ReactiveCommand.Create(() => _owner.SelectFile(this));
-        CloseCommand = ReactiveCommand.CreateFromTask(() => _owner.CloseFileAsync(this));
         SyncViews();
     }
 
@@ -36,9 +25,6 @@ internal sealed class FileTabViewModel : ReactiveObject
     public string Path => Model.Path;
     public string? Error => Model.Error;
     public ObservableCollection<LogViewViewModel> Views { get; } = [];
-    public ReactiveCommand<Unit, Unit> SelectCommand { get; }
-    public ReactiveCommand<Unit, Unit> CloseCommand { get; }
-
     public bool FollowAll
     {
         get => Model.FollowAll;

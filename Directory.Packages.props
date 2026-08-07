@@ -2,22 +2,22 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageVersion Include="Avalonia" Version="12.1.1" />
     <PackageVersion Include="Avalonia.Controls.ColorPicker" Version="12.1.1" />
     <PackageVersion Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageVersion Include="Avalonia.Headless.XUnit" Version="12.1.1" />
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.1" />
-    <PackageVersion Include="AtomUI.Desktop.Controls" Version="6.1.2" />
-    <PackageVersion Include="AtomUI.Desktop.Controls.ColorPicker" Version="6.1.2" />
-    <PackageVersion Include="AtomUI.Fonts.AlibabaSans" Version="6.1.2" />
-    <PackageVersion Include="AtomUI.Icons.AntDesign" Version="6.1.2" />
+    <PackageVersion Include="FluentIcons.Avalonia" Version="2.1.334" />
     <PackageVersion Include="ReactiveUI.Avalonia.Reactive" Version="12.1.1" />
     <PackageVersion Include="System.Reactive" Version="7.0.0" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="Polly" Version="8.7.0" />
-    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="Xaml.Behaviors.Interactivity" Version="12.0.5" />
+    <PackageVersion Include="Xaml.Behaviors.Interactions" Version="12.0.5" />
+    <PackageVersion Include="Xaml.Behaviors.Interactions.Events" Version="12.0.5" />
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>
 </Project>

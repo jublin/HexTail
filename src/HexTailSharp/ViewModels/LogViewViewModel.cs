@@ -3,15 +3,11 @@ using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
-using AtomUI.Controls;
-using AtomUI.Desktop.Controls;
-using AtomUI.Theme;
-using Avalonia;
-using Avalonia.Media;
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
 using HexTailSharp.Persistence;
 using ReactiveUI;
+using ReactiveUI.Reactive;
 
 namespace HexTailSharp.ViewModels;
 
