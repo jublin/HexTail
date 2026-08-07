@@ -101,6 +101,32 @@ internal sealed class LogViewViewModel : ReactiveObject
             return;
         }
 
+        if (current.Count > 0 && desired.Count > 0)
+        {
+            var retainedStart = 0;
+            while (
+                retainedStart < current.Count
+                && !ReferenceEquals(current[retainedStart], desired[0])
+            )
+                retainedStart++;
+
+            var retainedCount = current.Count - retainedStart;
+            var isHeadRollover =
+                retainedStart > 0 && retainedCount > 0 && retainedCount <= desired.Count;
+            for (var index = 0; isHeadRollover && index < retainedCount; index++)
+                isHeadRollover = ReferenceEquals(current[retainedStart + index], desired[index]);
+            if (isHeadRollover)
+            {
+                // ponytail: ObservableCollection has no RemoveRange; use a range-aware
+                // collection only if unusually large rollover batches become measurable.
+                for (var index = 0; index < retainedStart; index++)
+                    current.RemoveAt(0);
+                for (var index = retainedCount; index < desired.Count; index++)
+                    current.Add(desired[index]);
+                return;
+            }
+        }
+
         var common = 0;
         while (
             common < current.Count

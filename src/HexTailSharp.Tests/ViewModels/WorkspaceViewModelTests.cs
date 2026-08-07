@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Reactive.Concurrency;
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
@@ -90,5 +91,30 @@ public sealed class WorkspaceViewModelTests
 
         Assert.Single(rows);
         Assert.Same(replacement, rows[0]);
+    }
+
+    [Fact]
+    public void SyncCollection_CappedRolloverRemovesHeadAndAppendsTailWithoutReset()
+    {
+        var buffer = new FileBuffer(maxLines: 3);
+        buffer.Append([new Line("one"), new Line("two"), new Line("three")]);
+        var rows = new ObservableCollection<Line>(buffer.Lines);
+        var changes = new List<NotifyCollectionChangedAction>();
+        rows.CollectionChanged += (_, args) => changes.Add(args.Action);
+
+        buffer.Append([new Line("four"), new Line("five")]);
+        LogViewViewModel.SyncCollection(rows, buffer.Lines);
+
+        Assert.Equal(buffer.Lines, rows);
+        Assert.Equal(
+            [
+                NotifyCollectionChangedAction.Remove,
+                NotifyCollectionChangedAction.Remove,
+                NotifyCollectionChangedAction.Add,
+                NotifyCollectionChangedAction.Add,
+            ],
+            changes
+        );
+        Assert.DoesNotContain(NotifyCollectionChangedAction.Reset, changes);
     }
 }

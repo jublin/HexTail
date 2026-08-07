@@ -160,7 +160,7 @@
       </Grid>
     </SplitView.Pane>
 
-    <Grid RowDefinitions="Auto,Auto,Auto,*" Background="{DynamicResource CyberSurfaceBrush}">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Background="{DynamicResource CyberSurfaceBrush}">
       <Border Grid.Row="0" Classes="command-bar" BorderBrush="{DynamicResource CyberBorderBrush}" BorderThickness="0,0,0,1">
         <StackPanel Orientation="Horizontal" Spacing="8">
           <Button
@@ -205,7 +205,13 @@
           </ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:FileTabViewModel">
-              <Border BorderBrush="{DynamicResource CyberBorderBrush}" BorderThickness="0,0,1,0">
+              <Border
+                Classes="file-tab"
+                Classes.selected="{Binding IsSelected}"
+                ToolTip.Tip="{Binding Path}"
+                BorderBrush="{DynamicResource CyberBorderBrush}"
+                BorderThickness="0,0,1,0"
+              >
                 <Grid ColumnDefinitions="*,Auto">
                   <Button
                     Command="{Binding $parent[Window].DataContext.SelectFileCommand}"
@@ -216,11 +222,14 @@
                   </Button>
                   <Button
                     Grid.Column="1"
-                    Content="×"
-                    ToolTip.Tip="Close file"
+                    Classes="icon"
+                    ToolTip.Tip="{Binding Path, StringFormat='Close {0}'}"
+                    AutomationProperties.Name="{Binding Path, StringFormat='Close {0}'}"
                     Command="{Binding $parent[Window].DataContext.CloseFileCommand}"
                     CommandParameter="{Binding}"
-                  />
+                  >
+                    <icons:FluentIcon Icon="Dismiss" />
+                  </Button>
                 </Grid>
               </Border>
             </DataTemplate>
@@ -228,8 +237,20 @@
         </ItemsControl>
       </ScrollViewer>
 
-      <Grid
+      <Border
+        x:Name="FileErrorAlert"
         Grid.Row="2"
+        IsVisible="{Binding HasFileError}"
+        Background="{DynamicResource ErrorBackgroundBrush}"
+        BorderBrush="{DynamicResource CyberErrorBrush}"
+        BorderThickness="0,0,0,1"
+        Padding="12,8"
+      >
+        <TextBlock Classes="error" Text="{Binding FileError}" TextWrapping="Wrap" />
+      </Border>
+
+      <Grid
+        Grid.Row="3"
         ColumnDefinitions="*,Auto,Auto,Auto,Auto"
         Margin="12,10"
         IsVisible="{Binding HasFile}"
@@ -273,7 +294,7 @@
         />
       </Grid>
 
-      <Grid Grid.Row="3">
+      <Grid Grid.Row="4">
         <TextBlock
           Text="Open a file to start tailing."
           HorizontalAlignment="Center"

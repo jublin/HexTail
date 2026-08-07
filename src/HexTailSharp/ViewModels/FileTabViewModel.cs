@@ -24,6 +24,7 @@ internal sealed class FileTabViewModel : ReactiveObject
     public string DisplayName => Model.DisplayName;
     public string Path => Model.Path;
     public string? Error => Model.Error;
+    public bool IsSelected => ReferenceEquals(_owner.SelectedFile, this);
     public ObservableCollection<LogViewViewModel> Views { get; } = [];
     public bool FollowAll
     {
@@ -85,6 +86,8 @@ internal sealed class FileTabViewModel : ReactiveObject
     internal void SelectLine(Line line) => _owner.SelectLine(this, line);
 
     internal void ToggleExpanded(Line line) => _owner.ToggleExpanded(this, line);
+
+    internal void RaiseSelectionChanged() => this.RaisePropertyChanged(nameof(IsSelected));
 
     internal Task SetSearchFollowAsync(Search search, bool value) =>
         _owner.SetSearchFollowAsync(this, search, value);

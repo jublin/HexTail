@@ -121,7 +121,16 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public FileTabViewModel? SelectedFile
     {
         get => _selectedFile;
-        private set => this.RaiseAndSetIfChanged(ref _selectedFile, value);
+        private set
+        {
+            if (ReferenceEquals(_selectedFile, value))
+                return;
+
+            var previous = _selectedFile;
+            this.RaiseAndSetIfChanged(ref _selectedFile, value);
+            previous?.RaiseSelectionChanged();
+            value?.RaiseSelectionChanged();
+        }
     }
 
     public bool HasFile => SelectedFile is not null;
@@ -131,7 +140,9 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
     public string? FileError
     {
-        get => _fileError ?? SelectedFile?.Model.Error;
+        get =>
+            _fileError
+            ?? (SelectedFile?.Model.Error is { } error ? $"{SelectedFile.Path}: {error}" : null);
         private set
         {
             this.RaiseAndSetIfChanged(ref _fileError, value);

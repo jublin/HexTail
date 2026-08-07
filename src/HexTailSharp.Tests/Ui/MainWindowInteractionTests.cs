@@ -1,5 +1,6 @@
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -7,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using FluentIcons.Avalonia;
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
 using HexTailSharp.Persistence;
@@ -167,6 +169,77 @@ public sealed class MainWindowInteractionTests
         finally
         {
             File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task InvalidPathShowsPersistentWorkspaceError()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.log");
+        var window = TestWindow.Create(out var viewModel);
+        await viewModel.OpenPathsCommand.Execute([path]);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var alert = window.FindControl<Border>("FileErrorAlert");
+        Assert.True(viewModel.HasFileError);
+        Assert.NotNull(alert);
+        Assert.True(alert.IsVisible);
+        Assert.Contains(path, Assert.IsType<TextBlock>(alert.Child).Text);
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task FileTabsExposeSelectionPathAndFluentCloseAction()
+    {
+        var firstPath = Path.GetTempFileName();
+        var secondPath = Path.GetTempFileName();
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            window.Show();
+            await viewModel.OpenPathsCommand.Execute([firstPath, secondPath]);
+            Dispatcher.UIThread.RunJobs();
+            var first = viewModel.Files[0];
+            var second = viewModel.Files[1];
+            var tabs = window
+                .GetVisualDescendants()
+                .OfType<Border>()
+                .Where(border => border.Classes.Contains("file-tab"))
+                .ToDictionary(border => Assert.IsType<FileTabViewModel>(border.DataContext));
+
+            Click(
+                window
+                    .GetVisualDescendants()
+                    .OfType<Button>()
+                    .Single(button =>
+                        ReferenceEquals(button.DataContext, first)
+                        && Equals(button.CommandParameter, first)
+                        && button.Content is TextBlock
+                    )
+            );
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Contains("selected", tabs[first].Classes);
+            Assert.DoesNotContain("selected", tabs[second].Classes);
+            Assert.NotNull(tabs[first].Background);
+            Assert.Equal(firstPath, ToolTip.GetTip(tabs[first]));
+            var closeButton = window
+                .GetVisualDescendants()
+                .OfType<Button>()
+                .Single(button =>
+                    ReferenceEquals(button.DataContext, first) && button.Content is FluentIcon
+                );
+            Assert.Equal($"Close {firstPath}", ToolTip.GetTip(closeButton));
+            Assert.Equal($"Close {firstPath}", AutomationProperties.GetName(closeButton));
+
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(firstPath);
+            File.Delete(secondPath);
         }
     }
 
