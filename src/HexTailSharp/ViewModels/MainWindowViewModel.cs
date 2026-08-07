@@ -5,6 +5,8 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
+using HexTailSharp;
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
 using HexTailSharp.Persistence;
@@ -211,6 +213,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         try
         {
             await _state.RestoreAsync();
+            if (Dispatcher.UIThread.CheckAccess())
+                ThemeManager.Apply(_state.Settings.Theme);
+            else
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                    ThemeManager.Apply(_state.Settings.Theme)
+                );
             foreach (var path in _startupPaths.Where(path => !string.IsNullOrWhiteSpace(path)))
                 await TryOpenPathAsync(path);
 
@@ -240,8 +248,14 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         await _state.DisposeAsync();
     }
 
-    internal async Task UpdateSettingsAsync(AppSettings settings) =>
+    internal async Task UpdateSettingsAsync(AppSettings settings)
+    {
         await _state.UpdateSettingsAsync(settings);
+        if (Dispatcher.UIThread.CheckAccess())
+            ThemeManager.Apply(settings.Theme);
+        else
+            await Dispatcher.UIThread.InvokeAsync(() => ThemeManager.Apply(settings.Theme));
+    }
 
     internal void SelectLine(FileTabViewModel file, Line line) =>
         _state.SelectLine(file.Model, line);

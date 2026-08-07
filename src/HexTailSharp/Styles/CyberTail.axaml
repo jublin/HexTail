@@ -1,30 +1,27 @@
-<Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <Styles.Resources>
-    <SolidColorBrush x:Key="CyberSurfaceBrush" Color="#090D12" />
-    <SolidColorBrush x:Key="CyberRaisedBrush" Color="#101722" />
-    <SolidColorBrush x:Key="CyberToolbarBrush" Color="#0D141E" />
-    <SolidColorBrush x:Key="CyberBorderBrush" Color="#263449" />
-    <SolidColorBrush x:Key="CyberTextBrush" Color="#E6EDF7" />
-    <SolidColorBrush x:Key="CyberMutedBrush" Color="#91A0B5" />
-    <SolidColorBrush x:Key="CyberCyanBrush" Color="#28D7FE" />
-    <SolidColorBrush x:Key="CyberGreenBrush" Color="#39E58C" />
-    <SolidColorBrush x:Key="CyberMagentaBrush" Color="#FF4FD8" />
-    <SolidColorBrush x:Key="CyberErrorBrush" Color="#FF667A" />
-    <x:Double x:Key="CyberControlHeight">34</x:Double>
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#090D12" />
+    <SolidColorBrush x:Key="RaisedBrush" Color="#101722" />
+    <SolidColorBrush x:Key="ToolbarBrush" Color="#0D141E" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#263449" />
+    <SolidColorBrush x:Key="TextBrush" Color="#E6EDF7" />
+    <SolidColorBrush x:Key="MutedBrush" Color="#91A0B5" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#28D7FE" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="#39E58C" />
+    <SolidColorBrush x:Key="ErrorBrush" Color="#FF667A" />
+    <x:Double x:Key="ControlHeight">34</x:Double>
   </Styles.Resources>
-
   <Style Selector="Border.command-bar">
-    <Setter Property="Background" Value="{DynamicResource CyberToolbarBrush}" />
+    <Setter Property="Background" Value="{DynamicResource ToolbarBrush}" />
     <Setter Property="Padding" Value="12" />
   </Style>
   <Style Selector="Border.panel">
-    <Setter Property="Background" Value="{DynamicResource CyberRaisedBrush}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource CyberBorderBrush}" />
+    <Setter Property="Background" Value="{DynamicResource RaisedBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
   </Style>
   <Style Selector="Button.primary">
-    <Setter Property="Background" Value="{DynamicResource CyberCyanBrush}" />
-    <Setter Property="Foreground" Value="{DynamicResource CyberSurfaceBrush}" />
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource SurfaceBrush}" />
   </Style>
   <Style Selector="Button.icon">
     <Setter Property="Width" Value="34" />
@@ -32,16 +29,16 @@
     <Setter Property="Padding" Value="0" />
   </Style>
   <Style Selector="Border.file-tab.selected">
-    <Setter Property="Background" Value="{DynamicResource CyberBorderBrush}" />
+    <Setter Property="Background" Value="{DynamicResource BorderBrush}" />
   </Style>
   <Style Selector="TextBlock.status-live">
-    <Setter Property="Foreground" Value="{DynamicResource CyberGreenBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
   </Style>
   <Style Selector="TextBlock.error">
-    <Setter Property="Foreground" Value="{DynamicResource CyberErrorBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
   </Style>
   <Style Selector="ListBox.log-list">
-    <Setter Property="Background" Value="{DynamicResource CyberSurfaceBrush}" />
-    <Setter Property="Foreground" Value="{DynamicResource CyberTextBrush}" />
+    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
   </Style>
 </Styles>

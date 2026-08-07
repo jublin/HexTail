@@ -11,6 +11,7 @@ public partial class App : Avalonia.Application
     {
         RequestedThemeVariant = ThemeVariant.Dark;
         AvaloniaXamlLoader.Load(this);
+        ThemeManager.Apply("cyber-tail");
     }
 
     public override void OnFrameworkInitializationCompleted()

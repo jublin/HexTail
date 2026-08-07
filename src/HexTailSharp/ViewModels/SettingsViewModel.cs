@@ -20,6 +20,7 @@ internal sealed class SettingsViewModel : ReactiveObject
     private int _sectionIndex;
     private bool _isSaving;
     private bool _syncing;
+    private ThemeOption _selectedTheme;
 
     internal SettingsViewModel(MainWindowViewModel owner)
     {
@@ -28,6 +29,7 @@ internal sealed class SettingsViewModel : ReactiveObject
         RemoveLabelCommand = ReactiveCommand.Create<LabelSettingViewModel>(RemoveLabel);
         AddExclusionCommand = ReactiveCommand.Create(AddExclusion);
         RemoveExclusionCommand = ReactiveCommand.Create<ExclusionSettingViewModel>(RemoveExclusion);
+        _selectedTheme = ThemeOptions[0];
     }
 
     public ObservableCollection<LabelSettingViewModel> Labels { get; } = [];
@@ -36,6 +38,10 @@ internal sealed class SettingsViewModel : ReactiveObject
     [UiDensity.Comfortable, UiDensity.Cozy, UiDensity.Compact];
     public IReadOnlyList<LogFontSize> FontSizeOptions { get; } =
     [LogFontSize.Small, LogFontSize.Medium, LogFontSize.Large, LogFontSize.ExtraLarge];
+    public IReadOnlyList<ThemeOption> ThemeOptions { get; } =
+        ThemeCatalog
+            .Names.Select(id => new ThemeOption(id, ThemeCatalog.DisplayNames[id]))
+            .ToArray();
     public ReactiveCommand<Unit, Unit> AddLabelCommand { get; }
     public ReactiveCommand<LabelSettingViewModel, Unit> RemoveLabelCommand { get; }
     public ReactiveCommand<Unit, Unit> AddExclusionCommand { get; }
@@ -52,7 +58,7 @@ internal sealed class SettingsViewModel : ReactiveObject
         get => _sectionIndex;
         set
         {
-            var index = Math.Clamp(value, 0, 2);
+            var index = Math.Clamp(value, 0, 3);
             if (_sectionIndex == index)
                 return;
             this.RaiseAndSetIfChanged(ref _sectionIndex, index);
@@ -60,6 +66,7 @@ internal sealed class SettingsViewModel : ReactiveObject
             {
                 1 => "exclusions",
                 2 => "display",
+                3 => "appearance",
                 _ => "labels",
             };
         }
@@ -109,6 +116,19 @@ internal sealed class SettingsViewModel : ReactiveObject
         }
     }
 
+    public ThemeOption SelectedTheme
+    {
+        get => _selectedTheme;
+        set
+        {
+            if (_selectedTheme == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _selectedTheme, value);
+            if (!_syncing)
+                _ = CommitAsync(_owner.State.Settings with { Theme = value.Id });
+        }
+    }
+
     public string NewLabelText
     {
         get => _newLabelText;
@@ -134,6 +154,9 @@ internal sealed class SettingsViewModel : ReactiveObject
         {
             Density = settings.Density;
             FontSize = settings.LogFontSize;
+            SelectedTheme = ThemeOptions.First(option =>
+                option.Id == ThemeCatalog.Normalize(settings.Theme)
+            );
         }
         finally
         {

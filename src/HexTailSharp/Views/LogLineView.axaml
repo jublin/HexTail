@@ -8,7 +8,7 @@
 >
   <Border
     Background="{Binding Background}"
-    BorderBrush="{DynamicResource CyberBorderBrush}"
+    BorderBrush="{DynamicResource BorderBrush}"
     BorderThickness="0,0,0,1"
     Padding="{Binding RowPadding}"
     Tapped="OnTapped"
@@ -27,7 +27,7 @@
         Text="{Binding ParsedFieldsText}"
         FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
         FontSize="{Binding FontSize}"
-        Foreground="{DynamicResource CyberMutedBrush}"
+        Foreground="{DynamicResource MutedBrush}"
         TextWrapping="Wrap"
         Padding="16,2,0,6"
         IsVisible="{Binding FieldsVisible}"

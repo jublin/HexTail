@@ -7,7 +7,7 @@
   x:DataType="vm:MainWindowViewModel"
 >
   <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-    <StackPanel Orientation="Horizontal" Background="{DynamicResource CyberRaisedBrush}">
+    <StackPanel Orientation="Horizontal" Background="{DynamicResource RaisedBrush}">
       <Button Command="{Binding OpenCommand}" ToolTip.Tip="Open log files" Margin="4,2">
         <StackPanel Orientation="Horizontal" Spacing="8">
           <icons:FluentIcon Icon="FolderOpen" />
@@ -20,7 +20,7 @@
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:FileTabViewModel">
-            <Border Classes="file-tab" Classes.selected="{Binding IsSelected}" ToolTip.Tip="{Binding Path}" BorderBrush="{DynamicResource CyberBorderBrush}" BorderThickness="0,0,1,0">
+            <Border Classes="file-tab" Classes.selected="{Binding IsSelected}" ToolTip.Tip="{Binding Path}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
               <Grid ColumnDefinitions="*,Auto">
                 <Button Command="{Binding $parent[UserControl].DataContext.SelectFileCommand}" CommandParameter="{Binding}" HorizontalContentAlignment="Left">
                   <TextBlock Text="{Binding DisplayName}" />

@@ -10,7 +10,7 @@
     Name="FileErrorAlert"
     IsVisible="{Binding HasFileError}"
     Background="{DynamicResource ErrorBackgroundBrush}"
-    BorderBrush="{DynamicResource CyberErrorBrush}"
+    BorderBrush="{DynamicResource ErrorBrush}"
     BorderThickness="0,0,0,1"
     Padding="12,8"
   >
