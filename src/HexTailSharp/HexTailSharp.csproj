@@ -10,7 +10,9 @@
 
   <ItemGroup>
       <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Controls.ColorPicker" />
       <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
       <PackageReference Include="AtomUI.Desktop.Controls" />
       <PackageReference Include="AtomUI.Desktop.Controls.ColorPicker" />
       <PackageReference Include="AtomUI.Fonts.AlibabaSans" />

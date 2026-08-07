@@ -1,0 +1,44 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <SolidColorBrush x:Key="CyberSurfaceBrush" Color="#090D12" />
+    <SolidColorBrush x:Key="CyberRaisedBrush" Color="#101722" />
+    <SolidColorBrush x:Key="CyberToolbarBrush" Color="#0D141E" />
+    <SolidColorBrush x:Key="CyberBorderBrush" Color="#263449" />
+    <SolidColorBrush x:Key="CyberTextBrush" Color="#E6EDF7" />
+    <SolidColorBrush x:Key="CyberMutedBrush" Color="#91A0B5" />
+    <SolidColorBrush x:Key="CyberCyanBrush" Color="#28D7FE" />
+    <SolidColorBrush x:Key="CyberGreenBrush" Color="#39E58C" />
+    <SolidColorBrush x:Key="CyberMagentaBrush" Color="#FF4FD8" />
+    <SolidColorBrush x:Key="CyberErrorBrush" Color="#FF667A" />
+    <x:Double x:Key="CyberControlHeight">34</x:Double>
+  </Styles.Resources>
+
+  <Style Selector=".command-bar">
+    <Setter Property="Background" Value="{DynamicResource CyberToolbarBrush}" />
+    <Setter Property="Padding" Value="12" />
+  </Style>
+  <Style Selector=".panel">
+    <Setter Property="Background" Value="{DynamicResource CyberRaisedBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource CyberBorderBrush}" />
+  </Style>
+  <Style Selector=".primary">
+    <Setter Property="Background" Value="{DynamicResource CyberCyanBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource CyberSurfaceBrush}" />
+  </Style>
+  <Style Selector=".icon">
+    <Setter Property="Width" Value="34" />
+    <Setter Property="Height" Value="34" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+  <Style Selector=".status-live">
+    <Setter Property="Foreground" Value="{DynamicResource CyberGreenBrush}" />
+  </Style>
+  <Style Selector=".error">
+    <Setter Property="Foreground" Value="{DynamicResource CyberErrorBrush}" />
+  </Style>
+  <Style Selector=".log-list">
+    <Setter Property="Background" Value="{DynamicResource CyberSurfaceBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource CyberTextBrush}" />
+  </Style>
+</Styles>

@@ -16,6 +16,8 @@
     <SolidColorBrush x:Key="ErrorTextBrush" Color="#FECACA" />
   </Application.Resources>
   <Application.Styles>
+    <FluentTheme DensityStyle="Compact" />
+    <StyleInclude Source="avares://HexTailSharp/Styles/CyberTail.axaml" />
     <Style Selector="Button">
       <Setter Property="Padding" Value="10,6" />
     </Style>

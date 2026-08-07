@@ -6,6 +6,7 @@ using AtomUI.Theme.Configuration;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Styling;
 
 namespace HexTailSharp;
 
@@ -13,6 +14,7 @@ public partial class App : Avalonia.Application
 {
     public override void Initialize()
     {
+        RequestedThemeVariant = ThemeVariant.Dark;
         AvaloniaXamlLoader.Load(this);
         this.UseAtomUI(builder =>
         {
