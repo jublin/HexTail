@@ -108,7 +108,7 @@ public sealed class AppStateTests
         Assert.Equal("#ff0000", label.Color);
         Assert.Equal(["Health"], settings.GlobalExcludeLabels);
         Assert.Equal("dark", settings.Theme);
-        Assert.Equal(SettingsMenuAlignment.Left, settings.SettingsMenuAlignment);
+        Assert.Equal(SettingsMenuAlignment.Right, settings.SettingsMenuAlignment);
     }
 
     [Fact]
@@ -127,13 +127,16 @@ public sealed class AppStateTests
     }
 
     [Fact]
-    public void ThemeCatalog_UsesNativeThemeVariants()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("system")]
+    [InlineData("light")]
+    [InlineData("material-wcag")]
+    [InlineData("dark")]
+    public void ThemeCatalog_NormalizesEveryLegacyValueToDark(string? value)
     {
-        Assert.Equal(["system", "light", "dark"], ThemeCatalog.Names);
-        Assert.Equal("dark", ThemeCatalog.Normalize("material-dark-wcag"));
-        Assert.Equal("light", ThemeCatalog.Normalize("material-wcag"));
-        Assert.Equal("dark", ThemeCatalog.Normalize("not-a-theme"));
-        Assert.Equal("dark", ThemeCatalog.Normalize(null));
+        Assert.Equal(["dark"], ThemeCatalog.Names);
+        Assert.Equal("dark", ThemeCatalog.Normalize(value));
     }
 
     [Fact]

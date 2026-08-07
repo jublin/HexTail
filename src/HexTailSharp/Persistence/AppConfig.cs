@@ -73,22 +73,12 @@ public sealed record AppSettings
 
 public static class ThemeCatalog
 {
-    public static readonly string[] Names = ["system", "light", "dark"];
+    public static readonly string[] Names = ["dark"];
 
-    public static bool Contains(string theme) => Names.Contains(theme, StringComparer.Ordinal);
+    public static bool Contains(string? theme) =>
+        string.Equals(theme, "dark", StringComparison.Ordinal);
 
-    public static string Normalize(string? theme) =>
-        theme switch
-        {
-            null => "dark",
-            "system" => "system",
-            "light" => "light",
-            "dark" => "dark",
-            _ when theme.EndsWith("-dark", StringComparison.Ordinal) => "dark",
-            _ when theme.EndsWith("-dark-wcag", StringComparison.Ordinal) => "dark",
-            _ when theme.EndsWith("-wcag", StringComparison.Ordinal) => "light",
-            _ => "dark",
-        };
+    public static string Normalize(string? theme) => "dark";
 }
 
 public sealed class GlobalLabel
