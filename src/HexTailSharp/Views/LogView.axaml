@@ -1,0 +1,63 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTailSharp.ViewModels"
+  x:Class="HexTailSharp.Views.LogView"
+  x:DataType="vm:LogViewViewModel"
+>
+  <Grid RowDefinitions="Auto,*" Background="{DynamicResource CyberSurfaceBrush}">
+    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="12" Margin="12,7">
+      <CheckBox Content="Follow" IsChecked="{Binding IsFollowing, Mode=TwoWay}" />
+      <TextBlock
+        Text="{Binding MatchSummary}"
+        VerticalAlignment="Center"
+        Foreground="{DynamicResource CyberMutedBrush}"
+      />
+    </StackPanel>
+    <Grid Grid.Row="1" RowDefinitions="*,4,*">
+      <ListBox
+        x:Name="LogList"
+        Grid.Row="0"
+        Background="{DynamicResource CyberSurfaceBrush}"
+        BorderThickness="0"
+        ItemsSource="{Binding Lines}"
+      >
+        <ListBox.ItemsPanel>
+          <ItemsPanelTemplate>
+            <VirtualizingStackPanel />
+          </ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+      </ListBox>
+      <GridSplitter
+        Grid.Row="1"
+        Background="{DynamicResource CyberBorderBrush}"
+        ResizeDirection="Rows"
+        ResizeBehavior="PreviousAndNext"
+        ShowsPreview="False"
+        IsVisible="{Binding ShowContext}"
+      />
+      <ListBox
+        x:Name="ContextList"
+        Grid.Row="2"
+        Background="{DynamicResource CyberRaisedBrush}"
+        BorderThickness="0"
+        ItemsSource="{Binding ContextLines}"
+        IsVisible="{Binding ShowContext}"
+      >
+        <ListBox.ItemsPanel>
+          <ItemsPanelTemplate>
+            <VirtualizingStackPanel />
+          </ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+      </ListBox>
+      <TextBlock
+        Grid.Row="2"
+        Text="No lines to show."
+        Foreground="{DynamicResource CyberMutedBrush}"
+        FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+        Margin="12,8"
+        IsVisible="{Binding ContextEmpty}"
+      />
+    </Grid>
+  </Grid>
+</UserControl>

@@ -1,0 +1,141 @@
+# === C# / .NET ===
+# Build outputs
+build/
+
+# NuGet packages
+[Pp]ackage/
+[Tt]emp/
+[Tt]ests/[Tt]emp/
+
+# VS2026 / Visual Studio
+*.suo
+*.user
+*.userosscache
+*.vspscc
+*.vssscc
+*.csproj.user
+*.dbmdl
+*.dbml
+*.dcproj
+*.sln.docstates
+
+# VSCode
+.vscode/
+!.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Rider
+*.rider.workspace
+*.rider.user
+*.rider.user.xml
+*.rider.workspace.xml
+
+# GitHub
+.github/
+!.github/workflows/
+!.github/ISSUE_TEMPLATE/
+!.github/PULL_REQUEST_TEMPLATE.md
+
+# Logs
+*.log
+[Tt]rash/
+[Ll]ogs/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env
+
+# IDE-specific cache
+[Dd]ebug/
+[Rr]elease/
+*.vspscc
+*.vssscc
+*.suo
+*.user
+*.userosscache
+*.dbmdl
+*.dbml
+*.dcproj
+*.sln.docstates
+
+# Temporary files
+*.tmp
+*.temp
+*~
+*.swp
+*.swo
+
+# Generated files (Codex / Copilot Agent)
+# If Codex generates files, ignore them unless explicitly committed
+*.generated.*
+*.generated.cs
+*.generated.vb
+*.generated.fs
+*.generated.tsx
+*.generated.js
+*.generated.json
+*.generated.xml
+*.generated.h
+*.generated.cpp
+*.generated.c
+*.generated.hpp
+*.generated.hxx
+*.generated.inl
+*.generated.ipp
+*.generated.ixx
+*.generated.ixl
+*.generated.ixs
+*.generated.ixd
+*.generated.ixe
+*.generated.ixr
+*.generated.ixu
+*.generated.ixv
+*.generated.ixw
+*.generated.ixz
+*.generated.ixa
+*.generated.ixb
+*.generated.ixc
+*.generated.ixd
+*.generated.ixe
+*.generated.ixr
+*.generated.ixu
+*.generated.ixv
+*.generated.ixw
+*.generated.ixz
+*.generated.ixa
+*.generated.ixb
+*.generated.ixc
+**/.idea/
+# Optional: Ignore all files in .git/ if you want to be extra safe
+.git/
+
+# === Exclude from GitHub ===
+# These are already ignored by GitHub, but good to have explicitly
+**/**/[Bb]in/
+**/**/[Oo]bj/
+**/**/*.nupkg
+**/**/*.snupkg
+**/**/*.user
+**/**/*.userosscache
+**/**/*.suo
+**/**/*.vspscc
+**/**/*.vssscc
+**/**/*.dbmdl
+**/**/*.dbml
+*.dcproj
+*.sln.docstates
+*.rider.workspace
+*.rider.user
+*.rider.user.xml
+*.rider.workspace.xml
+*.vscode/
+!.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json

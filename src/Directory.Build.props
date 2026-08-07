@@ -1,0 +1,16 @@
+<Project>
+  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory).., 'Directory.Build.props'))\Directory.Build.props" />
+  <PropertyGroup>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)..\build\$(MSBuildProjectName)\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)..\build\$(MSBuildProjectName)\obj\</BaseIntermediateOutputPath>
+
+    <Nullable>enable</Nullable>
+    <EnableSourceLink>true</EnableSourceLink>
+    <SourceLinkEnabled>true</SourceLinkEnabled>
+    <SourceLinkCreate>true</SourceLinkCreate>
+    <TrimMode>link</TrimMode>
+    <TrimmerRootAssembly>true</TrimmerRootAssembly>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+  </PropertyGroup>
+</Project>

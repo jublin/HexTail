@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "HexTail: Debug Avalonia",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/HexTailSharp/Debug/net10.0/HexTailSharp.dll",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "dotnet: build"
+    }
+  ]
+}
