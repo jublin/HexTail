@@ -1,22 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
-    <PropertyGroup>
-      <TargetFramework>net10.0</TargetFramework>
-      <OutputType>Exe</OutputType>
-      <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
-      <Nullable>enable</Nullable>
-      <ImplicitUsings>enable</ImplicitUsings>
-      <ApplicationIcon>$(RepoRootPath)assets/hextail-logo.ico</ApplicationIcon>
-    </PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>$(RepoRootPath)assets/hextail-logo.ico</ApplicationIcon>
+  </PropertyGroup>
 
   <ItemGroup>
-      <PackageReference Include="Avalonia" />
-      <PackageReference Include="Avalonia.Desktop" />
-      <PackageReference Include="AtomUI.Desktop.Controls" />
-      <PackageReference Include="AtomUI.Desktop.Controls.ColorPicker" />
-      <PackageReference Include="AtomUI.Fonts.AlibabaSans" />
-      <PackageReference Include="AtomUI.Icons.AntDesign" />
-      <PackageReference Include="ReactiveUI.Avalonia" />
-      <PackageReference Include="System.Reactive" />
-      <PackageReference Include="Polly" />
-    </ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="AtomUI.Desktop.Controls" />
+    <PackageReference Include="AtomUI.Desktop.Controls.ColorPicker" />
+    <PackageReference Include="AtomUI.Fonts.AlibabaSans" />
+    <PackageReference Include="AtomUI.Icons.AntDesign" />
+    <PackageReference Include="Avalonia.Xaml.Interactions.Draggable" />
+    <PackageReference Include="FluentIcons.Avalonia" />
+    <PackageReference Include="Material.Icons.Avalonia" />
+    <PackageReference Include="ReactiveUI.Avalonia.Reactive" />
+    <PackageReference Include="System.Reactive" />
+    <PackageReference Include="Polly" />
+    <PackageReference Include="Xaml.Behaviors.Avalonia" />
+    <PackageReference Include="Xaml.Behaviors.Interactions.Draggable" />
+  </ItemGroup>
 </Project>
