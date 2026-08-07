@@ -1,33 +1,49 @@
 # Native desktop build
 
-HexTail targets .NET 10, Avalonia 12.1.1, and AtomUI 6.1.2. It is a native desktop executable; running it does not start a browser or listen on a port.
+HexTail is a native .NET 10/Avalonia 12.1.1 desktop executable. It does not
+start a browser or listen on a port. The UI is native Avalonia Fluent with a
+dark-only Cyber Tail theme. ReactiveUI.Avalonia.Reactive supplies the
+System.Reactive-compatible commands and schedulers.
 
-The interactive shell uses AtomUI's Ant Design controls and theme manager. ReactiveUI view models own state projection, commands, persistence orchestration, and tail refresh. `MainWindow` only adapts platform events (storage picker, drag/drop, window geometry, and keyboard input). The log and context surfaces intentionally retain Avalonia's virtualized `ListBox` because they render the hot 100,000-line path.
+The shell uses native picker and drop interactions and a right responsive
+settings inspector. The log and context surfaces retain Avalonia's virtualized
+lists for the bounded live-tail path.
 
-AtomUI is consumed as published LGPL-3.0 binaries; its source is not modified or vendored.
-
-## Build and run
+## Build and test
 
 ```bash
-dotnet build src/HexTailSharp.slnx
-dotnet test src/HexTailSharp.Tests/HexTailSharp.Tests.csproj
-dotnet run --project src/HexTailSharp/HexTailSharp.csproj -- /path/to/app.log /path/to/other.log
+dotnet restore src/HexTailSharp.slnx
+dotnet build src/HexTailSharp.slnx -c Release --no-restore
+dotnet test src/HexTailSharp.Tests/HexTailSharp.Tests.csproj -c Release
+dotnet run --project src/HexTailSharp/HexTailSharp.csproj -- /path/to/app.log
 ```
-
-The **Pick and tail log files** button uses the platform file picker. Files can also be dropped onto the workspace.
 
 ## Publish
 
-Choose a runtime identifier for the target desktop platform:
+Publish the desktop app for each supported runtime identifier as needed:
 
 ```bash
-dotnet publish src/HexTailSharp/HexTailSharp.csproj \
-  --configuration Release \
-  --runtime linux-x64 \
-  --self-contained false
+dotnet publish src/HexTailSharp/HexTailSharp.csproj -c Release -r win-x64 --self-contained false
+dotnet publish src/HexTailSharp/HexTailSharp.csproj -c Release -r linux-x64 --self-contained false
+dotnet publish src/HexTailSharp/HexTailSharp.csproj -c Release -r osx-x64 --self-contained false
+dotnet publish src/HexTailSharp/HexTailSharp.csproj -c Release -r osx-arm64 --self-contained false
 ```
 
-Replace `linux-x64` with the required RID, such as `win-x64` or `osx-arm64`. The publish directory is under `build/HexTailSharp/Release/net10.0/<rid>/publish`.
+The publish directory is under
+`build/HexTailSharp/Release/net10.0/<rid>/publish`.
+
+## Manual smoke pass
+
+Run the app with a representative sample log and verify: picker, drop, CLI
+path, tabs, every combo box, search button/Enter, regex error, settings
+add/edit/remove, settings error, follow/scroll-away, truncate, rotation,
+session restore, and keyboard shortcuts.
+
+CI supplies compiled/headless coverage on the other desktop operating systems;
+do not claim native manual coverage that was not performed locally.
+
+Whole-file random access and global search are deliberately deferred to the
+next engine phase.
 
 ## Formatting and commit hooks
 
@@ -46,4 +62,6 @@ skipped.
 
 ## Session data
 
-Session state is stored as `HexTailSharp/session.json` in the OS application-data directory. It includes open paths, searches, settings, window geometry, and context-pane size. Delete that file to start with a clean session.
+Session state is stored as `HexTailSharp/session.json` in the OS application-
+data directory. It includes open paths, searches, settings, window geometry,
+and context-pane size. Delete that file to start with a clean session.
