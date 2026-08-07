@@ -15,11 +15,31 @@ using HexTailSharp.Persistence;
 using HexTailSharp.Tailing;
 using HexTailSharp.Tests.Support;
 using HexTailSharp.ViewModels;
+using HexTailSharp.Views;
 
 namespace HexTailSharp.Tests.Ui;
 
 public sealed class MainWindowInteractionTests
 {
+    [AvaloniaFact]
+    public void MainWindowComposesDedicatedWorkspaceControls()
+    {
+        var window = TestWindow.Create(out _);
+        window.Show();
+
+        var controlNames = window
+            .GetVisualDescendants()
+            .Select(control => control.GetType().Name)
+            .ToHashSet();
+
+        Assert.Contains("SettingsPanel", controlNames);
+        Assert.Contains("FileStrip", controlNames);
+        Assert.Contains("SearchBar", controlNames);
+        Assert.Contains("WorkspaceError", controlNames);
+        Assert.Contains("LogWorkspace", controlNames);
+        window.Close();
+    }
+
     [AvaloniaFact]
     public void SettingsInspectorAndEveryComboBoxOpen()
     {
@@ -35,15 +55,15 @@ public sealed class MainWindowInteractionTests
         Assert.All(colorPickers, picker => Assert.NotNull(picker.Template));
         foreach (var name in new[] { "MatchModeBox", "DensityBox", "FontSizeBox" })
         {
-            var combo = window.FindControl<ComboBox>(name)!;
+            var combo = FindVisual<ComboBox>(window, name);
             combo.IsDropDownOpen = true;
             Assert.True(combo.IsDropDownOpen);
             combo.IsDropDownOpen = false;
         }
 
-        window.FindControl<ComboBox>("MatchModeBox")!.SelectedItem = MatchMode.Regex;
-        window.FindControl<ComboBox>("DensityBox")!.SelectedItem = UiDensity.Compact;
-        window.FindControl<ComboBox>("FontSizeBox")!.SelectedItem = LogFontSize.Large;
+        FindVisual<ComboBox>(window, "MatchModeBox").SelectedItem = MatchMode.Regex;
+        FindVisual<ComboBox>(window, "DensityBox").SelectedItem = UiDensity.Compact;
+        FindVisual<ComboBox>(window, "FontSizeBox").SelectedItem = LogFontSize.Large;
         Assert.Equal(MatchMode.Regex, viewModel.MatchMode);
         Assert.Equal(UiDensity.Compact, viewModel.Settings.Density);
         Assert.Equal(LogFontSize.Large, viewModel.Settings.FontSize);
@@ -80,7 +100,7 @@ public sealed class MainWindowInteractionTests
 
         viewModel.Settings.NewLabelText = "ERROR";
         viewModel.Settings.NewLabelColor = Colors.Magenta;
-        Click(window.FindControl<Button>("AddLabelButton")!);
+        Click(FindVisual<Button>(window, "AddLabelButton"));
         Assert.Equal(string.Empty, viewModel.Settings.NewLabelText);
         await WaitFor(() => viewModel.Settings.Labels.Count == 1);
         var label = Assert.Single(viewModel.Settings.Labels);
@@ -99,7 +119,7 @@ public sealed class MainWindowInteractionTests
 
         viewModel.Settings.SectionIndex = 1;
         viewModel.Settings.NewExclusionText = "healthcheck";
-        Click(window.FindControl<Button>("AddExclusionButton")!);
+        Click(FindVisual<Button>(window, "AddExclusionButton"));
         await WaitFor(() => viewModel.Settings.Exclusions.Count == 1);
         var exclusion = Assert.Single(viewModel.Settings.Exclusions);
         Dispatcher.UIThread.RunJobs();
@@ -125,11 +145,11 @@ public sealed class MainWindowInteractionTests
             var window = TestWindow.Create(out var viewModel);
             await viewModel.OpenPathsCommand.Execute([path]);
             window.Show();
-            var query = window.FindControl<TextBox>("QueryBox")!;
+            var query = FindVisual<TextBox>(window, "QueryBox");
 
             query.Text = "first";
             Dispatcher.UIThread.RunJobs();
-            Click(window.FindControl<Button>("AddSearchButton")!);
+            Click(FindVisual<Button>(window, "AddSearchButton"));
             await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 1);
 
             query.Text = "ignored";
@@ -166,11 +186,11 @@ public sealed class MainWindowInteractionTests
             viewModel.Query = "[";
             Dispatcher.UIThread.RunJobs();
 
-            Click(window.FindControl<Button>("AddSearchButton")!);
+            Click(FindVisual<Button>(window, "AddSearchButton"));
             await WaitFor(() => viewModel.HasSearchError);
 
             Assert.Equal("[", viewModel.Query);
-            Assert.True(window.FindControl<TextBlock>("SearchError")!.IsVisible);
+            Assert.True(FindVisual<TextBlock>(window, "SearchError").IsVisible);
             window.Close();
         }
         finally
@@ -188,7 +208,7 @@ public sealed class MainWindowInteractionTests
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
-        var alert = window.FindControl<Border>("FileErrorAlert");
+        var alert = FindVisual<Border>(window, "FileErrorAlert");
         Assert.True(viewModel.HasFileError);
         Assert.NotNull(alert);
         Assert.True(alert.IsVisible);
@@ -323,7 +343,7 @@ public sealed class MainWindowInteractionTests
         var window = TestWindow.Create(out var viewModel);
         await viewModel.OpenPathsCommand.Execute([path]);
         window.Show();
-        var query = window.FindControl<TextBox>("QueryBox")!;
+        var query = FindVisual<TextBox>(window, "QueryBox");
 
         window.KeyPress(Key.F, modifier, PhysicalKey.None, null);
 
@@ -364,7 +384,7 @@ public sealed class MainWindowInteractionTests
 
         Assert.True(viewModel.Settings.HasSaveError);
         Assert.Contains("disk full", viewModel.Settings.SaveError);
-        Assert.True(window.FindControl<TextBlock>("SettingsSaveError")!.IsVisible);
+        Assert.True(FindVisual<TextBlock>(window, "SettingsSaveError").IsVisible);
         Assert.False(viewModel.HasFileError);
         persistence.SaveError = null;
         window.Close();
@@ -410,6 +430,48 @@ public sealed class MainWindowInteractionTests
         Assert.NotNull(button.Command);
         Assert.True(button.Command.CanExecute(button.CommandParameter));
         button.Command.Execute(button.CommandParameter);
+    }
+
+    private static T FindVisual<T>(Window window, string name)
+        where T : Control
+    {
+        if (
+            window
+                .GetVisualDescendants()
+                .OfType<SettingsPanel>()
+                .FirstOrDefault()
+                ?.FindControl<T>(name) is
+            { } settingsControl
+        )
+            return settingsControl;
+        if (
+            window
+                .GetVisualDescendants()
+                .OfType<SearchBar>()
+                .FirstOrDefault()
+                ?.FindControl<T>(name) is
+            { } searchControl
+        )
+            return searchControl;
+        if (
+            window
+                .GetVisualDescendants()
+                .OfType<WorkspaceError>()
+                .FirstOrDefault()
+                ?.FindControl<T>(name) is
+            { } errorControl
+        )
+            return errorControl;
+        if (
+            window
+                .GetVisualDescendants()
+                .OfType<LogWorkspace>()
+                .FirstOrDefault()
+                ?.FindControl<T>(name) is
+            { } workspaceControl
+        )
+            return workspaceControl;
+        throw new InvalidOperationException($"Control '{name}' was not found.");
     }
 
     private static async Task WaitFor(Func<bool> condition)

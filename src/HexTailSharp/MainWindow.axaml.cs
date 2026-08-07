@@ -3,10 +3,12 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using HexTailSharp.Application;
 using HexTailSharp.Persistence;
 using HexTailSharp.Tailing;
 using HexTailSharp.ViewModels;
+using HexTailSharp.Views;
 using ReactiveUI;
 
 namespace HexTailSharp;
@@ -160,7 +162,7 @@ public partial class MainWindow : Window
                 Dispatcher.UIThread.Post(() => ViewModel.OpenCommand.Execute().Subscribe());
                 break;
             case Key.F:
-                QueryBox.Focus();
+                this.GetVisualDescendants().OfType<SearchBar>().FirstOrDefault()?.FocusQuery();
                 break;
             case Key.S:
                 ViewModel.SaveCommand.Execute().Subscribe();

@@ -1,0 +1,19 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTailSharp.ViewModels"
+  x:Class="HexTailSharp.Views.WorkspaceError"
+  x:DataType="vm:MainWindowViewModel"
+>
+  <Border
+    x:Name="FileErrorAlert"
+    Name="FileErrorAlert"
+    IsVisible="{Binding HasFileError}"
+    Background="{DynamicResource ErrorBackgroundBrush}"
+    BorderBrush="{DynamicResource CyberErrorBrush}"
+    BorderThickness="0,0,0,1"
+    Padding="12,8"
+  >
+    <TextBlock Classes="error" Text="{Binding FileError}" TextWrapping="Wrap" />
+  </Border>
+</UserControl>
