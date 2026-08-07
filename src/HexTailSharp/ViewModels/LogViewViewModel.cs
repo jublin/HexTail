@@ -35,8 +35,8 @@ internal sealed class LogViewViewModel : ReactiveObject
 
     public override string ToString() => Header;
 
-    public ObservableCollection<Line> Lines { get; } = [];
-    public ObservableCollection<Line> ContextLines { get; } = [];
+    public ObservableCollection<LogLineViewModel> Lines { get; } = [];
+    public ObservableCollection<LogLineViewModel> ContextLines { get; } = [];
     public ReactiveCommand<Line, Unit> SelectLineCommand { get; }
     public ReactiveCommand<Line, Unit> ToggleExpandedCommand { get; }
     public bool ShowContext => _file.Model.ShowContext;
@@ -61,10 +61,10 @@ internal sealed class LogViewViewModel : ReactiveObject
     public void Sync(bool resetItems = false)
     {
         var lines = LinesFor();
-        SyncCollection(Lines, lines, resetItems);
+        SyncRows(Lines, lines, isContext: false, resetItems);
 
         var context = _file.Model.ShowContext ? ContextLinesFor() : [];
-        SyncCollection(ContextLines, context, resetItems);
+        SyncRows(ContextLines, context, isContext: true, resetItems);
 
         this.RaisePropertyChanged(nameof(Header));
         this.RaisePropertyChanged(nameof(MatchSummary));
@@ -75,9 +75,32 @@ internal sealed class LogViewViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(IsFollowing));
     }
 
-    public static void SyncCollection(
-        ObservableCollection<Line> current,
+    private void SyncRows(
+        ObservableCollection<LogLineViewModel> current,
         IReadOnlyList<Line> desired,
+        bool isContext,
+        bool resetItems
+    )
+    {
+        var rows = desired
+            .Select(line =>
+            {
+                var row = current.FirstOrDefault(candidate =>
+                    ReferenceEquals(candidate.Line, line)
+                );
+                if (row is null)
+                    row = new LogLineViewModel(this, _file, line, isContext);
+                else
+                    row.Refresh();
+                return row;
+            })
+            .ToList();
+        SyncCollection(current, rows, resetItems);
+    }
+
+    public static void SyncCollection<T>(
+        ObservableCollection<T> current,
+        IReadOnlyList<T> desired,
         bool resetItems = false
     )
     {

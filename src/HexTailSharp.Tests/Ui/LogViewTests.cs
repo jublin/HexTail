@@ -52,11 +52,11 @@ public sealed class LogViewTests
             window.Show();
 
             var view = window.GetVisualDescendants().OfType<LogView>().Single();
-            var template = Assert.IsType<FuncDataTemplate<Line>>(
-                view.FindControl<ListBox>("LogList")!.ItemTemplate
-            );
+            var template = view.FindControl<ListBox>("LogList")!.ItemTemplate;
+            Assert.NotNull(template);
+            Assert.IsNotType<FuncDataTemplate<Line>>(template);
 
-            Assert.IsType<Border>(template.Build(null));
+            Assert.NotNull(template.Build(new Line("line")));
             window.Close();
         }
         finally

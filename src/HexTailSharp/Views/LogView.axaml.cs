@@ -1,17 +1,10 @@
 using System.Collections.Specialized;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Documents;
-using Avalonia.Controls.Templates;
 using Avalonia.Input;
-using Avalonia.Interactivity;
-using Avalonia.Layout;
-using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using HexTailSharp.Application;
 using HexTailSharp.Domain;
-using HexTailSharp.Persistence;
 using HexTailSharp.ViewModels;
 
 namespace HexTailSharp.Views;
@@ -44,8 +37,6 @@ public partial class LogView : UserControl
         _viewModel = DataContext as LogViewViewModel;
         _scrollAttached = false;
         _scrollViewer = null;
-        LogList.ItemTemplate = new FuncDataTemplate<Line>((line, _) => BuildLogRow(line));
-        ContextList.ItemTemplate = new FuncDataTemplate<Line>((line, _) => BuildContextRow(line));
         if (_viewModel is not null)
         {
             _viewModel.Lines.CollectionChanged += OnLinesChanged;
@@ -82,14 +73,14 @@ public partial class LogView : UserControl
 
     private void OnLogSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (_viewModel is not null && LogList.SelectedItem is Line line)
-            _viewModel.SelectLineCommand.Execute(line).Subscribe();
+        if (_viewModel is not null && LogList.SelectedItem is LogLineViewModel row)
+            _viewModel.SelectLineCommand.Execute(row.Line).Subscribe();
     }
 
     private void OnContextSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (_viewModel is not null && ContextList.SelectedItem is Line line)
-            _viewModel.SelectLineCommand.Execute(line).Subscribe();
+        if (_viewModel is not null && ContextList.SelectedItem is LogLineViewModel row)
+            _viewModel.SelectLineCommand.Execute(row.Line).Subscribe();
     }
 
     private void TryAttachScrollHandler()
@@ -117,149 +108,6 @@ public partial class LogView : UserControl
             _viewModel.IsFollowing = false;
     }
 
-    private Control BuildContextRow(Line? line)
-    {
-        if (_viewModel is null || line is null)
-            return new Border();
-
-        var text = new TextBlock
-        {
-            FontFamily = LogFont,
-            FontSize = ToLogFontSize(_viewModel.Settings.LogFontSize),
-            Foreground = ResourceBrush("CyberMutedBrush", Brushes.Gray),
-            TextWrapping = TextWrapping.NoWrap,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-        };
-        AddHighlightedRuns(text, _viewModel.File, line);
-        return new Border
-        {
-            Child = text,
-            Padding = LogRowPadding(),
-            BorderBrush = ResourceBrush("CyberBorderBrush", Brushes.Transparent),
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Background = ResourceBrush("CyberRaisedBrush", Brushes.Transparent),
-        };
-    }
-
-    private Control BuildLogRow(Line? line)
-    {
-        if (_viewModel is null || line is null)
-            return new Border();
-
-        var file = _viewModel.File;
-        var lineIndex = FindLineIndex(file, line);
-        var text = new TextBlock
-        {
-            FontFamily = LogFont,
-            FontSize = ToLogFontSize(_viewModel.Settings.LogFontSize),
-            Foreground = ResourceBrush("CyberTextBrush", Brushes.White),
-            TextWrapping = TextWrapping.NoWrap,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-        };
-        AddHighlightedRuns(text, file, line);
-
-        Control content = text;
-        if (line.ParsedFields is { Count: > 0 } && file.ExpandedLine == lineIndex)
-            content = new StackPanel
-            {
-                Spacing = 3,
-                Children =
-                {
-                    text,
-                    new TextBlock
-                    {
-                        Text = string.Join(
-                            "  ",
-                            line.ParsedFields.Select(field => $"{field.Key}={field.Value}")
-                        ),
-                        FontFamily = LogFont,
-                        FontSize = ToLogFontSize(_viewModel.Settings.LogFontSize),
-                        Foreground = ResourceBrush("CyberMutedBrush", Brushes.Gray),
-                        TextWrapping = TextWrapping.Wrap,
-                        Padding = new Thickness(16, 2, 0, 6),
-                    },
-                },
-            };
-
-        var row = new Border
-        {
-            Child = content,
-            Padding = LogRowPadding(),
-            BorderBrush = ResourceBrush("CyberBorderBrush", Brushes.Transparent),
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Background = ResourceBrush("CyberSurfaceBrush", Brushes.Transparent),
-            Focusable = true,
-        };
-        row.Tapped += (_, e) =>
-        {
-            if (e.Handled || _viewModel is null)
-                return;
-            _viewModel.SelectLineCommand.Execute(line).Subscribe();
-            e.Handled = true;
-        };
-        row.DoubleTapped += (_, e) =>
-        {
-            _viewModel?.ToggleExpandedCommand.Execute(line).Subscribe();
-            e.Handled = true;
-        };
-        return row;
-    }
-
-    private void AddHighlightedRuns(TextBlock target, FileTabState file, Line line)
-    {
-        if (_viewModel is null)
-            return;
-
-        var ranges = file
-            .Searches.SelectMany(search =>
-                search
-                    .GetHighlights(line)
-                    .Select(range => (range.Start, range.Length, search.Color))
-            )
-            .Concat(
-                _viewModel
-                    .Settings.GetLabelHighlights(line.Raw)
-                    .Select(range => (range.Start, range.Length, range.Color))
-            )
-            .Where(range =>
-                range.Start >= 0
-                && range.Length > 0
-                && range.Start + range.Length <= line.Raw.Length
-            )
-            .OrderBy(range => range.Start)
-            .ThenByDescending(range => range.Length)
-            .ToList();
-
-        if (ranges.Count == 0)
-        {
-            target.Text = line.Raw;
-            return;
-        }
-
-        var inlines = new InlineCollection();
-        var cursor = 0;
-        foreach (var range in ranges)
-        {
-            if (range.Start < cursor)
-                continue;
-            if (range.Start > cursor)
-                inlines.Add(new Run { Text = line.Raw[cursor..range.Start] });
-            inlines.Add(
-                new Run
-                {
-                    Text = line.Raw.Substring(range.Start, range.Length),
-                    Background = ColorBrush(range.Color),
-                    Foreground = ResourceBrush("CyberSurfaceBrush", Brushes.Black),
-                }
-            );
-            cursor = range.Start + range.Length;
-        }
-
-        if (cursor < line.Raw.Length)
-            inlines.Add(new Run { Text = line.Raw[cursor..] });
-        target.Inlines = inlines;
-    }
-
     private void ScrollContextToSelected()
     {
         if (
@@ -271,11 +119,12 @@ public partial class LogView : UserControl
             return;
 
         var line = _viewModel.File.Buffer[selected];
-        var index = _viewModel.ContextLines.IndexOf(line);
+        var row = _viewModel.ContextLines.FirstOrDefault(item => ReferenceEquals(item.Line, line));
+        var index = row is null ? -1 : _viewModel.ContextLines.IndexOf(row);
         if (index < 0)
             return;
 
-        ContextList.SelectedItem = line;
+        ContextList.SelectedItem = row;
         Dispatcher.UIThread.Post(
             () =>
             {
@@ -291,36 +140,4 @@ public partial class LogView : UserControl
             DispatcherPriority.Background
         );
     }
-
-    private static int FindLineIndex(FileTabState file, Line line)
-    {
-        for (var index = 0; index < file.Buffer.Count; index++)
-            if (ReferenceEquals(file.Buffer[index], line))
-                return index;
-        return -1;
-    }
-
-    private static FontFamily LogFont => new("Cascadia Mono,Consolas,Menlo,monospace");
-
-    private double ToLogFontSize(LogFontSize size) =>
-        size switch
-        {
-            LogFontSize.Small => 11,
-            LogFontSize.Large => 14,
-            LogFontSize.ExtraLarge => 17,
-            _ => 13,
-        };
-
-    private Thickness LogRowPadding() =>
-        _viewModel?.Settings.Density switch
-        {
-            UiDensity.Compact => new Thickness(12, 0.6),
-            UiDensity.Cozy => new Thickness(12, 2),
-            _ => new Thickness(12, 3),
-        };
-
-    private IBrush ResourceBrush(string key, IBrush fallback) =>
-        this.TryFindResource(key, out var value) && value is IBrush brush ? brush : fallback;
-
-    private static IBrush ColorBrush(string value) => new SolidColorBrush(Color.Parse(value));
 }
