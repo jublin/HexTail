@@ -2,12 +2,13 @@
   xmlns="https://github.com/avaloniaui"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:vm="using:HexTailSharp.ViewModels"
+  xmlns:ic="using:FluentIcons.Avalonia.Fluent"
   xmlns:views="using:HexTailSharp.Views"
   x:Class="HexTailSharp.MainWindow"
   x:DataType="vm:MainWindowViewModel"
-  Title="Cyber Tail"
-  Width="1280"
-  Height="800"
+  Title="Hex Tail"
+  Width="1920"
+  Height="1080"
   MinWidth="720"
   MinHeight="480"
   Background="{DynamicResource SurfaceBrush}"
@@ -15,8 +16,8 @@
 >
   <SplitView
     x:Name="SettingsSplitView"
-    PanePlacement="Right"
-    OpenPaneLength="380"
+    PanePlacement="Left"
+    OpenPaneLength="580"
     IsPaneOpen="{Binding SettingsOpen, Mode=TwoWay}"
     DisplayMode="Inline"
   >
@@ -24,19 +25,92 @@
       <views:SettingsPanel />
     </SplitView.Pane>
 
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Background="{DynamicResource SurfaceBrush}">
-      <Border Grid.Row="0" Classes="command-bar" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
-        <StackPanel Orientation="Horizontal" Spacing="8">
-          <Button x:Name="SettingsButton" Command="{Binding ToggleSettingsCommand}" Content="Settings" ToolTip.Tip="Open settings" />
-          <TextBlock Text="Cyber Tail" VerticalAlignment="Center" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="4,0,12,0" />
-          <Button Command="{Binding SaveCommand}" Content="Save Session" />
-          <TextBlock Text="{Binding FileCount, StringFormat='{}{0} file(s)'}" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" />
-        </StackPanel>
-      </Border>
+    <Grid
+      RowDefinitions="Auto,Auto,*"
+      Background="{DynamicResource SurfaceBrush}"
+      HorizontalAlignment="Stretch"
+    >
+      <!-- <Border -->
+      <!--   Grid.Row="0" -->
+      <!--   Classes="command-bar" -->
+      <!--   HorizontalAlignment="Stretch" -->
+      <!--   VerticalAlignment="Top" -->
+      <!--   BorderBrush="{DynamicResource BorderBrush}" -->
+      <!--   BorderThickness="0,0,0,1" -->
+      <!-- > -->
+      <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*">
+        <CommandBar
+          Grid.Column="0"
+          Grid.ColumnSpan="3"
+          HorizontalAlignment="Stretch"
+          HasMirrorTransform="True"
+          VerticalAlignment="Top"
+          FlowDirection="LeftToRight"
+          DefaultLabelPosition="Bottom"
+          BorderBrush="{DynamicResource RaisedBrush}"
+        >
+          <CommandBar.Content>
+            <views:SearchBar />
+          </CommandBar.Content>
+          <CommandBar.PrimaryCommands>
+            <CommandBarButton
+              Label="Open"
+              Command="{Binding OpenCommand}"
+              Foreground="{DynamicResource TextBrush}"
+              ToolTip.Tip="Open log files"
+            >
+              <CommandBarButton.Icon>
+                <ic:SymbolIcon
+                  Symbol="FolderOpen"
+                  FontSize="26"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Stretch"
+                  IconVariant="Color"
+                />
+              </CommandBarButton.Icon>
+            </CommandBarButton>
+            <CommandBarSeparator />
+            <CommandBarButton
+              Command="{Binding SaveCommand}"
+              Foreground="{DynamicResource TextBrush}"
+              Label="Save Session"
+            >
+              <CommandBarButton.Icon>
+                <ic:SymbolIcon
+                  Symbol="Save"
+                  FontSize="26"
+                  IconVariant="Filled"
+                  Foreground="{DynamicResource AccentBrush}"
+                  ic:Outline.Foreground="{DynamicResource RaisedBrush}"
+                />
+              </CommandBarButton.Icon>
+            </CommandBarButton>
+            <CommandBarButton
+              x:Name="SettingsButton"
+              Foreground="{DynamicResource TextBrush}"
+              Command="{Binding ToggleSettingsCommand}"
+              Label="Settings"
+              ToolTip.Tip="Open settings"
+            >
+              <CommandBarButton.Icon>
+                <ic:SymbolIcon
+                  Symbol="Settings"
+                  FontSize="26"
+                  IconVariant="Filled"
+                  Foreground="{DynamicResource AccentBrush}"
+                  ic:Outline.Foreground="{DynamicResource RaisedBrush}"
+                />
+              </CommandBarButton.Icon>
+            </CommandBarButton>
+          </CommandBar.PrimaryCommands>
+        </CommandBar>
+        <Grid Grid.Column="1" ColumnDefinitions="Auto,Auto">
+          <views:WorkspaceError Grid.Column="0" IsVisible="False" />
+        </Grid>
+      </Grid>
+      <!-- </Border> -->
       <views:FileStrip Grid.Row="1" />
-      <views:WorkspaceError Grid.Row="2" />
-      <views:SearchBar Grid.Row="3" />
-      <views:LogWorkspace Grid.Row="4" />
+      <views:LogWorkspace Grid.Row="2" />
     </Grid>
   </SplitView>
 </Window>

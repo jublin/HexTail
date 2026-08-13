@@ -8,7 +8,8 @@
     <PackageVersion Include="Avalonia.Desktop" Version="12.1.1" />
     <PackageVersion Include="Avalonia.Headless.XUnit" Version="12.1.1" />
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.1" />
-    <PackageVersion Include="FluentIcons.Avalonia" Version="2.1.334" />
+    <PackageVersion Include="FluentIcons.Avalonia" Version="2.1.335" />
+    <PackageVersion Include="FluentIcons.Avalonia.Fluent" Version="2.1.335" />
     <PackageVersion Include="ReactiveUI.Avalonia.Reactive" Version="12.1.1" />
     <PackageVersion Include="System.Reactive" Version="7.0.0" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
