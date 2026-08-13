@@ -7,8 +7,15 @@
   x:DataType="vm:LogViewViewModel"
 >
   <Grid RowDefinitions="Auto,*" Background="{DynamicResource SurfaceBrush}">
-    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="12" Margin="12,7">
+    <StackPanel
+      Grid.Row="0"
+      Orientation="Horizontal"
+      Spacing="12"
+      Margin="12,7"
+      HorizontalAlignment="Right"
+    >
       <CheckBox Content="Follow" IsChecked="{Binding IsFollowing, Mode=TwoWay}" />
+      <CheckBox Content="Show Inline" IsChecked="{Binding ShowContext}" />
       <TextBlock
         Text="{Binding MatchSummary}"
         VerticalAlignment="Center"

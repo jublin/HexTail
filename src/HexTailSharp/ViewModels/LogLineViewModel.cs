@@ -114,7 +114,7 @@ internal sealed class LogLineViewModel : ReactiveObject
                 new LogTextSegmentViewModel(
                     Line.Raw.Substring(range.Start, range.Length),
                     Brush(color),
-                    ThemeManager.Brush("SurfaceBrush")
+                    ThemeManager.Brush("TextBrush")
                 )
             );
             cursor = range.Start + range.Length;
