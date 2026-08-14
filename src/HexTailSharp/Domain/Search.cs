@@ -20,6 +20,9 @@ public sealed class CompiledQuery
 {
     private readonly Regex? _regex;
 
+    public static MatchMode DetectMode(string query) =>
+        query.Any(@"\[](){}*+?|^$".Contains) ? MatchMode.Regex : MatchMode.Literal;
+
     public CompiledQuery(string query, MatchMode mode, bool caseSensitive)
     {
         Query = query;

@@ -22,7 +22,12 @@
         Foreground="{DynamicResource MutedBrush}"
       />
     </StackPanel>
-    <Grid Grid.Row="1" RowDefinitions="*,4,*">
+    <Grid x:Name="LogLayout" Grid.Row="1">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*" />
+        <RowDefinition Height="{Binding ContextSplitterHeight}" />
+        <RowDefinition Height="{Binding ContextRowHeight}" />
+      </Grid.RowDefinitions>
       <ListBox
         x:Name="LogList"
         Grid.Row="0"

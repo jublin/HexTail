@@ -53,7 +53,7 @@ public sealed class MainWindowInteractionTests
         var colorPickers = pane.GetVisualDescendants().OfType<ColorPicker>().ToArray();
         Assert.NotEmpty(colorPickers);
         Assert.All(colorPickers, picker => Assert.NotNull(picker.Template));
-        foreach (var name in new[] { "MatchModeBox", "DensityBox", "FontSizeBox" })
+        foreach (var name in new[] { "DensityBox", "FontSizeBox" })
         {
             var combo = FindVisual<ComboBox>(window, name);
             combo.IsDropDownOpen = true;
@@ -61,10 +61,8 @@ public sealed class MainWindowInteractionTests
             combo.IsDropDownOpen = false;
         }
 
-        FindVisual<ComboBox>(window, "MatchModeBox").SelectedItem = MatchMode.Regex;
         FindVisual<ComboBox>(window, "DensityBox").SelectedItem = UiDensity.Compact;
         FindVisual<ComboBox>(window, "FontSizeBox").SelectedItem = LogFontSize.Large;
-        Assert.Equal(MatchMode.Regex, viewModel.MatchMode);
         Assert.Equal(UiDensity.Compact, viewModel.Settings.Density);
         Assert.Equal(LogFontSize.Large, viewModel.Settings.FontSize);
         window.Close();
@@ -74,11 +72,14 @@ public sealed class MainWindowInteractionTests
     public void SettingsOpenCloseAndEscape()
     {
         var window = TestWindow.Create(out var viewModel);
-        var button = window.FindControl<Button>("SettingsButton")!;
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        var button = window.FindControl<CommandBarButton>("SettingsButton")!;
 
-        Click(button);
+        Assert.True(button.Command!.CanExecute(button.CommandParameter));
+        button.Command.Execute(button.CommandParameter);
         Assert.True(viewModel.SettingsOpen);
-        Click(button);
+        button.Command.Execute(button.CommandParameter);
         Assert.False(viewModel.SettingsOpen);
         viewModel.SettingsOpen = true;
 
@@ -199,7 +200,6 @@ public sealed class MainWindowInteractionTests
             var window = TestWindow.Create(out var viewModel);
             await viewModel.OpenPathsCommand.Execute([path]);
             window.Show();
-            viewModel.MatchMode = MatchMode.Regex;
             viewModel.Query = "[";
             Dispatcher.UIThread.RunJobs();
 
