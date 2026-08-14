@@ -109,7 +109,12 @@ internal sealed class LogLineViewModel : ReactiveObject
             if (range.Start < cursor)
                 continue;
             if (range.Start > cursor)
-                Segments.Add(new LogTextSegmentViewModel(Line.Raw[cursor..range.Start]));
+                Segments.Add(
+                    new LogTextSegmentViewModel(
+                        Line.Raw[cursor..range.Start],
+                        foreground: Foreground
+                    )
+                );
             Segments.Add(
                 new LogTextSegmentViewModel(
                     Line.Raw.Substring(range.Start, range.Length),
@@ -121,7 +126,7 @@ internal sealed class LogLineViewModel : ReactiveObject
         }
 
         if (cursor < Line.Raw.Length || Segments.Count == 0)
-            Segments.Add(new LogTextSegmentViewModel(Line.Raw[cursor..]));
+            Segments.Add(new LogTextSegmentViewModel(Line.Raw[cursor..], foreground: Foreground));
 
         this.RaisePropertyChanged(nameof(ParsedFieldsText));
         this.RaisePropertyChanged(nameof(HasParsedFields));

@@ -4,6 +4,14 @@ namespace HexTailSharp.Tests.Domain;
 
 public class SearchTests
 {
+    [Theory]
+    [InlineData("error", MatchMode.Literal)]
+    [InlineData(@"error\\s+id", MatchMode.Regex)]
+    public void DetectMode_UsesRegexOnlyForRegexSyntax(string query, MatchMode expected)
+    {
+        Assert.Equal(expected, CompiledQuery.DetectMode(query));
+    }
+
     private static FileBuffer BufferWith(params string[] lines)
     {
         var buffer = new FileBuffer();

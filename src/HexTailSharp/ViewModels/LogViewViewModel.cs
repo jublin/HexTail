@@ -3,6 +3,8 @@ using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using Avalonia;
+using Avalonia.Controls;
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
 using HexTailSharp.Persistence;
@@ -41,6 +43,8 @@ internal sealed class LogViewViewModel : ReactiveObject
     public ReactiveCommand<Line, Unit> ToggleExpandedCommand { get; }
     public bool ShowContext => _file.Model.ShowContext;
     public bool ContextVisible => ShowContext && _file.Model.SelectedLine is not null;
+    public GridLength ContextRowHeight => ContextVisible ? new(1, GridUnitType.Star) : new(0);
+    public GridLength ContextSplitterHeight => ContextVisible ? new(4) : new(0);
     public bool ContextEmpty => ContextLines.Count == 0;
     public bool ContextEmptyVisible => ContextVisible && ContextEmpty;
     public bool IsFollowing
@@ -70,6 +74,8 @@ internal sealed class LogViewViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(MatchSummary));
         this.RaisePropertyChanged(nameof(ShowContext));
         this.RaisePropertyChanged(nameof(ContextVisible));
+        this.RaisePropertyChanged(nameof(ContextRowHeight));
+        this.RaisePropertyChanged(nameof(ContextSplitterHeight));
         this.RaisePropertyChanged(nameof(ContextEmpty));
         this.RaisePropertyChanged(nameof(ContextEmptyVisible));
         this.RaisePropertyChanged(nameof(IsFollowing));

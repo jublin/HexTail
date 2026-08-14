@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -14,6 +15,7 @@ public partial class LogView : UserControl
     private LogViewViewModel? _viewModel;
     private ScrollViewer? _scrollViewer;
     private bool _scrollAttached;
+    private bool _scrollingToEnd;
 
     public LogView()
     {
@@ -32,6 +34,7 @@ public partial class LogView : UserControl
         {
             _viewModel.Lines.CollectionChanged -= OnLinesChanged;
             _viewModel.ContextLines.CollectionChanged -= OnContextLinesChanged;
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         }
 
         _viewModel = DataContext as LogViewViewModel;
@@ -41,6 +44,7 @@ public partial class LogView : UserControl
         {
             _viewModel.Lines.CollectionChanged += OnLinesChanged;
             _viewModel.ContextLines.CollectionChanged += OnContextLinesChanged;
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
 
         Dispatcher.UIThread.Post(
@@ -71,6 +75,21 @@ public partial class LogView : UserControl
     private void OnContextLinesChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
         ScrollContextToSelected();
 
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(LogViewViewModel.IsFollowing))
+            return;
+
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                if (_viewModel?.IsFollowing == true)
+                    ScrollLogToEnd();
+            },
+            DispatcherPriority.Background
+        );
+    }
+
     private void OnLogSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (_viewModel is not null && LogList.SelectedItem is LogLineViewModel row)
@@ -99,13 +118,33 @@ public partial class LogView : UserControl
 
     private void OnScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        if (_viewModel is null || _scrollViewer is null)
+        if (_scrollingToEnd || _viewModel is null || _scrollViewer is null)
             return;
         if (
             _scrollViewer.Extent.Height - _scrollViewer.Viewport.Height - _scrollViewer.Offset.Y
             > 8
         )
             _viewModel.IsFollowing = false;
+    }
+
+    private void ScrollLogToEnd()
+    {
+        if (_viewModel?.IsFollowing != true || LogList.ItemCount == 0)
+            return;
+
+        _scrollingToEnd = true;
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                if (_viewModel?.IsFollowing == true && LogList.ItemCount > 0)
+                    LogList.ScrollIntoView(LogList.ItemCount - 1);
+                Dispatcher.UIThread.Post(
+                    () => _scrollingToEnd = false,
+                    DispatcherPriority.Background
+                );
+            },
+            DispatcherPriority.Background
+        );
     }
 
     private void ScrollContextToSelected()

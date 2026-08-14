@@ -3,12 +3,17 @@
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:vm="using:HexTailSharp.ViewModels"
   xmlns:icons="using:FluentIcons.Avalonia"
+  xmlns:i="using:Avalonia.Xaml.Interactivity"
+  xmlns:drag="using:Avalonia.Xaml.Interactions.Draggable"
   x:Class="HexTailSharp.Views.FileStrip"
   x:DataType="vm:MainWindowViewModel"
 >
   <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
     <StackPanel Orientation="Horizontal" Background="{DynamicResource RaisedBrush}">
       <ItemsControl ItemsSource="{Binding Files}">
+        <i:Interaction.Behaviors>
+          <drag:ListReorderDragBehavior />
+        </i:Interaction.Behaviors>
         <ItemsControl.ItemsPanel>
           <ItemsPanelTemplate>
             <StackPanel Orientation="Horizontal" />

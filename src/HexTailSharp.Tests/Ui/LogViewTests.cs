@@ -2,6 +2,7 @@ using System.Reactive.Linq;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using HexTailSharp.Domain;
 using HexTailSharp.Tests.Support;
@@ -92,6 +93,64 @@ public sealed class LogViewTests
             file.ShowContext = false;
             file.SyncViews();
             Assert.False(contextList.IsVisible);
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task HiddenContextRowDoesNotReserveSpace()
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllTextAsync(path, "line");
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            await viewModel.OpenPathsCommand.Execute([path]);
+            window.Show();
+            var view = window.GetVisualDescendants().OfType<LogView>().Single();
+            var layout = view.FindControl<Grid>("LogLayout")!;
+
+            Assert.Equal(0, layout.RowDefinitions[2].ActualHeight);
+            viewModel.SelectedFile!.ShowContext = true;
+            viewModel.SelectedFile.Model.SelectedLine = 0;
+            viewModel.SelectedFile.SyncViews();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(layout.RowDefinitions[2].ActualHeight > 0);
+
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task EnablingFollowScrollsToEndAndStaysEnabled()
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllLinesAsync(
+            path,
+            Enumerable.Range(0, 200).Select(index => $"line {index}")
+        );
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            await viewModel.OpenPathsCommand.Execute([path]);
+            window.Show();
+            var view = window.GetVisualDescendants().OfType<LogView>().Single();
+            var logViewModel = viewModel.SelectedFile!.Views[0];
+
+            logViewModel.IsFollowing = false;
+            Dispatcher.UIThread.RunJobs();
+            logViewModel.IsFollowing = true;
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(logViewModel.IsFollowing);
             window.Close();
         }
         finally

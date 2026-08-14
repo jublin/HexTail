@@ -362,7 +362,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             _state.AddSearch(
                 SelectedFile.Model,
                 Query,
-                MatchMode,
+                CompiledQuery.DetectMode(Query),
                 CaseSensitive,
                 ColorToHex(SearchColor)
             );
