@@ -33,6 +33,7 @@ internal sealed class FileTabViewModel : ReactiveObject
         {
             if (Model.FollowAll == value)
                 return;
+            Model.FollowAll = value;
             _ = _owner.SetFollowAllAsync(this, value);
             this.RaisePropertyChanged(nameof(FollowAll));
         }
@@ -45,6 +46,7 @@ internal sealed class FileTabViewModel : ReactiveObject
         {
             if (Model.ShowContext == value)
                 return;
+            Model.ShowContext = value;
             _ = _owner.SetShowContextAsync(this, value);
             this.RaisePropertyChanged(nameof(ShowContext));
         }
@@ -89,6 +91,11 @@ internal sealed class FileTabViewModel : ReactiveObject
 
     internal void RaiseSelectionChanged() => this.RaisePropertyChanged(nameof(IsSelected));
 
-    internal Task SetSearchFollowAsync(Search search, bool value) =>
-        _owner.SetSearchFollowAsync(this, search, value);
+    internal Task SetSearchFollowAsync(Search search, bool value)
+    {
+        var index = Model.Searches.IndexOf(search);
+        if (index >= 0 && index < Model.FollowSearches.Count)
+            Model.FollowSearches[index] = value;
+        return _owner.SetSearchFollowAsync(this, search, value);
+    }
 }

@@ -2,6 +2,7 @@
   xmlns="https://github.com/avaloniaui"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:vm="using:HexTailSharp.ViewModels"
+  xmlns:icons="using:FluentIcons.Avalonia"
   x:Class="HexTailSharp.Views.SettingsPanel"
   x:DataType="vm:MainWindowViewModel"
 >
@@ -36,11 +37,11 @@
                     />
                     <Button
                       Grid.Column="2"
-                      Content="×"
+                      Classes="icon"
                       ToolTip.Tip="Remove label"
                       Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveLabelCommand}"
                       CommandParameter="{Binding}"
-                    />
+                    ><icons:FluentIcon Icon="Dismiss" /></Button>
                   </Grid>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
@@ -60,10 +61,10 @@
                 x:Name="AddLabelButton"
                 Name="AddLabelButton"
                 Grid.Column="2"
-                Content="+"
+                Classes="icon"
                 ToolTip.Tip="Add label"
                 Command="{Binding Settings.AddLabelCommand}"
-              />
+              ><icons:FluentIcon Icon="Add" /></Button>
             </Grid>
           </StackPanel>
         </ScrollViewer>
@@ -83,11 +84,11 @@
                     <TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to hide" />
                     <Button
                       Grid.Column="1"
-                      Content="×"
+                      Classes="icon"
                       ToolTip.Tip="Remove exclusion"
                       Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveExclusionCommand}"
                       CommandParameter="{Binding}"
-                    />
+                    ><icons:FluentIcon Icon="Dismiss" /></Button>
                   </Grid>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
@@ -101,10 +102,10 @@
                 x:Name="AddExclusionButton"
                 Name="AddExclusionButton"
                 Grid.Column="1"
-                Content="+"
+                Classes="icon"
                 ToolTip.Tip="Add exclusion"
                 Command="{Binding Settings.AddExclusionCommand}"
-              />
+              ><icons:FluentIcon Icon="Add" /></Button>
             </Grid>
           </StackPanel>
         </ScrollViewer>
