@@ -6,8 +6,20 @@
   x:Class="HexTailSharp.Views.SettingsPanel"
   x:DataType="vm:MainWindowViewModel"
 >
-  <Grid RowDefinitions="Auto,*,Auto,Auto" Background="{DynamicResource RaisedBrush}" Margin="16">
-    <TextBlock Text="Settings" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12" />
+  <Border Classes="settings-sheet" Margin="12">
+    <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="16">
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+        <TextBlock Text="Settings" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <Button
+          x:Name="SettingsCloseButton"
+          Name="SettingsCloseButton"
+          Grid.Column="1"
+          Classes="icon tab-close settings-close"
+          Command="{Binding ToggleSettingsCommand}"
+          ToolTip.Tip="Close settings"
+          AutomationProperties.Name="Close settings"
+        ><icons:FluentIcon Icon="Dismiss" /></Button>
+      </Grid>
     <TabControl
       Grid.Row="1"
       SelectedIndex="{Binding Settings.SectionIndex, Mode=TwoWay}"
@@ -157,5 +169,6 @@
       IsVisible="{Binding Settings.IsSaving}"
       Text="Saving…"
     />
-  </Grid>
+    </Grid>
+  </Border>
 </UserControl>

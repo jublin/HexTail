@@ -83,6 +83,11 @@ public sealed class MainWindowInteractionTests
         button.Command.Execute(button.CommandParameter);
         Assert.False(viewModel.SettingsOpen);
         viewModel.SettingsOpen = true;
+        Dispatcher.UIThread.RunJobs();
+        var closeButton = FindVisual<Button>(window, "SettingsCloseButton");
+        closeButton.Command!.Execute(closeButton.CommandParameter);
+        Assert.False(viewModel.SettingsOpen);
+        viewModel.SettingsOpen = true;
 
         window.Show();
         window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.None, null);
