@@ -8,7 +8,6 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using FluentIcons.Avalonia;
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
 using HexTailSharp.Persistence;
@@ -16,6 +15,8 @@ using HexTailSharp.Tailing;
 using HexTailSharp.Tests.Support;
 using HexTailSharp.ViewModels;
 using HexTailSharp.Views;
+using Optris.Icons.Avalonia;
+using ObservableExtensions = System.ObservableExtensions;
 
 namespace HexTailSharp.Tests.Ui;
 
@@ -138,7 +139,7 @@ public sealed class MainWindowInteractionTests
             .Single(textBox => textBox.PlaceholderText == "Text to highlight")
             .Text = "WARN";
         await WaitFor(() => viewModel.State.Settings.GlobalLabels[0].Text == "WARN");
-        Click(labelControls.OfType<Button>().Single(button => button.Content is FluentIcon));
+        Click(labelControls.OfType<Button>().Single(button => button.Content is Icon));
         await WaitFor(() => viewModel.Settings.Labels.Count == 0);
 
         viewModel.Settings.SectionIndex = 1;
@@ -232,7 +233,7 @@ public sealed class MainWindowInteractionTests
                 .GetVisualDescendants()
                 .OfType<Button>()
                 .Single(button => button.Classes.Contains("search-close") && button.IsVisible);
-            Assert.IsType<FluentIcon>(closeButton.Content);
+            Assert.IsType<Icon>(closeButton.Content);
             Assert.Equal(50, closeButton.CornerRadius.TopLeft);
             Click(closeButton);
             await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 0);
@@ -326,7 +327,7 @@ public sealed class MainWindowInteractionTests
                 .GetVisualDescendants()
                 .OfType<Button>()
                 .Single(button =>
-                    ReferenceEquals(button.DataContext, first) && button.Content is FluentIcon
+                    ReferenceEquals(button.DataContext, first) && button.Content is Icon
                 );
             Assert.Equal($"Close {firstPath}", ToolTip.GetTip(closeButton));
             Assert.Equal($"Close {firstPath}", AutomationProperties.GetName(closeButton));
@@ -392,7 +393,10 @@ public sealed class MainWindowInteractionTests
         using var handler = viewModel.PickFiles.RegisterHandler(context => context.SetOutput([]));
         var window = new ShortcutWindow(viewModel);
         var completions = 0;
-        using var subscription = viewModel.OpenCommand.Subscribe(_ => completions++);
+        using var subscription = ObservableExtensions.Subscribe(
+            viewModel.OpenCommand,
+            _ => completions++
+        );
 
         foreach (var modifier in new[] { KeyModifiers.Control, KeyModifiers.Meta })
         {

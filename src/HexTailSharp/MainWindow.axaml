@@ -2,8 +2,8 @@
   xmlns="https://github.com/avaloniaui"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:vm="using:HexTailSharp.ViewModels"
-  xmlns:ic="using:FluentIcons.Avalonia.Fluent"
   xmlns:views="using:HexTailSharp.Views"
+  xmlns:i="https://github.com/projektanker/icons.avalonia"
   x:Class="HexTailSharp.MainWindow"
   x:DataType="vm:MainWindowViewModel"
   Title="Hex Tail"
@@ -58,12 +58,10 @@
               AutomationProperties.Name="Open settings"
             >
               <CommandBarButton.Icon>
-                <ic:SymbolIcon
-                  Symbol="Navigation"
-                  FontSize="26"
-                  IconVariant="Filled"
-                  Foreground="{DynamicResource AccentBrush}"
-                  ic:Outline.Foreground="{DynamicResource RaisedBrush}"
+                <i:Icon
+                  Foreground="{DynamicResource TextBrush}"
+                  Value="mdi-menu"
+                  Background="{DynamicResource SurfaceBrush}"
                 />
               </CommandBarButton.Icon>
             </CommandBarButton>
@@ -76,12 +74,10 @@
               AutomationProperties.Name="Save session"
             >
               <CommandBarButton.Icon>
-                <ic:SymbolIcon
-                  Symbol="Save"
-                  FontSize="26"
-                  IconVariant="Filled"
-                  Foreground="{DynamicResource AccentBrush}"
-                  ic:Outline.Foreground="{DynamicResource RaisedBrush}"
+                <i:Icon
+                  Foreground="{DynamicResource TextBrush}"
+                  Value="mdi-content-save"
+                  Background="{DynamicResource SurfaceBrush}"
                 />
               </CommandBarButton.Icon>
             </CommandBarButton>
@@ -93,13 +89,7 @@
               AutomationProperties.Name="Open log files"
             >
               <CommandBarButton.Icon>
-                <ic:SymbolIcon
-                  Symbol="FolderOpen"
-                  FontSize="26"
-                  HorizontalAlignment="Stretch"
-                  VerticalAlignment="Stretch"
-                  IconVariant="Color"
-                />
+                i:Icon Foreground="{DynamicResource TextBrush}" Value="mdi-folder-open" Background="{DynamicResource SurfaceBrush}" />
               </CommandBarButton.Icon>
             </CommandBarButton>
           </CommandBar.PrimaryCommands>

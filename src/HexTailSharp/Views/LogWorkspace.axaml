@@ -3,7 +3,7 @@
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:vm="using:HexTailSharp.ViewModels"
   xmlns:views="using:HexTailSharp.Views"
-  xmlns:icons="using:FluentIcons.Avalonia"
+  xmlns:ic="https://github.com/projektanker/icons.avalonia"
   x:Class="HexTailSharp.Views.LogWorkspace"
   x:DataType="vm:MainWindowViewModel"
 >
@@ -65,7 +65,9 @@
                       IsVisible="{Binding IsSearchView}"
                       ToolTip.Tip="Clear search"
                       AutomationProperties.Name="Clear search"
-                    ><icons:FluentIcon Icon="Dismiss" /></Button>
+                    >
+                      <ic:Icon Value="mdi-close" />
+                    </Button>
                   </Grid>
                 </Border>
               </DataTemplate>
