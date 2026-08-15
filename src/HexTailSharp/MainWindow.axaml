@@ -38,10 +38,10 @@
       <!--   BorderBrush="{DynamicResource BorderBrush}" -->
       <!--   BorderThickness="0,0,0,1" -->
       <!-- > -->
-      <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+      <Grid Grid.Row="0" ColumnDefinitions="Auto,*">
         <CommandBar
-          Grid.Column="1"
-          HorizontalAlignment="Right"
+          Grid.Column="0"
+          HorizontalAlignment="Left"
           HasMirrorTransform="True"
           VerticalAlignment="Top"
           FlowDirection="LeftToRight"
@@ -50,18 +50,20 @@
         >
           <CommandBar.PrimaryCommands>
             <CommandBarButton
-              Label="Open"
-              Command="{Binding OpenCommand}"
+              x:Name="SettingsButton"
               Foreground="{DynamicResource TextBrush}"
-              ToolTip.Tip="Open log files"
+              Command="{Binding ToggleSettingsCommand}"
+              Label="Settings"
+              ToolTip.Tip="Open settings"
+              AutomationProperties.Name="Open settings"
             >
               <CommandBarButton.Icon>
                 <ic:SymbolIcon
-                  Symbol="FolderOpen"
+                  Symbol="Navigation"
                   FontSize="26"
-                  HorizontalAlignment="Stretch"
-                  VerticalAlignment="Stretch"
-                  IconVariant="Color"
+                  IconVariant="Filled"
+                  Foreground="{DynamicResource AccentBrush}"
+                  ic:Outline.Foreground="{DynamicResource RaisedBrush}"
                 />
               </CommandBarButton.Icon>
             </CommandBarButton>
@@ -70,6 +72,8 @@
               Command="{Binding SaveCommand}"
               Foreground="{DynamicResource TextBrush}"
               Label="Save Session"
+              ToolTip.Tip="Save session"
+              AutomationProperties.Name="Save session"
             >
               <CommandBarButton.Icon>
                 <ic:SymbolIcon
@@ -82,19 +86,19 @@
               </CommandBarButton.Icon>
             </CommandBarButton>
             <CommandBarButton
-              x:Name="SettingsButton"
+              Label="Open"
+              Command="{Binding OpenCommand}"
               Foreground="{DynamicResource TextBrush}"
-              Command="{Binding ToggleSettingsCommand}"
-              Label="Settings"
-              ToolTip.Tip="Open settings"
+              ToolTip.Tip="Open log files"
+              AutomationProperties.Name="Open log files"
             >
               <CommandBarButton.Icon>
                 <ic:SymbolIcon
-                  Symbol="Settings"
+                  Symbol="FolderOpen"
                   FontSize="26"
-                  IconVariant="Filled"
-                  Foreground="{DynamicResource AccentBrush}"
-                  ic:Outline.Foreground="{DynamicResource RaisedBrush}"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Stretch"
+                  IconVariant="Color"
                 />
               </CommandBarButton.Icon>
             </CommandBarButton>
