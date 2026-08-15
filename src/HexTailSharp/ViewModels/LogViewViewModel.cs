@@ -107,12 +107,35 @@ internal sealed class LogViewViewModel : ReactiveObject
         bool resetItems
     )
     {
+        if (!resetItems && current.Count > 0 && desired.Count > current.Count)
+        {
+            var lastLine = current[^1].Line;
+            var lastIndex = desired.Count - 1;
+            while (lastIndex >= 0 && !ReferenceEquals(desired[lastIndex], lastLine))
+                lastIndex--;
+
+            if (lastIndex >= 0 && lastIndex < desired.Count - 1)
+            {
+                for (var index = lastIndex + 1; index < desired.Count; index++)
+                    current.Add(new LogLineViewModel(this, _file, desired[index], isContext));
+                return;
+            }
+        }
+
+        Dictionary<Line, LogLineViewModel>? existing =
+            current.Count == 0
+                ? null
+                : new Dictionary<Line, LogLineViewModel>(ReferenceEqualityComparer.Instance);
+        if (existing is not null)
+            foreach (var row in current)
+                existing[row.Line] = row;
         var rows = desired
             .Select(line =>
             {
-                var row = current.FirstOrDefault(candidate =>
-                    ReferenceEquals(candidate.Line, line)
-                );
+                var row =
+                    existing is not null && existing.TryGetValue(line, out var retained)
+                        ? retained
+                        : null;
                 if (row is null)
                     row = new LogLineViewModel(this, _file, line, isContext);
                 else

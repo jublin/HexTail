@@ -403,9 +403,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     {
         if (_closed || !_state.DrainTailerEvents())
             return;
-
-        SyncFromState();
-        SelectedFile?.SyncViews();
     }
 
     private void SyncFromState()

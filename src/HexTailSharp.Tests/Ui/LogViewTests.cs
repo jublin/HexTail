@@ -217,6 +217,12 @@ public sealed class LogViewTests
             Assert.NotNull(
                 contextList.GetVisualDescendants().OfType<ScrollViewer>().SingleOrDefault()
             );
+
+            var firstRow = file.Views[0].Lines[0];
+            file.Model.Buffer.Append(new Line("line 200"));
+            file.SyncViews();
+            Assert.Same(firstRow, file.Views[0].Lines[0]);
+            Assert.Equal(201, file.Views[0].Lines.Count);
             window.Close();
         }
         finally
