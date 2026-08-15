@@ -66,6 +66,10 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             CloseFileAsync,
             _scheduler
         );
+        RemoveSearchCommand = ReactiveCommand.CreateFromTask<LogViewViewModel>(
+            RemoveSearchAsync,
+            _scheduler
+        );
 
         var canAddSearch = this.WhenAnyValue(
             viewModel => viewModel.Query,
@@ -101,6 +105,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                     OpenPathsCommand.ThrownExceptions,
                     SaveCommand.ThrownExceptions,
                     CloseFileCommand.ThrownExceptions,
+                    RemoveSearchCommand.ThrownExceptions,
                     AddSearchCommand.ThrownExceptions
                 )
                 .Subscribe(ex => SetFileError(ex.Message))
@@ -117,6 +122,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<Unit, Unit> ToggleSettingsCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> SelectFileCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> CloseFileCommand { get; }
+    public ReactiveCommand<LogViewViewModel, Unit> RemoveSearchCommand { get; }
     public ReactiveCommand<Unit, Unit> AddSearchCommand { get; }
     public ReactiveCommand<KeyEventArgs, Unit> AddSearchOnKeyCommand { get; }
 
@@ -344,6 +350,15 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         {
             SetFileError(ex.Message);
         }
+    }
+
+    private async Task RemoveSearchAsync(LogViewViewModel view)
+    {
+        if (view.Search is null)
+            return;
+
+        await _state.RemoveSearchAsync(view.File, view.Search);
+        SyncFromState();
     }
 
     private async Task SaveAsync()

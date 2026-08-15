@@ -28,6 +28,33 @@
             ItemsSource="{Binding Views}"
             SelectedIndex="{Binding SelectedViewIndex, Mode=TwoWay}"
           >
+            <TabControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:LogViewViewModel">
+                <Border
+                  Classes="search-tab"
+                  Background="{Binding HighlightBrush}"
+                  Padding="8,3"
+                >
+                  <Grid ColumnDefinitions="*,Auto" MinWidth="72">
+                    <TextBlock
+                      Text="{Binding Header}"
+                      Foreground="{DynamicResource TextBrush}"
+                      VerticalAlignment="Center"
+                    />
+                    <Button
+                      Grid.Column="1"
+                      Classes="icon search-close"
+                      Content="×"
+                      Command="{Binding Workspace.RemoveSearchCommand}"
+                      CommandParameter="{Binding}"
+                      IsVisible="{Binding IsSearchView}"
+                      ToolTip.Tip="Clear search"
+                      AutomationProperties.Name="Clear search"
+                    />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </TabControl.ItemTemplate>
             <TabControl.ContentTemplate>
               <DataTemplate x:DataType="vm:LogViewViewModel">
                 <views:LogView />

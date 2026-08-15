@@ -158,4 +158,32 @@ public sealed class LogViewTests
             File.Delete(path);
         }
     }
+
+    [AvaloniaFact]
+    public async Task ShowingContextIsIndependentFromFollow()
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllTextAsync(path, "line");
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            await viewModel.OpenPathsCommand.Execute([path]);
+            window.Show();
+            var file = viewModel.SelectedFile!;
+            var log = file.Views[0];
+            file.Model.SelectedLine = 0;
+
+            log.ShowContext = true;
+            file.SyncViews();
+
+            Assert.True(file.Model.ShowContext);
+            Assert.True(log.IsFollowing);
+            Assert.True(log.ContextVisible);
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

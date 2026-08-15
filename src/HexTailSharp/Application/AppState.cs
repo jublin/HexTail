@@ -175,6 +175,25 @@ public sealed class AppState : IAsyncDisposable
         return search;
     }
 
+    public async ValueTask<bool> RemoveSearchAsync(
+        FileTabState tab,
+        Search search,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(search);
+        bool removed;
+        lock (_gate)
+            removed = _files.Contains(tab) && tab.RemoveSearch(search);
+        if (!removed)
+            return false;
+
+        NotifyChanged();
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
     public void SelectFile(FileTabState? tab)
     {
         lock (_gate)

@@ -5,6 +5,7 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media;
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
 using HexTailSharp.Persistence;
@@ -28,6 +29,7 @@ internal sealed class LogViewViewModel : ReactiveObject
     }
 
     public Search? Search { get; }
+    public MainWindowViewModel Workspace => _owner;
     public FileTabState File => _file.Model;
     public AppSettings Settings => _owner.State.Settings;
     public bool IsAllView => Search is null;
@@ -41,7 +43,21 @@ internal sealed class LogViewViewModel : ReactiveObject
     public ObservableCollection<LogLineViewModel> ContextLines { get; } = [];
     public ReactiveCommand<Line, Unit> SelectLineCommand { get; }
     public ReactiveCommand<Line, Unit> ToggleExpandedCommand { get; }
-    public bool ShowContext => _file.Model.ShowContext;
+    public bool ShowContext
+    {
+        get => _file.Model.ShowContext;
+        set
+        {
+            if (_file.Model.ShowContext == value)
+                return;
+            _file.ShowContext = value;
+            Sync();
+        }
+    }
+
+    public bool IsSearchView => Search is not null;
+    public IBrush? HighlightBrush =>
+        Search is null ? null : new SolidColorBrush(Color.Parse(Search.Color));
     public bool ContextVisible => ShowContext && _file.Model.SelectedLine is not null;
     public GridLength ContextRowHeight => ContextVisible ? new(1, GridUnitType.Star) : new(0);
     public GridLength ContextSplitterHeight => ContextVisible ? new(4) : new(0);
@@ -64,6 +80,7 @@ internal sealed class LogViewViewModel : ReactiveObject
 
     public void Sync(bool resetItems = false)
     {
+        FollowLatestLine();
         var lines = LinesFor();
         SyncRows(Lines, lines, isContext: false, resetItems);
 
@@ -71,6 +88,8 @@ internal sealed class LogViewViewModel : ReactiveObject
         SyncRows(ContextLines, context, isContext: true, resetItems);
 
         this.RaisePropertyChanged(nameof(Header));
+        this.RaisePropertyChanged(nameof(IsSearchView));
+        this.RaisePropertyChanged(nameof(HighlightBrush));
         this.RaisePropertyChanged(nameof(MatchSummary));
         this.RaisePropertyChanged(nameof(ShowContext));
         this.RaisePropertyChanged(nameof(ContextVisible));
@@ -189,6 +208,19 @@ internal sealed class LogViewViewModel : ReactiveObject
         return index >= 0
             && index < _file.Model.FollowSearches.Count
             && _file.Model.FollowSearches[index];
+    }
+
+    private void FollowLatestLine()
+    {
+        if (!IsFollowing)
+            return;
+
+        var index =
+            Search is null ? _file.Model.Buffer.Count - 1
+            : Search.Results.Count == 0 ? -1
+            : Search.Results[^1];
+        if (index >= 0 && index < _file.Model.Buffer.Count)
+            _file.Model.SelectedLine = index;
     }
 
     private IReadOnlyList<Line> LinesFor()
