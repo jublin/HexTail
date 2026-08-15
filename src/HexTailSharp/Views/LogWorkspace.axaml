@@ -28,6 +28,7 @@
           <TabControl
             ItemsSource="{Binding Views}"
             SelectedIndex="{Binding SelectedViewIndex, Mode=TwoWay}"
+            Classes="log-tabs"
           >
             <TabControl.ItemTemplate>
               <DataTemplate x:DataType="vm:LogViewViewModel">
@@ -38,6 +39,7 @@
                   BorderThickness="0,0,0,2"
                   CornerRadius="4"
                   Padding="{Binding Workspace.Settings.SecondaryPadding}"
+                  MinHeight="{Binding Workspace.Settings.SecondaryTabHeight}"
                 >
                   <Grid ColumnDefinitions="Auto,Auto,Auto" ColumnSpacing="8" MinWidth="72">
                     <TextBlock

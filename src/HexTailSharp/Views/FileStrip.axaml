@@ -34,6 +34,7 @@
                   CommandParameter="{Binding}"
                   HorizontalContentAlignment="Left"
                   Padding="{Binding Workspace.Settings.TabPadding}"
+                  Height="{Binding Workspace.Settings.TabHeight}"
                 >
                   <TextBlock Text="{Binding DisplayName}" />
                 </Button>
