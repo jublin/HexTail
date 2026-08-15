@@ -383,8 +383,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             );
             Query = string.Empty;
             SearchError = null;
-            await _state.SaveAsync();
             SyncFromState();
+            await _state.SaveAsync();
         }
         catch (ArgumentException ex)
         {

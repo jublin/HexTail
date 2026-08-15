@@ -34,7 +34,6 @@ public sealed class MainWindowInteractionTests
 
         Assert.Contains("SettingsPanel", controlNames);
         Assert.Contains("FileStrip", controlNames);
-        Assert.Contains("SearchBar", controlNames);
         Assert.Contains("WorkspaceError", controlNames);
         Assert.Contains("LogWorkspace", controlNames);
         window.Close();
@@ -165,13 +164,16 @@ public sealed class MainWindowInteractionTests
             var window = TestWindow.Create(out var viewModel);
             await viewModel.OpenPathsCommand.Execute([path]);
             window.Show();
+            Dispatcher.UIThread.RunJobs();
             var query = FindVisual<TextBox>(window, "QueryBox");
 
             query.Text = "first";
             Dispatcher.UIThread.RunJobs();
             Click(FindVisual<Button>(window, "AddSearchButton"));
             await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 1);
+            await WaitFor(() => window.GetVisualDescendants().OfType<SearchBar>().Any());
 
+            query = FindVisual<TextBox>(window, "QueryBox");
             query.Text = "ignored";
             query.Focus();
             window.KeyPress(Key.A, RawInputModifiers.None, PhysicalKey.None, null);
