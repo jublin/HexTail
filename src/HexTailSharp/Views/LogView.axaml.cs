@@ -62,25 +62,24 @@ public partial class LogView : UserControl
         if (_viewModel?.IsFollowing != true)
             return;
 
-        Dispatcher.UIThread.Post(ScrollLogToEnd, DispatcherPriority.Background);
+        if (Dispatcher.UIThread.CheckAccess())
+            RequestScrollLogToEnd();
+        else
+            Dispatcher.UIThread.Post(RequestScrollLogToEnd, DispatcherPriority.Background);
     }
 
     private void OnContextLinesChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
-        ScrollContextToSelected();
+        Dispatcher.UIThread.Post(ScrollContextToSelected, DispatcherPriority.Background);
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(LogViewViewModel.ContextVisible))
+            Dispatcher.UIThread.Post(ScrollContextToSelected, DispatcherPriority.Background);
+
         if (e.PropertyName != nameof(LogViewViewModel.IsFollowing))
             return;
 
-        Dispatcher.UIThread.Post(
-            () =>
-            {
-                if (_viewModel?.IsFollowing == true)
-                    ScrollLogToEnd();
-            },
-            DispatcherPriority.Background
-        );
+        Dispatcher.UIThread.Post(RequestScrollLogToEnd, DispatcherPriority.Background);
     }
 
     private void OnLogSelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -120,9 +119,9 @@ public partial class LogView : UserControl
             _viewModel.IsFollowing = false;
     }
 
-    private void ScrollLogToEnd()
+    private void RequestScrollLogToEnd()
     {
-        if (_viewModel?.IsFollowing != true || LogList.ItemCount == 0)
+        if (_viewModel?.IsFollowing != true)
             return;
 
         _scrollingToEnd = true;
@@ -131,10 +130,7 @@ public partial class LogView : UserControl
             {
                 if (_viewModel?.IsFollowing == true && LogList.ItemCount > 0)
                     LogList.ScrollIntoView(LogList.ItemCount - 1);
-                Dispatcher.UIThread.Post(
-                    () => _scrollingToEnd = false,
-                    DispatcherPriority.Background
-                );
+                Dispatcher.UIThread.Post(() => _scrollingToEnd = false, DispatcherPriority.Render);
             },
             DispatcherPriority.Background
         );

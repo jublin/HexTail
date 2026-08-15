@@ -213,7 +213,7 @@ public sealed class AppState : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(tab);
         lock (_gate)
         {
-            if (!_files.Contains(tab) || tab.FollowAll == value)
+            if (!_files.Contains(tab))
                 return;
             tab.FollowAll = value;
         }
@@ -230,7 +230,7 @@ public sealed class AppState : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(tab);
         lock (_gate)
         {
-            if (!_files.Contains(tab) || tab.ShowContext == value)
+            if (!_files.Contains(tab))
                 return;
             tab.ShowContext = value;
         }
@@ -253,11 +253,7 @@ public sealed class AppState : IAsyncDisposable
                 return;
 
             var index = tab.Searches.IndexOf(search);
-            if (
-                index < 0
-                || index >= tab.FollowSearches.Count
-                || tab.FollowSearches[index] == value
-            )
+            if (index < 0 || index >= tab.FollowSearches.Count)
                 return;
 
             tab.FollowSearches[index] = value;

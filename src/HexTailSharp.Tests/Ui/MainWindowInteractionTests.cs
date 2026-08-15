@@ -132,7 +132,7 @@ public sealed class MainWindowInteractionTests
             .Single(textBox => textBox.PlaceholderText == "Text to highlight")
             .Text = "WARN";
         await WaitFor(() => viewModel.State.Settings.GlobalLabels[0].Text == "WARN");
-        Click(labelControls.OfType<Button>().Single(button => Equals(button.Content, "×")));
+        Click(labelControls.OfType<Button>().Single(button => button.Content is FluentIcon));
         await WaitFor(() => viewModel.Settings.Labels.Count == 0);
 
         viewModel.Settings.SectionIndex = 1;
@@ -213,14 +213,14 @@ public sealed class MainWindowInteractionTests
                     ReferenceEquals(border.DataContext, searchView)
                     && border.Classes.Contains("search-tab")
                 );
-            Assert.Equal(Color.Parse("#F59E0B"), ((SolidColorBrush)header.Background!).Color);
+            Assert.Equal(Color.Parse("#F59E0B"), ((SolidColorBrush)header.BorderBrush!).Color);
 
-            Click(
-                window
-                    .GetVisualDescendants()
-                    .OfType<Button>()
-                    .Single(button => button.Classes.Contains("search-close") && button.IsVisible)
-            );
+            var closeButton = window
+                .GetVisualDescendants()
+                .OfType<Button>()
+                .Single(button => button.Classes.Contains("search-close") && button.IsVisible);
+            Assert.IsType<FluentIcon>(closeButton.Content);
+            Click(closeButton);
             await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 0);
             window.Close();
         }

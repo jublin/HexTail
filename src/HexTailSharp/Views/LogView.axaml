@@ -15,7 +15,7 @@
       HorizontalAlignment="Right"
     >
       <CheckBox Content="Follow" IsChecked="{Binding IsFollowing, Mode=TwoWay}" />
-      <CheckBox Content="Show Inline" IsChecked="{Binding ShowContext}" />
+      <CheckBox Content="Show Inline" IsChecked="{Binding ShowContext, Mode=TwoWay}" />
       <TextBlock
         Text="{Binding MatchSummary}"
         VerticalAlignment="Center"

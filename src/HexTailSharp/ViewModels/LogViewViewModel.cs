@@ -237,7 +237,7 @@ internal sealed class LogViewViewModel : ReactiveObject
 
     private IReadOnlyList<Line> ContextLinesFor()
     {
-        var lines = _file.Model.ContextLines;
+        var lines = _file.Model.Buffer.Lines;
         return _owner.State.Settings.GlobalExcludeLabels.Count == 0
             ? lines
             : lines.Where(line => !_owner.State.Settings.Excludes(line.Raw)).ToList();

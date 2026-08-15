@@ -186,4 +186,42 @@ public sealed class LogViewTests
             File.Delete(path);
         }
     }
+
+    [AvaloniaFact]
+    public async Task ContextViewContainsFullFileAndOwnsScrolling()
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllLinesAsync(
+            path,
+            Enumerable.Range(0, 200).Select(index => $"line {index}")
+        );
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            await viewModel.OpenPathsCommand.Execute([path]);
+            window.Show();
+
+            var file = viewModel.SelectedFile!;
+            file.Model.Buffer.Append(
+                Enumerable.Range(0, 200).Select(index => new Line($"line {index}"))
+            );
+            file.Model.SelectedLine = 100;
+            file.Views[0].ShowContext = true;
+            file.SyncViews();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(200, file.Views[0].ContextLines.Count);
+
+            var view = window.GetVisualDescendants().OfType<LogView>().Single();
+            var contextList = view.FindControl<ListBox>("ContextList")!;
+            Assert.Equal(200, contextList.ItemCount);
+            Assert.NotNull(
+                contextList.GetVisualDescendants().OfType<ScrollViewer>().SingleOrDefault()
+            );
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

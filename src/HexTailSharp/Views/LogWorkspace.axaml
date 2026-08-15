@@ -3,6 +3,7 @@
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:vm="using:HexTailSharp.ViewModels"
   xmlns:views="using:HexTailSharp.Views"
+  xmlns:icons="using:FluentIcons.Avalonia"
   x:Class="HexTailSharp.Views.LogWorkspace"
   x:DataType="vm:MainWindowViewModel"
 >
@@ -32,7 +33,10 @@
               <DataTemplate x:DataType="vm:LogViewViewModel">
                 <Border
                   Classes="search-tab"
-                  Background="{Binding HighlightBrush}"
+                  Background="{DynamicResource RaisedBrush}"
+                  BorderBrush="{Binding HighlightBrush}"
+                  BorderThickness="0,0,0,2"
+                  CornerRadius="4"
                   Padding="8,3"
                 >
                   <Grid ColumnDefinitions="*,Auto" MinWidth="72">
@@ -44,13 +48,12 @@
                     <Button
                       Grid.Column="1"
                       Classes="icon search-close"
-                      Content="×"
                       Command="{Binding Workspace.RemoveSearchCommand}"
                       CommandParameter="{Binding}"
                       IsVisible="{Binding IsSearchView}"
                       ToolTip.Tip="Clear search"
                       AutomationProperties.Name="Clear search"
-                    />
+                    ><icons:FluentIcon Icon="Dismiss" /></Button>
                   </Grid>
                 </Border>
               </DataTemplate>
