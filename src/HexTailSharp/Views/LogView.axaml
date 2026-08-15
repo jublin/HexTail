@@ -7,21 +7,39 @@
   x:DataType="vm:LogViewViewModel"
 >
   <Grid RowDefinitions="Auto,*" Background="{DynamicResource SurfaceBrush}">
-    <StackPanel
+    <Grid
       Grid.Row="0"
-      Orientation="Horizontal"
-      Spacing="12"
-      Margin="12,7"
-      HorizontalAlignment="Right"
+      ColumnDefinitions="*,Auto"
     >
-      <CheckBox Content="Follow" IsChecked="{Binding IsFollowing, Mode=TwoWay}" />
-      <CheckBox Content="Show Inline" IsChecked="{Binding ShowContext, Mode=TwoWay}" />
-      <TextBlock
-        Text="{Binding MatchSummary}"
+      <views:SearchBar DataContext="{Binding Workspace}" />
+      <StackPanel
+        Grid.Column="1"
+        Orientation="Horizontal"
+        Spacing="8"
+        Margin="0,4,12,4"
         VerticalAlignment="Center"
-        Foreground="{DynamicResource MutedBrush}"
-      />
-    </StackPanel>
+      >
+        <CheckBox
+          Content="Follow"
+          FontSize="12"
+          Padding="{Binding Workspace.Settings.SecondaryPadding}"
+          MinHeight="{Binding Workspace.Settings.SecondaryControlHeight}"
+          IsChecked="{Binding IsFollowing, Mode=TwoWay}"
+        />
+        <CheckBox
+          Content="Show Inline"
+          FontSize="12"
+          Padding="{Binding Workspace.Settings.SecondaryPadding}"
+          MinHeight="{Binding Workspace.Settings.SecondaryControlHeight}"
+          IsChecked="{Binding ShowContext, Mode=TwoWay}"
+        />
+        <TextBlock
+          Text="{Binding MatchSummary}"
+          VerticalAlignment="Center"
+          Foreground="{DynamicResource MutedBrush}"
+        />
+      </StackPanel>
+    </Grid>
     <Grid x:Name="LogLayout" Grid.Row="1">
       <Grid.RowDefinitions>
         <RowDefinition Height="*" />

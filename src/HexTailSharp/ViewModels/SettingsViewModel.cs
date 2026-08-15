@@ -101,6 +101,10 @@ internal sealed class SettingsViewModel : ReactiveObject
             this.RaiseAndSetIfChanged(ref _density, value);
             this.RaisePropertyChanged(nameof(TabPadding));
             this.RaisePropertyChanged(nameof(TabCloseSize));
+            this.RaisePropertyChanged(nameof(SecondaryPadding));
+            this.RaisePropertyChanged(nameof(SearchInputPadding));
+            this.RaisePropertyChanged(nameof(SecondaryControlHeight));
+            this.RaisePropertyChanged(nameof(SecondaryCloseSize));
             if (!_syncing)
                 _ = CommitAsync(_owner.State.Settings with { Density = value });
         }
@@ -121,6 +125,26 @@ internal sealed class SettingsViewModel : ReactiveObject
             UiDensity.Cozy => 24,
             _ => 28,
         };
+
+    public Thickness SecondaryPadding => new(TabPadding.Left * 0.8, TabPadding.Top * 0.8);
+
+    public Thickness SearchInputPadding =>
+        new(
+            SecondaryPadding.Left,
+            SecondaryPadding.Top,
+            SecondaryCloseSize + 8,
+            SecondaryPadding.Bottom
+        );
+
+    public double SecondaryControlHeight =>
+        Density switch
+        {
+            UiDensity.Compact => 27,
+            UiDensity.Cozy => 30,
+            _ => 34,
+        };
+
+    public double SecondaryCloseSize => TabCloseSize * 0.8;
 
     public LogFontSize FontSize
     {

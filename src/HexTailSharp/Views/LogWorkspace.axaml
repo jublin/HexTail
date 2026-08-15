@@ -37,7 +37,7 @@
                   BorderBrush="{Binding HighlightBrush}"
                   BorderThickness="0,0,0,2"
                   CornerRadius="4"
-                  Padding="{Binding Workspace.Settings.TabPadding}"
+                  Padding="{Binding Workspace.Settings.SecondaryPadding}"
                 >
                   <Grid ColumnDefinitions="Auto,Auto,Auto" ColumnSpacing="8" MinWidth="72">
                     <TextBlock
@@ -56,8 +56,8 @@
                     <Button
                       Grid.Column="2"
                       Classes="icon tab-close search-close"
-                      Width="{Binding Workspace.Settings.TabCloseSize}"
-                      Height="{Binding Workspace.Settings.TabCloseSize}"
+                      Width="{Binding Workspace.Settings.SecondaryCloseSize}"
+                      Height="{Binding Workspace.Settings.SecondaryCloseSize}"
                       Command="{Binding Workspace.RemoveSearchCommand}"
                       CommandParameter="{Binding}"
                       IsVisible="{Binding IsSearchView}"
