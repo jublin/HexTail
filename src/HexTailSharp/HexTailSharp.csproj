@@ -13,8 +13,7 @@
     <PackageReference Include="Avalonia.Controls.ColorPicker" />
     <PackageReference Include="Avalonia.Desktop" />
     <PackageReference Include="Avalonia.Themes.Fluent" />
-    <PackageReference Include="FluentIcons.Avalonia" />
-    <PackageReference Include="FluentIcons.Avalonia.Fluent" />
+    <PackageReference Include="Optris.Icons.Avalonia.MaterialDesign" />
     <PackageReference Include="Polly" />
     <PackageReference Include="ReactiveUI.Avalonia.Reactive" />
     <PackageReference Include="System.Reactive" />

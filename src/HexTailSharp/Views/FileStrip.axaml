@@ -2,7 +2,7 @@
   xmlns="https://github.com/avaloniaui"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:vm="using:HexTailSharp.ViewModels"
-  xmlns:icons="using:FluentIcons.Avalonia"
+  xmlns:ic="https://github.com/projektanker/icons.avalonia"
   xmlns:i="using:Avalonia.Xaml.Interactivity"
   xmlns:drag="using:Avalonia.Xaml.Interactions.Draggable"
   x:Class="HexTailSharp.Views.FileStrip"
@@ -48,7 +48,7 @@
                   Command="{Binding $parent[UserControl].DataContext.CloseFileCommand}"
                   CommandParameter="{Binding}"
                 >
-                  <icons:FluentIcon Icon="Dismiss" />
+                  <ic:Icon Value="mdi-close" />
                 </Button>
               </Grid>
             </Border>

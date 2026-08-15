@@ -1,5 +1,7 @@
 using Avalonia;
 using HexTailSharp;
+using Optris.Icons.Avalonia;
+using Optris.Icons.Avalonia.MaterialDesign;
 using ReactiveUI.Avalonia.Reactive;
 
 internal static class Program
@@ -8,6 +10,10 @@ internal static class Program
     public static void Main(string[] args) =>
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
 
-    public static AppBuilder BuildAvaloniaApp() =>
-        AppBuilder.Configure<App>().UsePlatformDetect().UseReactiveUI(_ => { });
+    public static AppBuilder BuildAvaloniaApp()
+    {
+        IconProvider.Current.Register<MaterialDesignIconProvider>();
+
+        return AppBuilder.Configure<App>().UsePlatformDetect().UseReactiveUI(_ => { });
+    }
 }
