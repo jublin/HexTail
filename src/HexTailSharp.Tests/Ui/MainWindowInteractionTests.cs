@@ -65,6 +65,8 @@ public sealed class MainWindowInteractionTests
         FindVisual<ComboBox>(window, "FontSizeBox").SelectedItem = LogFontSize.Large;
         Assert.Equal(UiDensity.Compact, viewModel.Settings.Density);
         Assert.Equal(LogFontSize.Large, viewModel.Settings.FontSize);
+        Assert.Equal(8, viewModel.Settings.TabPadding.Left);
+        Assert.Equal(22, viewModel.Settings.TabCloseSize);
         window.Close();
     }
 
@@ -214,12 +216,17 @@ public sealed class MainWindowInteractionTests
                     && border.Classes.Contains("search-tab")
                 );
             Assert.Equal(Color.Parse("#F59E0B"), ((SolidColorBrush)header.BorderBrush!).Color);
+            Assert.Contains(
+                header.GetVisualDescendants().OfType<TextBlock>(),
+                text => text.Text == searchView.MatchSummary
+            );
 
             var closeButton = window
                 .GetVisualDescendants()
                 .OfType<Button>()
                 .Single(button => button.Classes.Contains("search-close") && button.IsVisible);
             Assert.IsType<FluentIcon>(closeButton.Content);
+            Assert.Equal(50, closeButton.CornerRadius.TopLeft);
             Click(closeButton);
             await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 0);
             window.Close();
