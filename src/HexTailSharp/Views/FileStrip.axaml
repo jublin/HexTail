@@ -33,12 +33,15 @@
                   Command="{Binding $parent[UserControl].DataContext.SelectFileCommand}"
                   CommandParameter="{Binding}"
                   HorizontalContentAlignment="Left"
+                  Padding="{Binding Workspace.Settings.TabPadding}"
                 >
                   <TextBlock Text="{Binding DisplayName}" />
                 </Button>
                 <Button
                   Grid.Column="1"
-                  Classes="icon"
+                  Classes="icon tab-close"
+                  Width="{Binding Workspace.Settings.TabCloseSize}"
+                  Height="{Binding Workspace.Settings.TabCloseSize}"
                   ToolTip.Tip="{Binding Path, StringFormat='Close {0}'}"
                   AutomationProperties.Name="{Binding Path, StringFormat='Close {0}'}"
                   Command="{Binding $parent[UserControl].DataContext.CloseFileCommand}"

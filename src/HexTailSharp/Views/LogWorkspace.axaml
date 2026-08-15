@@ -37,17 +37,27 @@
                   BorderBrush="{Binding HighlightBrush}"
                   BorderThickness="0,0,0,2"
                   CornerRadius="4"
-                  Padding="8,3"
+                  Padding="{Binding Workspace.Settings.TabPadding}"
                 >
-                  <Grid ColumnDefinitions="*,Auto" MinWidth="72">
+                  <Grid ColumnDefinitions="Auto,Auto,Auto" ColumnSpacing="8" MinWidth="72">
                     <TextBlock
                       Text="{Binding Header}"
                       Foreground="{DynamicResource TextBrush}"
                       VerticalAlignment="Center"
                     />
-                    <Button
+                    <TextBlock
                       Grid.Column="1"
-                      Classes="icon search-close"
+                      Text="{Binding MatchSummary}"
+                      Foreground="{DynamicResource MutedBrush}"
+                      FontSize="11"
+                      VerticalAlignment="Center"
+                      IsVisible="{Binding IsSearchView}"
+                    />
+                    <Button
+                      Grid.Column="2"
+                      Classes="icon tab-close search-close"
+                      Width="{Binding Workspace.Settings.TabCloseSize}"
+                      Height="{Binding Workspace.Settings.TabCloseSize}"
                       Command="{Binding Workspace.RemoveSearchCommand}"
                       CommandParameter="{Binding}"
                       IsVisible="{Binding IsSearchView}"

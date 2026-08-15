@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using Avalonia;
 using Avalonia.Media;
 using HexTailSharp.Persistence;
 using ReactiveUI;
@@ -98,10 +99,28 @@ internal sealed class SettingsViewModel : ReactiveObject
             if (_density == value)
                 return;
             this.RaiseAndSetIfChanged(ref _density, value);
+            this.RaisePropertyChanged(nameof(TabPadding));
+            this.RaisePropertyChanged(nameof(TabCloseSize));
             if (!_syncing)
                 _ = CommitAsync(_owner.State.Settings with { Density = value });
         }
     }
+
+    public Thickness TabPadding =>
+        Density switch
+        {
+            UiDensity.Compact => new(8, 2),
+            UiDensity.Cozy => new(10, 4),
+            _ => new(12, 6),
+        };
+
+    public double TabCloseSize =>
+        Density switch
+        {
+            UiDensity.Compact => 22,
+            UiDensity.Cozy => 24,
+            _ => 28,
+        };
 
     public LogFontSize FontSize
     {
