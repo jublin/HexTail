@@ -192,6 +192,45 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
+    public async Task SearchTabsShowColorAndCanBeClosed()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            await viewModel.OpenPathsCommand.Execute([path]);
+            window.Show();
+            viewModel.Query = "error";
+            Click(FindVisual<Button>(window, "AddSearchButton"));
+            await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 1);
+            Dispatcher.UIThread.RunJobs();
+
+            var searchView = viewModel.SelectedFile!.Views[1];
+            var header = window
+                .GetVisualDescendants()
+                .OfType<Border>()
+                .Single(border =>
+                    ReferenceEquals(border.DataContext, searchView)
+                    && border.Classes.Contains("search-tab")
+                );
+            Assert.Equal(Color.Parse("#F59E0B"), ((SolidColorBrush)header.Background!).Color);
+
+            Click(
+                window
+                    .GetVisualDescendants()
+                    .OfType<Button>()
+                    .Single(button => button.Classes.Contains("search-close") && button.IsVisible)
+            );
+            await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 0);
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task InvalidRegexStaysVisibleAndPreservesQuery()
     {
         var path = Path.GetTempFileName();

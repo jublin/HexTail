@@ -59,17 +59,10 @@ public partial class LogView : UserControl
 
     private void OnLinesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (_viewModel?.IsFollowing != true || e.Action is not NotifyCollectionChangedAction.Add)
+        if (_viewModel?.IsFollowing != true)
             return;
 
-        Dispatcher.UIThread.Post(
-            () =>
-            {
-                if (_viewModel?.IsFollowing == true && LogList.ItemCount > 0)
-                    LogList.ScrollIntoView(LogList.ItemCount - 1);
-            },
-            DispatcherPriority.Background
-        );
+        Dispatcher.UIThread.Post(ScrollLogToEnd, DispatcherPriority.Background);
     }
 
     private void OnContextLinesChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
