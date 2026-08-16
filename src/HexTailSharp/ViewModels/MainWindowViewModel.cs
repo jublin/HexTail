@@ -17,6 +17,17 @@ namespace HexTailSharp.ViewModels;
 
 internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 {
+    private static readonly string[] SearchColors =
+    [
+        "#F59E0B",
+        "#22D3EE",
+        "#A78BFA",
+        "#34D399",
+        "#FB7185",
+        "#60A5FA",
+        "#F97316",
+        "#E879F9",
+    ];
     private readonly AppState _state;
     private readonly string[] _startupPaths;
     private readonly IScheduler _scheduler;
@@ -369,17 +380,24 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
     private async Task AddSearchAsync()
     {
-        if (SelectedFile is null || string.IsNullOrWhiteSpace(Query))
+        var file = SelectedFile;
+        if (file is null || string.IsNullOrWhiteSpace(Query))
             return;
 
         try
         {
             _state.AddSearch(
-                SelectedFile.Model,
+                file.Model,
                 Query,
                 CompiledQuery.DetectMode(Query),
                 CaseSensitive,
                 ColorToHex(SearchColor)
+            );
+            SearchColor = Color.Parse(
+                NextSearchColor(
+                    file.Model.Searches.Select(search => search.Color),
+                    State.Settings.GlobalLabels.Select(label => label.Color)
+                )
             );
             Query = string.Empty;
             SearchError = null;
@@ -444,4 +462,29 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     }
 
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+
+    internal static string NextSearchColor(
+        IEnumerable<string> activeSearchColors,
+        IEnumerable<string> globalLabelColors
+    )
+    {
+        var used = activeSearchColors
+            .Concat(globalLabelColors)
+            .Select(color => color.Trim().ToUpperInvariant())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var next = SearchColors.FirstOrDefault(color => !used.Contains(color));
+        if (next is not null)
+            return next;
+
+        for (var red = 32; red <= 224; red += 32)
+        for (var green = 32; green <= 224; green += 32)
+        for (var blue = 32; blue <= 224; blue += 32)
+        {
+            next = $"#{red:X2}{green:X2}{blue:X2}";
+            if (!used.Contains(next))
+                return next;
+        }
+
+        return "#FFFFFF";
+    }
 }
