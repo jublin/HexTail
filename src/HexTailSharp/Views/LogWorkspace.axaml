@@ -33,10 +33,10 @@
                 <Border
                   Background="{DynamicResource RaisedBrush}"
                   BorderBrush="{Binding HighlightBrush}"
-                  BorderThickness="0,0,0,3"
+                  BorderThickness="3,3,3,0"
                   CornerRadius="4"
                   Padding="{Binding Workspace.Settings.SecondaryPadding}"
-                  MaxHeight="{Binding Workspace.Settings.SearchTabHeight}"
+                  MinHeight="{Binding Workspace.Settings.SearchTabHeight}"
                 >
                   <Grid ColumnDefinitions="Auto,Auto,Auto" ColumnSpacing="6" MinWidth="72">
                     <TextBlock
@@ -48,14 +48,14 @@
                       Grid.Column="1"
                       Text="{Binding MatchSummary}"
                       Foreground="{DynamicResource MutedBrush}"
-                      FontSize="11"
                       VerticalAlignment="Center"
                       IsVisible="{Binding IsSearchView}"
                     />
                     <Button
                       Grid.Column="2"
-                      Width="{Binding Workspace.Settings.SecondaryTabHeight}"
-                      Height="{Binding Workspace.Settings.SecondaryTabHeight}"
+                      Classes="icon tab-close search-close"
+                      Width="{Binding Workspace.Settings.SecondaryCloseSize}"
+                      Height="{Binding Workspace.Settings.SecondaryCloseSize}"
                       Command="{Binding Workspace.RemoveSearchCommand}"
                       CommandParameter="{Binding}"
                       IsVisible="{Binding IsSearchView}"
@@ -64,9 +64,7 @@
                     >
                       <ic:Icon
                         Value="mdi-close"
-                        IsVisible="{Binding $parent.IsPointerOver}"
                         FontSize="{Binding Workspace.Settings.SecondaryCloseButtonSize}"
-                        Background="{DynamicResource RaisedBrush}"
                         Foreground="{DynamicResource AccentBrush}"
                       />
                     </Button>

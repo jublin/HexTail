@@ -235,6 +235,12 @@ public sealed class MainWindowInteractionTests
                 .OfType<Button>()
                 .Single(button => button.Classes.Contains("search-close") && button.IsVisible);
             Assert.IsType<Icon>(closeButton.Content);
+            Assert.Equal(viewModel.Settings.SecondaryCloseSize, closeButton.Width);
+            Assert.Equal(
+                viewModel.Settings.SecondaryCloseButtonSize,
+                ((Icon)closeButton.Content).FontSize
+            );
+            Assert.True(((Icon)closeButton.Content).IsVisible);
             Assert.Equal(50, closeButton.CornerRadius.TopLeft);
             Click(closeButton);
             await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 0);
