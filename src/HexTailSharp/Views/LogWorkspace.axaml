@@ -42,12 +42,16 @@
                     <TextBlock
                       Text="{Binding Header}"
                       Foreground="{DynamicResource TextBrush}"
+                      FontSize="{Binding Workspace.Settings.SecondaryFontSize}"
+                      FontWeight="Normal"
                       VerticalAlignment="Center"
                     />
                     <TextBlock
                       Grid.Column="1"
                       Text="{Binding MatchSummary}"
                       Foreground="{DynamicResource MutedBrush}"
+                      FontSize="{Binding Workspace.Settings.SecondaryFontSize}"
+                      FontWeight="Normal"
                       VerticalAlignment="Center"
                       IsVisible="{Binding IsSearchView}"
                     />
