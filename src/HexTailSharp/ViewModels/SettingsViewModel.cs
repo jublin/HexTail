@@ -178,9 +178,9 @@ internal sealed class SettingsViewModel : ReactiveObject
     public double SecondaryFontSize =>
         Density switch
         {
-            UiDensity.Compact => 10,
-            UiDensity.Cozy => 11,
-            _ => 12,
+            UiDensity.Compact => 12,
+            UiDensity.Cozy => 14,
+            _ => 16,
         };
 
     public double SecondaryTabHeight => TabHeight * 0.8;

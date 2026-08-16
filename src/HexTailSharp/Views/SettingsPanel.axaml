@@ -27,7 +27,7 @@
         SelectedIndex="{Binding Settings.SectionIndex, Mode=TwoWay}"
         TabStripPlacement="Left"
       >
-        <TabItem Header="Labels">
+        <TabItem Header="Global Labels">
           <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="10" Margin="0,12,0,0">
               <TextBlock
@@ -38,13 +38,17 @@
               <ItemsControl ItemsSource="{Binding Settings.Labels}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:LabelSettingViewModel">
-                    <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2">
+                    <Grid ColumnDefinitions=".8*,.1*,.1*" Margin="0,2">
                       <TextBox
                         Text="{Binding Text, Mode=TwoWay}"
                         PlaceholderText="Text to highlight"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
                       />
                       <ColorPicker
                         Grid.Column="1"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
                         Color="{Binding Color, Mode=TwoWay}"
                         Width="48"
                         IsAlphaEnabled="False"
@@ -56,13 +60,13 @@
                         Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveLabelCommand}"
                         CommandParameter="{Binding}"
                       >
-                        <ic:Icon Value="mdi-close" />
+                        <ic:Icon Value="mdi-close" FontSize="18" />
                       </Button>
                     </Grid>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-              <Grid ColumnDefinitions="*,Auto,Auto">
+              <Grid ColumnDefinitions=".8*,.1*,.1*">
                 <TextBox
                   Text="{Binding Settings.NewLabelText, Mode=TwoWay}"
                   PlaceholderText="Text to highlight"
@@ -81,7 +85,7 @@
                   ToolTip.Tip="Add label"
                   Command="{Binding Settings.AddLabelCommand}"
                 >
-                  <ic:Icon Value="mdi-plus" />
+                  <ic:Icon Value="mdi-plus" FontSize="18" />
                 </Button>
               </Grid>
             </StackPanel>

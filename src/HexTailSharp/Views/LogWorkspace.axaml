@@ -33,12 +33,17 @@
                 <Border
                   Background="{DynamicResource RaisedBrush}"
                   BorderBrush="{Binding HighlightBrush}"
-                  BorderThickness="3,3,3,0"
+                  BorderThickness="2,2,0,0"
                   CornerRadius="4"
                   Padding="{Binding Workspace.Settings.SecondaryPadding}"
                   MinHeight="{Binding Workspace.Settings.SearchTabHeight}"
                 >
-                  <Grid ColumnDefinitions="Auto,Auto,Auto" ColumnSpacing="6" MinWidth="72">
+                  <Grid
+                    ColumnDefinitions="Auto,Auto,Auto"
+                    ColumnSpacing="6"
+                    MinWidth="72"
+                    Margin="3,0,2,0"
+                  >
                     <TextBlock
                       Text="{Binding Header}"
                       Foreground="{DynamicResource TextBrush}"
