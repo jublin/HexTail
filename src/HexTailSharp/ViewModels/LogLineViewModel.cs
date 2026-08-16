@@ -119,7 +119,7 @@ internal sealed class LogLineViewModel : ReactiveObject
                 new LogTextSegmentViewModel(
                     Line.Raw.Substring(range.Start, range.Length),
                     Brush(color),
-                    ThemeManager.Brush("TextBrush")
+                    new SolidColorBrush(ReadableHighlightColor(color))
                 )
             );
             cursor = range.Start + range.Length;
@@ -139,6 +139,25 @@ internal sealed class LogLineViewModel : ReactiveObject
     }
 
     private static SolidColorBrush Brush(string value) => new(Color.Parse(value));
+
+    internal static Color ReadableHighlightColor(string color)
+    {
+        var background = Color.Parse(color);
+        return RelativeLuminance(background) > 0.179 ? Colors.Black : Colors.White;
+    }
+
+    private static double RelativeLuminance(Color color)
+    {
+        static double Channel(byte value)
+        {
+            var normalized = value / 255d;
+            return normalized <= 0.03928
+                ? normalized / 12.92
+                : Math.Pow((normalized + 0.055) / 1.055, 2.4);
+        }
+
+        return 0.2126 * Channel(color.R) + 0.7152 * Channel(color.G) + 0.0722 * Channel(color.B);
+    }
 }
 
 public sealed class LogTextSegmentViewModel

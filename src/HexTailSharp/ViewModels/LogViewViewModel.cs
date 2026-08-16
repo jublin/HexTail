@@ -81,7 +81,6 @@ internal sealed class LogViewViewModel : ReactiveObject
 
     public void Sync(bool resetItems = false)
     {
-        FollowLatestLine();
         var lines = LinesFor();
         SyncRows(Lines, lines, isContext: false, resetItems);
 
@@ -232,19 +231,6 @@ internal sealed class LogViewViewModel : ReactiveObject
         return index >= 0
             && index < _file.Model.FollowSearches.Count
             && _file.Model.FollowSearches[index];
-    }
-
-    private void FollowLatestLine()
-    {
-        if (!IsFollowing)
-            return;
-
-        var index =
-            Search is null ? _file.Model.Buffer.Count - 1
-            : Search.Results.Count == 0 ? -1
-            : Search.Results[^1];
-        if (index >= 0 && index < _file.Model.Buffer.Count)
-            _file.Model.SelectedLine = index;
     }
 
     private IReadOnlyList<Line> LinesFor()
