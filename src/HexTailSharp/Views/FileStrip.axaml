@@ -9,7 +9,7 @@
   x:DataType="vm:MainWindowViewModel"
 >
   <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-    <StackPanel Orientation="Horizontal" Background="{DynamicResource RaisedBrush}">
+    <StackPanel Orientation="Horizontal" Background="{DynamicResource RaisedAltBrush}">
       <ItemsControl ItemsSource="{Binding Files}">
         <i:Interaction.Behaviors>
           <drag:ListReorderDragBehavior />

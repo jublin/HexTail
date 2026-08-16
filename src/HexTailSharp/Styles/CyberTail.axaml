@@ -4,12 +4,18 @@
 >
   <Styles.Resources>
     <SolidColorBrush x:Key="SurfaceBrush" Color="#090D12" />
+    <SolidColorBrush x:Key="SurfaceAltBrush" Color="#0C1219" />
     <SolidColorBrush x:Key="RaisedBrush" Color="#101722" />
+    <SolidColorBrush x:Key="RaisedAltBrush" Color="#151F2D" />
     <SolidColorBrush x:Key="ToolbarBrush" Color="#0D141E" />
     <SolidColorBrush x:Key="BorderBrush" Color="#263449" />
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="#354761" />
     <SolidColorBrush x:Key="TextBrush" Color="#E6EDF7" />
     <SolidColorBrush x:Key="MutedBrush" Color="#91A0B5" />
+    <SolidColorBrush x:Key="FaintTextBrush" Color="#65758D" />
     <SolidColorBrush x:Key="AccentBrush" Color="#28D7FE" />
+    <SolidColorBrush x:Key="AccentMutedBrush" Color="#157B94" />
+    <SolidColorBrush x:Key="AccentStrongBrush" Color="#7AEAFF" />
     <SolidColorBrush x:Key="SelectedTabBrush" Color="#28D7FE" />
     <SolidColorBrush x:Key="SuccessBrush" Color="#39E58C" />
     <SolidColorBrush x:Key="ErrorBrush" Color="#FF667A" />
@@ -21,11 +27,11 @@
   </Style>
   <Style Selector="Border.panel">
     <Setter Property="Background" Value="{DynamicResource RaisedBrush}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
   </Style>
   <Style Selector="Border.settings-sheet">
     <Setter Property="Background" Value="{DynamicResource RaisedBrush}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="12" />
   </Style>
@@ -33,13 +39,16 @@
     <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
     <Setter Property="Foreground" Value="{DynamicResource SurfaceBrush}" />
   </Style>
+  <Style Selector="Button.primary:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AccentStrongBrush}" />
+  </Style>
   <Style Selector="Button.icon">
     <Setter Property="Width" Value="34" />
     <Setter Property="Height" Value="34" />
     <Setter Property="Padding" Value="0" />
   </Style>
   <Style Selector="Button.search-close">
-    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentMutedBrush}" />
   </Style>
   <Style Selector="Button.tab-close">
     <Setter Property="CornerRadius" Value="50" />
