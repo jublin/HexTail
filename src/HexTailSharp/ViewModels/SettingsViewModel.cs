@@ -106,6 +106,7 @@ internal sealed class SettingsViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(SearchInputPadding));
             this.RaisePropertyChanged(nameof(SecondaryControlHeight));
             this.RaisePropertyChanged(nameof(SecondaryCloseSize));
+            this.RaisePropertyChanged(nameof(SecondaryFontSize));
             this.RaisePropertyChanged(nameof(SecondaryTabHeight));
             if (!_syncing)
                 _ = CommitAsync(_owner.State.Settings with { Density = value });
@@ -172,7 +173,15 @@ internal sealed class SettingsViewModel : ReactiveObject
 
     public double SecondaryCloseSize => TabCloseSize * 0.8;
 
-    public double SecondaryCloseButtonSize => TabHeight * 0.7;
+    public double SecondaryCloseButtonSize => TabHeight * 0.6;
+
+    public double SecondaryFontSize =>
+        Density switch
+        {
+            UiDensity.Compact => 10,
+            UiDensity.Cozy => 11,
+            _ => 12,
+        };
 
     public double SecondaryTabHeight => TabHeight * 0.8;
 
