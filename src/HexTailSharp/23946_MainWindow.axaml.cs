@@ -180,7 +180,7 @@ public partial class MainWindow : Window
 
     private void MainWindowKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Escape && ViewModel.SettingsOpen)
+        if (e.Key != Key.Escape)
         {
             ViewModel.SettingsOpen = false;
         }

@@ -11,6 +11,7 @@
     <SolidColorBrush x:Key="TextBrush" Color="#E6EDF7" />
     <SolidColorBrush x:Key="MutedBrush" Color="#91A0B5" />
     <SolidColorBrush x:Key="AccentBrush" Color="#28D7FE" />
+    <SolidColorBrush x:Key="SelectedTabBrush" Color="#28D7FE" />
     <SolidColorBrush x:Key="SuccessBrush" Color="#39E58C" />
     <SolidColorBrush x:Key="ErrorBrush" Color="#FF667A" />
     <SolidColorBrush x:Key="ErrorBackgroundBrush" Color="#2A1118" />

@@ -10,6 +10,7 @@
   Width="1920"
   Height="1080"
   MinWidth="720"
+  KeyDown="MainWindowKeyDown"
   MinHeight="480"
   Background="{DynamicResource SurfaceBrush}"
   DragDrop.AllowDrop="True"
