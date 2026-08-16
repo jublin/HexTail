@@ -7,6 +7,7 @@
     <SolidColorBrush x:Key="TextBrush" Color="#E6EDF7" />
     <SolidColorBrush x:Key="MutedBrush" Color="#91A0B5" />
     <SolidColorBrush x:Key="AccentBrush" Color="#28D7FE" />
+    <SolidColorBrush x:Key="SelectedTabBrush" Color="#28D7FE" />
     <SolidColorBrush x:Key="SuccessBrush" Color="#39E58C" />
     <SolidColorBrush x:Key="ErrorBrush" Color="#FF667A" />
     <x:Double x:Key="ControlHeight">34</x:Double>
@@ -48,6 +49,12 @@
   </Style>
   <Style Selector="Border.file-tab.selected">
     <Setter Property="Background" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource SelectedTabBrush}" />
+    <Setter Property="BorderThickness" Value="2,0,2,2" />
+  </Style>
+  <Style Selector="Border.file-tab">
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1,0,1,0" />
   </Style>
   <Style Selector="TextBlock.status-live">
     <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />

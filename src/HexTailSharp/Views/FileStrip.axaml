@@ -25,21 +25,22 @@
               Classes="file-tab"
               Classes.selected="{Binding IsSelected}"
               ToolTip.Tip="{Binding Path}"
-              BorderBrush="{DynamicResource BorderBrush}"
-              BorderThickness="0,0,1,0"
             >
-              <Grid ColumnDefinitions="*,Auto">
+              <DockPanel>
                 <Button
+                  DockPanel.Dock="Left"
+                  MinHeight="{Binding Workspace.Settings.FileStripHeight}"
                   Command="{Binding $parent[UserControl].DataContext.SelectFileCommand}"
                   CommandParameter="{Binding}"
                   HorizontalContentAlignment="Left"
+                  VerticalContentAlignment="Center"
                   Padding="{Binding Workspace.Settings.TabPadding}"
                   Height="{Binding Workspace.Settings.TabHeight}"
                 >
                   <TextBlock Text="{Binding DisplayName}" />
                 </Button>
                 <Button
-                  Grid.Column="1"
+                  DockPanel.Dock="Right"
                   Classes="icon tab-close"
                   Width="{Binding Workspace.Settings.TabCloseSize}"
                   Height="{Binding Workspace.Settings.TabCloseSize}"
@@ -50,7 +51,7 @@
                 >
                   <ic:Icon Value="mdi-close" />
                 </Button>
-              </Grid>
+              </DockPanel>
             </Border>
           </DataTemplate>
         </ItemsControl.ItemTemplate>

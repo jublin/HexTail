@@ -1,5 +1,6 @@
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -322,6 +323,14 @@ public sealed class MainWindowInteractionTests
             Assert.Contains("selected", tabs[first].Classes);
             Assert.DoesNotContain("selected", tabs[second].Classes);
             Assert.NotNull(tabs[first].Background);
+            Assert.Equal(new Thickness(2, 0, 2, 2), tabs[first].BorderThickness);
+            Assert.Equal(
+                "#FF28D7FE",
+                Assert
+                    .IsType<SolidColorBrush>(tabs[first].BorderBrush)
+                    .Color.ToString()
+                    .ToUpperInvariant()
+            );
             Assert.Equal(firstPath, ToolTip.GetTip(tabs[first]));
             var closeButton = window
                 .GetVisualDescendants()
