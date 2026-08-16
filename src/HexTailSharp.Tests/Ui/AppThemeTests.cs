@@ -8,6 +8,16 @@ namespace HexTailSharp.Tests.Ui;
 
 public sealed class AppThemeTests
 {
+    private static readonly string[] ShadeKeys =
+    [
+        "SurfaceAltBrush",
+        "RaisedAltBrush",
+        "BorderStrongBrush",
+        "FaintTextBrush",
+        "AccentMutedBrush",
+        "AccentStrongBrush",
+    ];
+
     [AvaloniaFact]
     public void AppLoadsCyberTailSemanticResources()
     {
@@ -24,9 +34,9 @@ public sealed class AppThemeTests
         var app = Assert.IsType<App>(Avalonia.Application.Current);
         ThemeManager.Apply("spotify");
         var spotify = Assert.IsType<SolidColorBrush>(app.Resources["AccentBrush"]);
-        Assert.Equal("#FF1ED760", spotify.Color.ToString().ToUpperInvariant());
+        Assert.Equal("#FF14D760", spotify.Color.ToString().ToUpperInvariant());
         Assert.Equal(
-            "#FF1ED760",
+            "#FF269750",
             Assert
                 .IsType<SolidColorBrush>(app.Resources["SelectedTabBrush"])
                 .Color.ToString()
@@ -37,7 +47,7 @@ public sealed class AppThemeTests
         var mocha = Assert.IsType<SolidColorBrush>(app.Resources["AccentBrush"]);
         Assert.Equal("#FFCBA6F7", mocha.Color.ToString().ToUpperInvariant());
         Assert.Equal(
-            "#FFF5C2E7",
+            "#FF3552E7",
             Assert
                 .IsType<SolidColorBrush>(app.Resources["SelectedTabBrush"])
                 .Color.ToString()
@@ -53,12 +63,25 @@ public sealed class AppThemeTests
                 .ToUpperInvariant()
         );
         Assert.Equal(
-            "#FF28D7FE",
+            "#FF4822FE",
             Assert
                 .IsType<SolidColorBrush>(app.Resources["SelectedTabBrush"])
                 .Color.ToString()
                 .ToUpperInvariant()
         );
         Assert.Contains("cyber-tail", ThemeCatalog.Names);
+    }
+
+    [AvaloniaFact]
+    public void EveryThemeProvidesShadeLevels()
+    {
+        var app = Assert.IsType<App>(Avalonia.Application.Current);
+
+        foreach (var theme in ThemeCatalog.Names)
+        {
+            ThemeManager.Apply(theme);
+            foreach (var key in ShadeKeys)
+                Assert.IsType<SolidColorBrush>(app.Resources[key]);
+        }
     }
 }

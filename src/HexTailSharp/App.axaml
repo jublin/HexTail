@@ -5,12 +5,18 @@
 >
   <Application.Resources>
     <SolidColorBrush x:Key="SurfaceBrush" Color="#090D12" />
+    <SolidColorBrush x:Key="SurfaceAltBrush" Color="#0C1219" />
     <SolidColorBrush x:Key="RaisedBrush" Color="#101722" />
+    <SolidColorBrush x:Key="RaisedAltBrush" Color="#151F2D" />
     <SolidColorBrush x:Key="ToolbarBrush" Color="#0D141E" />
     <SolidColorBrush x:Key="BorderBrush" Color="#263449" />
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="#354761" />
     <SolidColorBrush x:Key="TextBrush" Color="#E6EDF7" />
     <SolidColorBrush x:Key="MutedBrush" Color="#91A0B5" />
+    <SolidColorBrush x:Key="FaintTextBrush" Color="#65758D" />
     <SolidColorBrush x:Key="AccentBrush" Color="#28D7FE" />
+    <SolidColorBrush x:Key="AccentMutedBrush" Color="#157B94" />
+    <SolidColorBrush x:Key="AccentStrongBrush" Color="#7AEAFF" />
     <SolidColorBrush x:Key="SelectedTabBrush" Color="#28D7FE" />
     <SolidColorBrush x:Key="SuccessBrush" Color="#39E58C" />
     <SolidColorBrush x:Key="ErrorBrush" Color="#FF667A" />

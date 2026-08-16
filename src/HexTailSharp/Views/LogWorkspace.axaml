@@ -31,7 +31,7 @@
             <TabControl.ItemTemplate>
               <DataTemplate x:DataType="vm:LogViewViewModel">
                 <Border
-                  Background="{DynamicResource RaisedBrush}"
+                  Background="{DynamicResource RaisedAltBrush}"
                   BorderBrush="{Binding HighlightBrush}"
                   BorderThickness="2,2,0,0"
                   CornerRadius="4"
