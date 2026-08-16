@@ -1,11 +1,16 @@
+using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using HexTailSharp.Application;
 using HexTailSharp.Domain;
+using HexTailSharp.Persistence;
+using HexTailSharp.Tailing;
 using HexTailSharp.Tests.Support;
+using HexTailSharp.ViewModels;
 using HexTailSharp.Views;
 
 namespace HexTailSharp.Tests.Ui;
@@ -180,6 +185,39 @@ public sealed class LogViewTests
             Assert.True(log.IsFollowing);
             Assert.True(log.ContextVisible);
             window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task FollowDoesNotMoveInlineContextSelection()
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllLinesAsync(path, ["line 0", "line 1"]);
+        try
+        {
+            await using var viewModel = new MainWindowViewModel(
+                new AppState(new TailerService(), new TestPersistence()),
+                scheduler: ImmediateScheduler.Instance,
+                startPolling: false
+            );
+            await viewModel.OpenPathsCommand.Execute([path]);
+            var file = viewModel.SelectedFile!;
+            var log = file.Views[0];
+
+            file.Model.FollowAll = false;
+            file.Model.SelectedLine = 0;
+            log.ShowContext = true;
+            file.SyncViews();
+
+            file.Model.FollowAll = true;
+            file.Model.Buffer.Append(new Line("line 2"));
+            file.SyncViews();
+
+            Assert.Equal(0, file.Model.SelectedLine);
         }
         finally
         {
