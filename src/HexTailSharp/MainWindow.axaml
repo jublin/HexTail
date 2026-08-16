@@ -9,9 +9,9 @@
   Title="Hex Tail"
   Width="1920"
   Height="1080"
-  MinWidth="720"
+  MinWidth="1280"
   KeyDown="MainWindowKeyDown"
-  MinHeight="480"
+  MinHeight="720"
   Background="{DynamicResource SurfaceBrush}"
   DragDrop.AllowDrop="True"
 >
@@ -31,15 +31,7 @@
       Background="{DynamicResource SurfaceBrush}"
       HorizontalAlignment="Stretch"
     >
-      <!-- <Border -->
-      <!--   Grid.Row="0" -->
-      <!--   Classes="command-bar" -->
-      <!--   HorizontalAlignment="Stretch" -->
-      <!--   VerticalAlignment="Top" -->
-      <!--   BorderBrush="{DynamicResource BorderBrush}" -->
-      <!--   BorderThickness="0,0,0,1" -->
-      <!-- > -->
-      <Grid Grid.Row="0" ColumnDefinitions="Auto,*">
+      <Grid Grid.Row="0" ColumnDefinitions=".3*,.7*" HorizontalAlignment="Stretch">
         <CommandBar
           Grid.Column="0"
           HorizontalAlignment="Left"
@@ -60,7 +52,8 @@
             >
               <CommandBarButton.Icon>
                 <i:Icon
-                  Foreground="{DynamicResource TextBrush}"
+                  Foreground="{DynamicResource AccentBrush}"
+                  FontSize="22"
                   Value="mdi-menu"
                   Background="{DynamicResource SurfaceBrush}"
                 />
@@ -76,8 +69,9 @@
             >
               <CommandBarButton.Icon>
                 <i:Icon
-                  Foreground="{DynamicResource TextBrush}"
+                  Foreground="{DynamicResource AccentBrush}"
                   Value="mdi-content-save"
+                  FontSize="22"
                   Background="{DynamicResource SurfaceBrush}"
                 />
               </CommandBarButton.Icon>
@@ -90,16 +84,45 @@
               AutomationProperties.Name="Open log files"
             >
               <CommandBarButton.Icon>
-                i:Icon Foreground="{DynamicResource TextBrush}" Value="mdi-folder-open" Background="{DynamicResource SurfaceBrush}" />
+                <i:Icon
+                  Foreground="{DynamicResource AccentBrush}"
+                  Value="mdi-folder-open"
+                  FontSize="22"
+                  Background="{DynamicResource SurfaceBrush}"
+                />
               </CommandBarButton.Icon>
             </CommandBarButton>
           </CommandBar.PrimaryCommands>
         </CommandBar>
-        <views:WorkspaceError Grid.Column="0" IsVisible="False" />
+        <!-- <views:WorkspaceError Grid.Column="0" IsVisible="False" /> -->
+
+        <DockPanel Grid.Column="1" HorizontalAlignment="Right" Margin="0,0,5,0">
+          <views:SearchBar DataContext="{Binding }" DockPanel.Dock="Left" />
+
+          <ToggleSwitch
+            OnContent="Following"
+            OffContent="Not Following"
+            FontSize="12"
+            DockPanel.Dock="Right"
+            DataContext="{Binding SelectedFile}"
+            Padding="{Binding Workspace.Settings.SecondaryPadding}"
+            MinHeight="{Binding Workspace.Settings.SecondaryControlHeight}"
+            IsChecked="{Binding SelectedView.IsFollowing, Mode=TwoWay}"
+          />
+          <ToggleSwitch
+            OnContent="Inline Shown"
+            OffContent="No Inline"
+            FontSize="12"
+            DockPanel.Dock="Right"
+            DataContext="{Binding SelectedFile}"
+            Padding="{Binding Workspace.Settings.SecondaryPadding}"
+            MinHeight="{Binding Workspace.Settings.SecondaryControlHeight}"
+            IsChecked="{Binding ShowContext, Mode=TwoWay}"
+          />
+        </DockPanel>
       </Grid>
-      <!-- </Border> -->
-      <views:FileStrip Grid.Row="1" />
-      <views:LogWorkspace Grid.Row="2" />
+      <views:FileStrip Grid.Column="0" Grid.Row="1" />
+      <views:LogWorkspace Grid.Column="0" Grid.Row="2" />
     </Grid>
   </SplitView>
 </Window>

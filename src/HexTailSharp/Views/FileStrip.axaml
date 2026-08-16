@@ -23,6 +23,7 @@
           <DataTemplate x:DataType="vm:FileTabViewModel">
             <Border
               Classes="file-tab"
+              BorderBrush="{Binding SelectedTabBrush}"
               Classes.selected="{Binding IsSelected}"
               ToolTip.Tip="{Binding Path}"
             >

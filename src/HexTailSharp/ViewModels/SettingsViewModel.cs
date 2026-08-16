@@ -115,20 +115,36 @@ internal sealed class SettingsViewModel : ReactiveObject
     public Thickness TabPadding =>
         Density switch
         {
-            UiDensity.Compact => new(8, 2),
-            UiDensity.Cozy => new(10, 4),
-            _ => new(12, 6),
+            UiDensity.Compact => new(4, 2),
+            UiDensity.Cozy => new(6, 4),
+            _ => new(10, 6),
         };
 
     public double TabCloseSize =>
         Density switch
         {
             UiDensity.Compact => 22,
-            UiDensity.Cozy => 24,
-            _ => 28,
+            UiDensity.Cozy => 26,
+            _ => 30,
         };
 
     public double TabHeight =>
+        Density switch
+        {
+            UiDensity.Compact => 24,
+            UiDensity.Cozy => 30,
+            _ => 36,
+        };
+
+    public double FileStripHeight =>
+        Density switch
+        {
+            UiDensity.Compact => 32,
+            UiDensity.Cozy => 36,
+            _ => 40,
+        };
+
+    public double SearchTabHeight =>
         Density switch
         {
             UiDensity.Compact => 28,
@@ -136,25 +152,27 @@ internal sealed class SettingsViewModel : ReactiveObject
             _ => 36,
         };
 
-    public Thickness SecondaryPadding => new(TabPadding.Left * 0.8, TabPadding.Top * 0.8);
+    public Thickness SecondaryPadding => new(TabPadding.Left * 0.5, TabPadding.Top * 0.5);
 
     public Thickness SearchInputPadding =>
         new(
             SecondaryPadding.Left,
             SecondaryPadding.Top,
-            SecondaryCloseSize + 8,
+            SecondaryCloseSize + 5,
             SecondaryPadding.Bottom
         );
 
     public double SecondaryControlHeight =>
         Density switch
         {
-            UiDensity.Compact => 27,
-            UiDensity.Cozy => 30,
-            _ => 34,
+            UiDensity.Compact => 22,
+            UiDensity.Cozy => 28,
+            _ => 32,
         };
 
     public double SecondaryCloseSize => TabCloseSize * 0.8;
+
+    public double SecondaryCloseButtonSize => TabHeight * 0.7;
 
     public double SecondaryTabHeight => TabHeight * 0.8;
 

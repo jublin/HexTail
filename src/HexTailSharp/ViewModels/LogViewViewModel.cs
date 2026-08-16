@@ -56,7 +56,9 @@ internal sealed class LogViewViewModel : ReactiveObject
 
     public bool IsSearchView => Search is not null;
     public IBrush? HighlightBrush =>
-        Search is null ? null : new SolidColorBrush(Color.Parse(Search.Color));
+        Search is null
+            ? new SolidColorBrush(Colors.WhiteSmoke)
+            : new SolidColorBrush(Color.Parse(Search.Color));
     public bool ContextVisible => ShowContext && _file.Model.SelectedLine is not null;
     public GridLength ContextRowHeight => ContextVisible ? new(1, GridUnitType.Star) : new(0);
     public GridLength ContextSplitterHeight => ContextVisible ? new(4) : new(0);

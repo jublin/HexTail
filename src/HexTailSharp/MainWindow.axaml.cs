@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Notifications;
 using Avalonia.Input;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -15,6 +16,8 @@ namespace HexTailSharp;
 
 public partial class MainWindow : Window
 {
+    private WindowNotificationManager _notificationManager;
+
     public MainWindow()
         : this((string[]?)null) { }
 
@@ -34,6 +37,11 @@ public partial class MainWindow : Window
         InitializeComponent();
         ViewModel = viewModel;
         DataContext = ViewModel;
+        _notificationManager = new WindowNotificationManager(this)
+        {
+            Position = NotificationPosition.BottomRight,
+            MaxItems = 3,
+        };
         if (registerNativePicker)
             ViewModel.PickFiles.RegisterHandler(context => _ = HandlePickFilesAsync(context));
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
