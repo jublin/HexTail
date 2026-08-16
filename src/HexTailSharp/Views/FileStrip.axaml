@@ -23,7 +23,9 @@
           <DataTemplate x:DataType="vm:FileTabViewModel">
             <Border
               Classes="file-tab"
+              MinHeight="{Binding Workspace.Settings.TabHeight}"
               BorderBrush="{Binding SelectedTabBrush}"
+              Background="{DynamicResource SurfaceBrush}"
               Classes.selected="{Binding IsSelected}"
               ToolTip.Tip="{Binding Path}"
             >
