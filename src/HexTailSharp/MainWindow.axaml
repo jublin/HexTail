@@ -18,9 +18,9 @@
   <SplitView
     x:Name="SettingsSplitView"
     PanePlacement="Left"
-    OpenPaneLength="580"
+    OpenPaneLength="600"
     IsPaneOpen="{Binding SettingsOpen, Mode=TwoWay}"
-    DisplayMode="Inline"
+    DisplayMode="CompactOverlay"
   >
     <SplitView.Pane>
       <views:SettingsPanel />
