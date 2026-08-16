@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using Avalonia.Automation;
+using Avalonia.Media;
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
 using ReactiveUI;
@@ -25,6 +27,9 @@ internal sealed class FileTabViewModel : ReactiveObject
     public string Path => Model.Path;
     public string? Error => Model.Error;
     public bool IsSelected => ReferenceEquals(_owner.SelectedFile, this);
+
+    public IBrush SelectedTabBrush =>
+        IsSelected ? ThemeManager.Brush("SelectedTabBrush") : ThemeManager.Brush("MutedBrush");
     public ObservableCollection<LogViewViewModel> Views { get; } = [];
     public bool FollowAll
     {
@@ -57,6 +62,8 @@ internal sealed class FileTabViewModel : ReactiveObject
         get => _selectedViewIndex;
         set => this.RaiseAndSetIfChanged(ref _selectedViewIndex, Math.Max(0, value));
     }
+
+    public LogViewViewModel SelectedView => Views[SelectedViewIndex];
 
     public string SearchCount => $"{Model.Searches.Count:N0} search(es)";
 
