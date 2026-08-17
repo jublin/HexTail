@@ -1,5 +1,3 @@
-using System.Collections.ObjectModel;
-using System.Reactive;
 using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Media;
@@ -16,6 +14,8 @@ internal sealed class LogLineViewModel : ReactiveObject
 {
     private readonly LogViewViewModel _owner;
     private readonly FileTabViewModel _file;
+    private bool _isVisible;
+    private bool _renderDirty = true;
 
     internal LogLineViewModel(
         LogViewViewModel owner,
@@ -28,22 +28,12 @@ internal sealed class LogLineViewModel : ReactiveObject
         _file = file;
         Line = line;
         IsContext = isContext;
-        SelectCommand = ReactiveCommand.Create(() =>
-        {
-            _owner.SelectLineCommand.Execute(Line).Subscribe();
-        });
-        ToggleExpandedCommand = ReactiveCommand.Create(() =>
-        {
-            _owner.ToggleExpandedCommand.Execute(Line).Subscribe();
-        });
         Refresh();
     }
 
     public Line Line { get; }
     public bool IsContext { get; }
-    public ObservableCollection<LogTextSegmentViewModel> Segments { get; } = [];
-    public ReactiveCommand<Unit, Unit> SelectCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleExpandedCommand { get; }
+    public IReadOnlyList<LogTextSegmentViewModel> Segments { get; private set; } = [];
     public string ParsedFieldsText { get; private set; } = string.Empty;
     public bool HasParsedFields => Line.ParsedFields is { Count: > 0 };
     public bool IsExpanded { get; private set; }
@@ -73,16 +63,48 @@ internal sealed class LogLineViewModel : ReactiveObject
         Background = IsContext
             ? ThemeManager.Brush("RaisedBrush")
             : ThemeManager.Brush("SurfaceBrush");
-        ParsedFieldsText = Line.ParsedFields is { Count: > 0 }
-            ? string.Join("  ", Line.ParsedFields.Select(field => $"{field.Key}={field.Value}"))
-            : string.Empty;
+        ParsedFieldsText = string.Empty;
         IsExpanded =
             _file.Model.ExpandedLine is int index
             && index >= 0
             && index < _file.Model.Buffer.Count
             && ReferenceEquals(_file.Model.Buffer[index], Line);
 
-        Segments.Clear();
+        _renderDirty = true;
+        if (_isVisible)
+            Render();
+
+        this.RaisePropertyChanged(nameof(ParsedFieldsText));
+        this.RaisePropertyChanged(nameof(HasParsedFields));
+        this.RaisePropertyChanged(nameof(IsExpanded));
+        this.RaisePropertyChanged(nameof(FieldsVisible));
+        this.RaisePropertyChanged(nameof(FontSize));
+        this.RaisePropertyChanged(nameof(RowPadding));
+        this.RaisePropertyChanged(nameof(Foreground));
+        this.RaisePropertyChanged(nameof(Background));
+    }
+
+    internal void SetVisible(bool visible)
+    {
+        _isVisible = visible;
+        if (visible)
+            Render();
+    }
+
+    internal void Select() => _owner.SelectLineCommand.Execute(Line).Subscribe();
+
+    internal void ToggleExpanded() => _owner.ToggleExpandedCommand.Execute(Line).Subscribe();
+
+    private void Render()
+    {
+        if (!_renderDirty)
+            return;
+
+        var settings = _owner.Settings;
+        ParsedFieldsText = Line.ParsedFields is { Count: > 0 }
+            ? string.Join("  ", Line.ParsedFields.Select(field => $"{field.Key}={field.Value}"))
+            : string.Empty;
+        var segments = new List<LogTextSegmentViewModel>();
         var ranges = _file
             .Model.Searches.SelectMany(search =>
                 search.GetHighlights(Line).Select(range => (Range: range, Color: search.Color))
@@ -109,13 +131,13 @@ internal sealed class LogLineViewModel : ReactiveObject
             if (range.Start < cursor)
                 continue;
             if (range.Start > cursor)
-                Segments.Add(
+                segments.Add(
                     new LogTextSegmentViewModel(
                         Line.Raw[cursor..range.Start],
                         foreground: Foreground
                     )
                 );
-            Segments.Add(
+            segments.Add(
                 new LogTextSegmentViewModel(
                     Line.Raw.Substring(range.Start, range.Length),
                     Brush(color),
@@ -125,17 +147,13 @@ internal sealed class LogLineViewModel : ReactiveObject
             cursor = range.Start + range.Length;
         }
 
-        if (cursor < Line.Raw.Length || Segments.Count == 0)
-            Segments.Add(new LogTextSegmentViewModel(Line.Raw[cursor..], foreground: Foreground));
+        if (cursor < Line.Raw.Length || segments.Count == 0)
+            segments.Add(new LogTextSegmentViewModel(Line.Raw[cursor..], foreground: Foreground));
 
+        Segments = segments;
+        this.RaisePropertyChanged(nameof(Segments));
         this.RaisePropertyChanged(nameof(ParsedFieldsText));
-        this.RaisePropertyChanged(nameof(HasParsedFields));
-        this.RaisePropertyChanged(nameof(IsExpanded));
-        this.RaisePropertyChanged(nameof(FieldsVisible));
-        this.RaisePropertyChanged(nameof(FontSize));
-        this.RaisePropertyChanged(nameof(RowPadding));
-        this.RaisePropertyChanged(nameof(Foreground));
-        this.RaisePropertyChanged(nameof(Background));
+        _renderDirty = false;
     }
 
     private static SolidColorBrush Brush(string value) => new(Color.Parse(value));
