@@ -501,7 +501,11 @@ public sealed class MainWindowInteractionTests
     {
         var persistence = new DelayedPersistence
         {
-            Config = new AppConfig { Window = new AppWindowState { Width = 1234 } },
+            Config = new AppConfig
+            {
+                Window = new AppWindowState { Width = 1234 },
+                Settings = new AppSettings { Density = UiDensity.Compact },
+            },
         };
         var viewModel = new MainWindowViewModel(
             new AppState(new TailerService(), persistence),
@@ -511,7 +515,9 @@ public sealed class MainWindowInteractionTests
         var window = new MainWindow(viewModel);
 
         window.Show();
-        await WaitFor(() => window.Width == 1234);
+        await WaitFor(() =>
+            window.Width == 1234 && viewModel.Settings.Density == UiDensity.Compact
+        );
         window.Close();
     }
 
