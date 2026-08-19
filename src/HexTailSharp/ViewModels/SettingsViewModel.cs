@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Reactive.Concurrency;
 using Avalonia;
 using Avalonia.Media;
 using HexTailSharp.Persistence;
@@ -23,13 +24,16 @@ internal sealed class SettingsViewModel : ReactiveObject
     private bool _syncing;
     private ThemeOption _selectedTheme;
 
-    internal SettingsViewModel(MainWindowViewModel owner)
+    internal SettingsViewModel(MainWindowViewModel owner, IScheduler scheduler)
     {
         _owner = owner;
-        AddLabelCommand = ReactiveCommand.Create(AddLabel);
-        RemoveLabelCommand = ReactiveCommand.Create<LabelSettingViewModel>(RemoveLabel);
-        AddExclusionCommand = ReactiveCommand.Create(AddExclusion);
-        RemoveExclusionCommand = ReactiveCommand.Create<ExclusionSettingViewModel>(RemoveExclusion);
+        AddLabelCommand = ReactiveCommand.Create(AddLabel, scheduler);
+        RemoveLabelCommand = ReactiveCommand.Create<LabelSettingViewModel>(RemoveLabel, scheduler);
+        AddExclusionCommand = ReactiveCommand.Create(AddExclusion, scheduler);
+        RemoveExclusionCommand = ReactiveCommand.Create<ExclusionSettingViewModel>(
+            RemoveExclusion,
+            scheduler
+        );
         _selectedTheme = ThemeOptions[0];
     }
 

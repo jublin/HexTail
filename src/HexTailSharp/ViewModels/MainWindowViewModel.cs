@@ -56,7 +56,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         _startupPaths = startupPaths?.ToArray() ?? [];
         _scheduler = scheduler ?? RxSchedulers.MainThreadScheduler;
         _startPolling = startPolling;
-        Settings = new SettingsViewModel(this);
+        Settings = new SettingsViewModel(this, _scheduler);
         PickFiles = new Interaction<Unit, IReadOnlyList<string>>(_scheduler);
 
         OpenCommand = ReactiveCommand.CreateFromTask(OpenFilesAsync, _scheduler);

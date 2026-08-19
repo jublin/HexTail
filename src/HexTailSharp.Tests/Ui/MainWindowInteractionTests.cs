@@ -414,6 +414,7 @@ public sealed class MainWindowInteractionTests
             _ => completions++
         );
 
+        window.Show();
         foreach (var modifier in new[] { KeyModifiers.Control, KeyModifiers.Meta })
         {
             var key = window.PressShortcut(Key.O, modifier);
@@ -422,6 +423,9 @@ public sealed class MainWindowInteractionTests
             await WaitFor(() => completions > 0);
             completions = 0;
         }
+
+        window.Close();
+        await viewModel.DisposeAsync();
     }
 
     [AvaloniaTheory]
