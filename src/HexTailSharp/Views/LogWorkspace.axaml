@@ -31,6 +31,7 @@
             <TabControl.ItemTemplate>
               <DataTemplate x:DataType="vm:LogViewViewModel">
                 <Border
+                  Classes="search-tab"
                   Background="{DynamicResource RaisedAltBrush}"
                   BorderBrush="{Binding HighlightBrush}"
                   BorderThickness="2,2,0,0"

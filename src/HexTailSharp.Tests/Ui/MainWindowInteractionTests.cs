@@ -66,9 +66,9 @@ public sealed class MainWindowInteractionTests
         FindVisual<ComboBox>(window, "FontSizeBox").SelectedItem = LogFontSize.Large;
         Assert.Equal(UiDensity.Compact, viewModel.Settings.Density);
         Assert.Equal(LogFontSize.Large, viewModel.Settings.FontSize);
-        Assert.Equal(8, viewModel.Settings.TabPadding.Left);
+        Assert.Equal(4, viewModel.Settings.TabPadding.Left);
         Assert.Equal(22, viewModel.Settings.TabCloseSize);
-        Assert.Equal(10, viewModel.Settings.SecondaryFontSize);
+        Assert.Equal(12, viewModel.Settings.SecondaryFontSize);
         window.Close();
     }
 
@@ -332,7 +332,7 @@ public sealed class MainWindowInteractionTests
             Assert.NotNull(tabs[first].Background);
             Assert.Equal(new Thickness(2, 0, 2, 2), tabs[first].BorderThickness);
             Assert.Equal(
-                "#FF28D7FE",
+                "#FF4822FE",
                 Assert
                     .IsType<SolidColorBrush>(tabs[first].BorderBrush)
                     .Color.ToString()
