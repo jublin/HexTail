@@ -96,7 +96,11 @@ internal sealed class FileTabViewModel : ReactiveObject
 
     internal void ToggleExpanded(Line line) => _owner.ToggleExpanded(this, line);
 
-    internal void RaiseSelectionChanged() => this.RaisePropertyChanged(nameof(IsSelected));
+    internal void RaiseSelectionChanged()
+    {
+        this.RaisePropertyChanged(nameof(IsSelected));
+        this.RaisePropertyChanged(nameof(SelectedTabBrush));
+    }
 
     internal Task SetSearchFollowAsync(Search search, bool value)
     {
