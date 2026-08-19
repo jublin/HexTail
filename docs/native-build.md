@@ -1,12 +1,15 @@
 # Native desktop build
 
+See the [README](../README.md) for the user-facing quick start and feature
+overview. This page covers local development, publishing, and verification.
+
 HexTail is a native .NET 10/Avalonia 12.1.1 desktop executable. It does not
 start a browser or listen on a port. The UI is native Avalonia Fluent with a
 dark-only Cyber Tail theme. ReactiveUI.Avalonia.Reactive supplies the
 System.Reactive-compatible commands and schedulers.
 
-The shell uses native picker and drop interactions and a right responsive
-settings inspector. The log and context surfaces retain Avalonia's virtualized
+The shell uses native picker and drop interactions and a responsive settings
+inspector. The log and context surfaces retain Avalonia's virtualized
 lists for the bounded live-tail path.
 
 ## Build and test
