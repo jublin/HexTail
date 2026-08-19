@@ -318,6 +318,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
     internal void SetFileError(string? message)
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => SetFileError(message));
+            return;
+        }
+
         FileError = string.IsNullOrWhiteSpace(message) ? null : message;
     }
 
@@ -341,7 +347,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         try
         {
             await _state.OpenFileAsync(path);
-            FileError = null;
+            SetFileError(null);
         }
         catch (Exception ex)
             when (ex is IOException or UnauthorizedAccessException or ArgumentException)
@@ -427,6 +433,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     {
         if (_closed)
             return;
+
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(SyncFromState);
+            return;
+        }
 
         var files = _state.Files;
 
