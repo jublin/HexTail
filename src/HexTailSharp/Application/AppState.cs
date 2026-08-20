@@ -13,6 +13,7 @@ public sealed class AppState : IAsyncDisposable
     private readonly object _gate = new();
     private readonly ICredentialVault _credentials;
     private readonly IElasticApiClient _elastic;
+    private readonly ElasticHealthMonitor _health;
     private readonly List<FileTabState> _files = [];
     private AppSettings _settings;
     private int _nextFileId;
@@ -29,6 +30,8 @@ public sealed class AppState : IAsyncDisposable
         _persistence = persistence;
         _credentials = credentials ?? new OsCredentialVault();
         _elastic = elastic ?? new ElasticApiClient(new HttpClient());
+        _health = new ElasticHealthMonitor(_elastic, _credentials);
+        _health.Changed += NotifyChanged;
         _settings = NormalizeSettings(settings ?? new AppSettings());
     }
 
@@ -182,6 +185,44 @@ public sealed class AppState : IAsyncDisposable
             for (var i = 0; i < tab.FollowSearches.Count && i < persisted.FollowSearches.Count; i++)
                 tab.FollowSearches[i] = persisted.FollowSearches[i];
         }
+        foreach (var persisted in config.OpenElasticTabs)
+        {
+            try
+            {
+                var tab = await OpenElasticSourceAsync(
+                        persisted.SourceId,
+                        save: false,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                tab.FollowAll = persisted.FollowAll;
+                tab.ShowContext = persisted.ShowContext;
+                tab.ContextAbove = persisted.ContextAbove;
+                tab.ContextBelow = persisted.ContextBelow;
+                foreach (var search in persisted.Searches)
+                    try
+                    {
+                        tab.AddSearch(
+                            new Search(
+                                new CompiledQuery(search.Query, search.Mode, search.CaseSensitive),
+                                search.Color,
+                                tab.Buffer
+                            )
+                        );
+                    }
+                    catch (ArgumentException) { }
+                for (
+                    var i = 0;
+                    i < tab.FollowSearches.Count && i < persisted.FollowSearches.Count;
+                    i++
+                )
+                    tab.FollowSearches[i] = persisted.FollowSearches[i];
+            }
+            catch (ArgumentException) { }
+            catch (InvalidOperationException) { }
+        }
+        if (_settings.ElasticConnections.Count > 0)
+            await _health.CheckOnceAsync(_settings, cancellationToken).ConfigureAwait(false);
 
         lock (_gate)
         {
@@ -194,6 +235,11 @@ public sealed class AppState : IAsyncDisposable
                     )
                 );
             SelectedFile ??= _files.FirstOrDefault();
+            if (config.SelectedElasticSourceId is not null)
+                SelectedFile =
+                    _files.FirstOrDefault(file =>
+                        file.Source.ElasticSourceId == config.SelectedElasticSourceId
+                    ) ?? SelectedFile;
         }
         NotifyChanged();
     }
@@ -309,6 +355,10 @@ public sealed class AppState : IAsyncDisposable
 
     public bool IsElasticSourceOpen(string sourceId) =>
         Files.Any(file => file.Source.ElasticSourceId == sourceId);
+
+    public IReadOnlyDictionary<string, ElasticSourceHealth> ElasticSourceStatuses =>
+        _health.Statuses;
+    public bool HasElasticWarning => _health.HasWarning;
 
     public async ValueTask CloseFileAsync(
         FileTabState tab,
@@ -599,6 +649,8 @@ public sealed class AppState : IAsyncDisposable
         foreach (var file in files)
             await file.DisposeAsync().ConfigureAwait(false);
         await _tailers.DisposeAsync().ConfigureAwait(false);
+        _health.Changed -= NotifyChanged;
+        await _health.DisposeAsync().ConfigureAwait(false);
     }
 
     private void NotifyChanged() => Changed?.Invoke();

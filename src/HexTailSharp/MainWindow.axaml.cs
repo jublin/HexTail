@@ -189,9 +189,12 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void UpdateResponsiveLayout(double width) =>
+    private void UpdateResponsiveLayout(double width)
+    {
+        SettingsSplitView.OpenPaneLength = Math.Min(760, Math.Max(320, width - 48));
         SettingsSplitView.DisplayMode =
             width < 960 ? SplitViewDisplayMode.Overlay : SplitViewDisplayMode.Inline;
+    }
 
     private void MainWindowKeyDown(object? sender, KeyEventArgs e)
     {

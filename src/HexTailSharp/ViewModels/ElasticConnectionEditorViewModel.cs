@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Reactive;
 using HexTailSharp.Persistence;
 using ReactiveUI;
 using ReactiveUI.Reactive;
@@ -13,6 +14,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     {
         _owner = owner;
         Id = id;
+        SaveCommand = ReactiveCommand.CreateFromTask(SaveAsync);
     }
 
     public string Id { get; }
@@ -22,6 +24,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     public ElasticAuthMode AuthMode { get; set; }
     public string Username { get; set; } = string.Empty;
     public string Secret { get; set; } = string.Empty;
+    public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public string? DataViewId { get; set; }
     public string? DataViewTitle { get; set; }
     public string? TimeFieldName { get; set; }

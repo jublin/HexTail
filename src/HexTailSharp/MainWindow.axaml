@@ -18,7 +18,7 @@
   <SplitView
     x:Name="SettingsSplitView"
     PanePlacement="Left"
-    OpenPaneLength="600"
+    OpenPaneLength="760"
     IsPaneOpen="{Binding SettingsOpen, Mode=TwoWay}"
     DisplayMode="CompactOverlay"
   >
@@ -58,6 +58,26 @@
                   Background="{DynamicResource SurfaceBrush}"
                 />
               </CommandBarButton.Icon>
+            </CommandBarButton>
+            <CommandBarButton
+              x:Name="ElasticSourcesButton"
+              IsVisible="{Binding HasElasticSources}"
+              Label="Elastic sources"
+              ToolTip.Tip="Select Elastic sources"
+              AutomationProperties.Name="Elastic sources"
+            >
+              <CommandBarButton.Icon><i:Icon Value="mdi-cloud-check" FontSize="22" /></CommandBarButton.Icon>
+              <CommandBarButton.Flyout>
+                <Flyout>
+                  <ItemsControl ItemsSource="{Binding ElasticSources}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:ElasticSourceOptionViewModel">
+                        <CheckBox Content="{Binding DisplayName}" ToolTip.Tip="{Binding ToolTip}" IsChecked="{Binding IsOpen, Mode=TwoWay}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Flyout>
+              </CommandBarButton.Flyout>
             </CommandBarButton>
             <CommandBarSeparator />
             <CommandBarButton
