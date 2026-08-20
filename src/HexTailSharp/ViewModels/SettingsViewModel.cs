@@ -39,6 +39,7 @@ internal sealed class SettingsViewModel : ReactiveObject
 
     public ObservableCollection<LabelSettingViewModel> Labels { get; } = [];
     public ObservableCollection<ExclusionSettingViewModel> Exclusions { get; } = [];
+    public ObservableCollection<ElasticConnectionEditorViewModel> ElasticConnections { get; } = [];
     public IReadOnlyList<UiDensity> DensityOptions { get; } =
     [UiDensity.Comfortable, UiDensity.Cozy, UiDensity.Compact];
     public IReadOnlyList<LogFontSize> FontSizeOptions { get; } =
@@ -63,7 +64,7 @@ internal sealed class SettingsViewModel : ReactiveObject
         get => _sectionIndex;
         set
         {
-            var index = Math.Clamp(value, 0, 3);
+            var index = Math.Clamp(value, 0, 4);
             if (_sectionIndex == index)
                 return;
             this.RaiseAndSetIfChanged(ref _sectionIndex, index);
@@ -72,6 +73,7 @@ internal sealed class SettingsViewModel : ReactiveObject
                 1 => "exclusions",
                 2 => "display",
                 3 => "appearance",
+                4 => "elastic",
                 _ => "labels",
             };
         }
@@ -265,6 +267,28 @@ internal sealed class SettingsViewModel : ReactiveObject
             if (index == Exclusions.Count)
                 Exclusions.Add(new ExclusionSettingViewModel(this, index));
             Exclusions[index].Sync(settings.GlobalExcludeLabels[index]);
+
+            while (ElasticConnections.Count > settings.ElasticConnections.Count)
+                ElasticConnections.RemoveAt(ElasticConnections.Count - 1);
+            for (
+                var connectionIndex = 0;
+                connectionIndex < settings.ElasticConnections.Count;
+                connectionIndex++
+            )
+            {
+                if (connectionIndex == ElasticConnections.Count)
+                    ElasticConnections.Add(
+                        new ElasticConnectionEditorViewModel(
+                            this,
+                            settings.ElasticConnections[connectionIndex].Id
+                        )
+                    );
+                var connection = settings.ElasticConnections[connectionIndex];
+                var editor = ElasticConnections[connectionIndex];
+                editor.Name = connection.Name;
+                editor.KibanaUrl = connection.KibanaUrl;
+                editor.ElasticsearchUrl = connection.ElasticsearchUrl;
+            }
         }
     }
 
@@ -352,6 +376,18 @@ internal sealed class SettingsViewModel : ReactiveObject
         {
             IsSaving = false;
         }
+    }
+
+    internal AppSettings ConnectionSettingsWith(ElasticConnectionSettings connection, string secret)
+    {
+        _ = secret;
+        return _owner.State.Settings with
+        {
+            ElasticConnections = _owner
+                .State.Settings.ElasticConnections.Where(item => item.Id != connection.Id)
+                .Append(connection)
+                .ToList(),
+        };
     }
 
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";

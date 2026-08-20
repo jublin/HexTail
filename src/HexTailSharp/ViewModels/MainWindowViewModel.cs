@@ -125,6 +125,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
     public AppState State => _state;
     public ObservableCollection<FileTabViewModel> Files { get; } = [];
+    public ObservableCollection<ElasticSourceOptionViewModel> ElasticSources { get; } = [];
+    public bool HasElasticSources => ElasticSources.Count > 0;
+    public bool HasElasticWarning =>
+        _state
+            .Settings.ElasticConnections.SelectMany(connection => connection.Sources)
+            .Any(source => !_state.IsElasticSourceOpen(source.Id));
     public SettingsViewModel Settings { get; }
     public Interaction<Unit, IReadOnlyList<string>> PickFiles { get; }
     public ReactiveCommand<Unit, Unit> OpenCommand { get; }
@@ -464,6 +470,25 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             ? null
             : Files.FirstOrDefault(item => ReferenceEquals(item.Model, _state.SelectedFile));
         Settings.Sync(_state.Settings);
+        var configured = _state
+            .Settings.ElasticConnections.SelectMany(connection =>
+                connection.Sources.Select(source =>
+                    (
+                        source.Id,
+                        source.DisplayName,
+                        ToolTip: $"{connection.Name}: {source.DisplayName}"
+                    )
+                )
+            )
+            .ToArray();
+        for (var index = ElasticSources.Count - 1; index >= 0; index--)
+            if (!configured.Any(item => item.Id == ElasticSources[index].SourceId))
+                ElasticSources.RemoveAt(index);
+        foreach (var item in configured)
+            if (!ElasticSources.Any(option => option.SourceId == item.Id))
+                ElasticSources.Add(
+                    new ElasticSourceOptionViewModel(this, item.Id, item.DisplayName, item.ToolTip)
+                );
         this.RaisePropertyChanged(nameof(FileCount));
         this.RaisePropertyChanged(nameof(HasFile));
         this.RaisePropertyChanged(nameof(ShowEmpty));
@@ -471,6 +496,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         this.RaisePropertyChanged(nameof(FileError));
         this.RaisePropertyChanged(nameof(HasFileError));
         this.RaisePropertyChanged(nameof(HasSearchError));
+        this.RaisePropertyChanged(nameof(HasElasticSources));
+        this.RaisePropertyChanged(nameof(HasElasticWarning));
     }
 
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
