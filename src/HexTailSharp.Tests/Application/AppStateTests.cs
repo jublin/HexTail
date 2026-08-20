@@ -1,12 +1,81 @@
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
+using HexTailSharp.Elastic;
 using HexTailSharp.Persistence;
 using HexTailSharp.Tailing;
+using HexTailSharp.Tests.Support;
 
 namespace HexTailSharp.Tests.Application;
 
 public sealed class AppStateTests
 {
+    [Fact]
+    public async Task SaveElasticConnection_RestoresSecretAndSettingsWhenJsonSaveFails()
+    {
+        var old = ElasticConnection("Old name");
+        var updated = old with { Name = "New name" };
+        var persistence = new MemoryPersistence { SaveError = new IOException("disk full") };
+        var vault = new InMemoryCredentialVault();
+        vault.Set("elastic-1", "old-secret");
+        await using var state = new AppState(
+            NewTailers(),
+            persistence,
+            new AppSettings { ElasticConnections = [old] },
+            vault,
+            new FakeElasticApiClient()
+        );
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            state.SaveElasticConnectionAsync(updated, "new-secret").AsTask()
+        );
+
+        Assert.Equal("old-secret", vault.Get("elastic-1"));
+        Assert.Equal("Old name", Assert.Single(state.Settings.ElasticConnections).Name);
+        persistence.SaveError = null;
+    }
+
+    [Fact]
+    public async Task OpenElasticSource_UsesOneTabPerStableSourceAndPersistsRemoteSelection()
+    {
+        var connection = ElasticConnection("ops") with
+        {
+            Sources =
+            [
+                new ElasticSourceSettings
+                {
+                    Id = "source-1",
+                    ServerValue = "api",
+                    NamespaceValue = "prod",
+                },
+            ],
+        };
+        var persistence = new MemoryPersistence();
+        await using var state = new AppState(
+            NewTailers(),
+            persistence,
+            new AppSettings { ElasticConnections = [connection] },
+            new InMemoryCredentialVault(),
+            new FakeElasticApiClient()
+        );
+
+        var first = await state.OpenElasticSourceAsync("source-1", save: false);
+        var second = await state.OpenElasticSourceAsync("source-1", save: false);
+        await state.SaveAsync();
+
+        Assert.Same(first, second);
+        Assert.Equal(LogSourceKind.Elastic, first.Source.Kind);
+        Assert.Equal("api-prod", first.DisplayName);
+        Assert.Empty(Assert.IsType<AppConfig>(persistence.Config).OpenFiles);
+        Assert.Equal(
+            "source-1",
+            Assert.Single(Assert.IsType<AppConfig>(persistence.Config).OpenElasticTabs).SourceId
+        );
+        Assert.Equal(
+            "source-1",
+            Assert.IsType<AppConfig>(persistence.Config).SelectedElasticSourceId
+        );
+    }
+
     [Fact]
     public async Task OpenAndDrain_AppendsParsedLinesAndUpdatesSearches()
     {
@@ -205,14 +274,32 @@ public sealed class AppStateTests
     private sealed class MemoryPersistence : IAppPersistence
     {
         public AppConfig? Config { get; private set; }
+        public Exception? SaveError { get; set; }
 
         public ValueTask<AppConfig?> LoadAsync(CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(Config);
 
         public ValueTask SaveAsync(AppConfig config, CancellationToken cancellationToken = default)
         {
+            if (SaveError is not null)
+                throw SaveError;
             Config = AppConfigJson.Deserialize(AppConfigJson.Serialize(config));
             return ValueTask.CompletedTask;
         }
     }
+
+    private static ElasticConnectionSettings ElasticConnection(string name) =>
+        new()
+        {
+            Id = "elastic-1",
+            Name = name,
+            KibanaUrl = "https://kibana/",
+            ElasticsearchUrl = "https://elastic/",
+            DataViewId = "view",
+            DataViewTitle = "logs-*",
+            TimeFieldName = "@timestamp",
+            ServerField = "server",
+            NamespaceField = "namespace",
+            OutputFields = ["message"],
+        };
 }

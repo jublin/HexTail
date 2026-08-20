@@ -24,6 +24,21 @@ namespace HexTailSharp.Tests.Ui;
 public sealed class MainWindowInteractionTests
 {
     [AvaloniaFact]
+    public void ElasticToolbarButtonIsHiddenWhenNoSourcesAreConfigured()
+    {
+        var window = TestWindow.Create(out var viewModel);
+        window.Show();
+
+        var pane = window.FindControl<SplitView>("SettingsSplitView")!;
+        var button = window.FindControl<CommandBarButton>("ElasticSourcesButton")!;
+
+        Assert.Equal(760, pane.OpenPaneLength);
+        Assert.False(viewModel.HasElasticSources);
+        Assert.False(button.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void MainWindowComposesDedicatedWorkspaceControls()
     {
         var window = TestWindow.Create(out _);

@@ -3,6 +3,7 @@ using System.Reactive;
 using System.Reactive.Concurrency;
 using Avalonia;
 using Avalonia.Media;
+using HexTailSharp.Elastic;
 using HexTailSharp.Persistence;
 using ReactiveUI;
 using ReactiveUI.Reactive;
@@ -23,6 +24,7 @@ internal sealed class SettingsViewModel : ReactiveObject
     private bool _isSaving;
     private bool _syncing;
     private ThemeOption _selectedTheme;
+    private ElasticConnectionEditorViewModel? _selectedElasticConnection;
 
     internal SettingsViewModel(MainWindowViewModel owner, IScheduler scheduler)
     {
@@ -34,6 +36,12 @@ internal sealed class SettingsViewModel : ReactiveObject
             RemoveExclusion,
             scheduler
         );
+        AddElasticConnectionCommand = ReactiveCommand.Create(AddElasticConnection, scheduler);
+        RemoveElasticConnectionCommand =
+            ReactiveCommand.CreateFromTask<ElasticConnectionEditorViewModel>(
+                RemoveElasticConnectionAsync,
+                scheduler
+            );
         _selectedTheme = ThemeOptions[0];
     }
 
@@ -52,6 +60,17 @@ internal sealed class SettingsViewModel : ReactiveObject
     public ReactiveCommand<LabelSettingViewModel, Unit> RemoveLabelCommand { get; }
     public ReactiveCommand<Unit, Unit> AddExclusionCommand { get; }
     public ReactiveCommand<ExclusionSettingViewModel, Unit> RemoveExclusionCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddElasticConnectionCommand { get; }
+    public ReactiveCommand<
+        ElasticConnectionEditorViewModel,
+        Unit
+    > RemoveElasticConnectionCommand { get; }
+
+    public ElasticConnectionEditorViewModel? SelectedElasticConnection
+    {
+        get => _selectedElasticConnection;
+        set => this.RaiseAndSetIfChanged(ref _selectedElasticConnection, value);
+    }
 
     public string Section
     {
@@ -267,29 +286,30 @@ internal sealed class SettingsViewModel : ReactiveObject
             if (index == Exclusions.Count)
                 Exclusions.Add(new ExclusionSettingViewModel(this, index));
             Exclusions[index].Sync(settings.GlobalExcludeLabels[index]);
-
-            while (ElasticConnections.Count > settings.ElasticConnections.Count)
-                ElasticConnections.RemoveAt(ElasticConnections.Count - 1);
-            for (
-                var connectionIndex = 0;
-                connectionIndex < settings.ElasticConnections.Count;
-                connectionIndex++
-            )
-            {
-                if (connectionIndex == ElasticConnections.Count)
-                    ElasticConnections.Add(
-                        new ElasticConnectionEditorViewModel(
-                            this,
-                            settings.ElasticConnections[connectionIndex].Id
-                        )
-                    );
-                var connection = settings.ElasticConnections[connectionIndex];
-                var editor = ElasticConnections[connectionIndex];
-                editor.Name = connection.Name;
-                editor.KibanaUrl = connection.KibanaUrl;
-                editor.ElasticsearchUrl = connection.ElasticsearchUrl;
-            }
         }
+
+        while (ElasticConnections.Count > settings.ElasticConnections.Count)
+            ElasticConnections.RemoveAt(ElasticConnections.Count - 1);
+        for (
+            var connectionIndex = 0;
+            connectionIndex < settings.ElasticConnections.Count;
+            connectionIndex++
+        )
+        {
+            if (connectionIndex == ElasticConnections.Count)
+                ElasticConnections.Add(
+                    new ElasticConnectionEditorViewModel(
+                        this,
+                        settings.ElasticConnections[connectionIndex].Id
+                    )
+                );
+            var connection = settings.ElasticConnections[connectionIndex];
+            var editor = ElasticConnections[connectionIndex];
+            editor.Name = connection.Name;
+            editor.KibanaUrl = connection.KibanaUrl;
+            editor.ElasticsearchUrl = connection.ElasticsearchUrl;
+        }
+        SelectedElasticConnection ??= ElasticConnections.FirstOrDefault();
     }
 
     internal Task CommitLabelAsync(int index, string text, Color color)
@@ -388,6 +408,32 @@ internal sealed class SettingsViewModel : ReactiveObject
                 .Append(connection)
                 .ToList(),
         };
+    }
+
+    internal Task SaveElasticConnectionAsync(ElasticConnectionSettings connection, string secret) =>
+        _owner.State.SaveElasticConnectionAsync(connection, secret).AsTask();
+
+    internal Task<IReadOnlyList<ElasticDataViewSummary>> GetDataViewsAsync(
+        ElasticConnectionSettings connection
+    ) => _owner.State.GetDataViewsAsync(connection);
+
+    internal Task<ElasticDataView> GetDataViewAsync(
+        ElasticConnectionSettings connection,
+        string dataViewId
+    ) => _owner.State.GetDataViewAsync(connection, dataViewId);
+
+    private void AddElasticConnection()
+    {
+        var editor = new ElasticConnectionEditorViewModel(this, Guid.NewGuid().ToString("N"));
+        ElasticConnections.Add(editor);
+        SelectedElasticConnection = editor;
+    }
+
+    private async Task RemoveElasticConnectionAsync(ElasticConnectionEditorViewModel editor)
+    {
+        await _owner.State.RemoveElasticConnectionAsync(editor.Id);
+        ElasticConnections.Remove(editor);
+        SelectedElasticConnection = ElasticConnections.FirstOrDefault();
     }
 
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";

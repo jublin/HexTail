@@ -8,6 +8,7 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
 {
     private readonly MainWindowViewModel _owner;
     private bool _isOpen;
+    private string _status = "Checking";
 
     internal ElasticSourceOptionViewModel(
         MainWindowViewModel owner,
@@ -25,6 +26,18 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
     public string SourceId { get; }
     public string DisplayName { get; }
     public string ToolTip { get; }
+    public string Status
+    {
+        get => _status;
+        private set => this.RaiseAndSetIfChanged(ref _status, value);
+    }
+    public string StatusGlyph =>
+        Status switch
+        {
+            "Connected" => "mdi-cloud-check",
+            "Checking" => "mdi-cloud-sync",
+            _ => "mdi-cloud-alert",
+        };
     public bool IsOpen
     {
         get => _isOpen;
@@ -47,9 +60,25 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
 
     private async Task ToggleAsync(bool open)
     {
-        if (open)
-            await _owner.State.OpenElasticSourceAsync(SourceId);
-        else
-            await CloseAsync();
+        try
+        {
+            if (open)
+                await _owner.State.OpenElasticSourceAsync(SourceId);
+            else
+                await CloseAsync();
+        }
+        catch
+        {
+            _isOpen = !open;
+            this.RaisePropertyChanged(nameof(IsOpen));
+        }
+    }
+
+    internal void Sync(bool isOpen, string status)
+    {
+        _isOpen = isOpen;
+        this.RaisePropertyChanged(nameof(IsOpen));
+        Status = status;
+        this.RaisePropertyChanged(nameof(StatusGlyph));
     }
 }

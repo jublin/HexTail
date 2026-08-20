@@ -127,10 +127,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ObservableCollection<FileTabViewModel> Files { get; } = [];
     public ObservableCollection<ElasticSourceOptionViewModel> ElasticSources { get; } = [];
     public bool HasElasticSources => ElasticSources.Count > 0;
-    public bool HasElasticWarning =>
-        _state
-            .Settings.ElasticConnections.SelectMany(connection => connection.Sources)
-            .Any(source => !_state.IsElasticSourceOpen(source.Id));
+    public bool HasElasticWarning => _state.HasElasticWarning;
+    public string ElasticSourceIcon => HasElasticWarning ? "mdi-cloud-alert" : "mdi-cloud-check";
     public SettingsViewModel Settings { get; }
     public Interaction<Unit, IReadOnlyList<string>> PickFiles { get; }
     public ReactiveCommand<Unit, Unit> OpenCommand { get; }
@@ -167,7 +165,11 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     {
         get =>
             _fileError
-            ?? (SelectedFile?.Model.Error is { } error ? $"{SelectedFile.Path}: {error}" : null);
+            ?? (
+                SelectedFile?.Model.Error is { } error
+                    ? $"{(SelectedFile.Model.Source.Kind == LogSourceKind.File ? SelectedFile.Path : SelectedFile.Model.Source.ToolTip)}: {error}"
+                    : null
+            );
         private set
         {
             this.RaiseAndSetIfChanged(ref _fileError, value);
@@ -489,6 +491,13 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 ElasticSources.Add(
                     new ElasticSourceOptionViewModel(this, item.Id, item.DisplayName, item.ToolTip)
                 );
+        foreach (var option in ElasticSources)
+        {
+            var status =
+                _state.ElasticSourceStatuses.GetValueOrDefault(option.SourceId)?.Status.ToString()
+                ?? "Checking";
+            option.Sync(_state.IsElasticSourceOpen(option.SourceId), status);
+        }
         this.RaisePropertyChanged(nameof(FileCount));
         this.RaisePropertyChanged(nameof(HasFile));
         this.RaisePropertyChanged(nameof(ShowEmpty));
@@ -498,6 +507,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         this.RaisePropertyChanged(nameof(HasSearchError));
         this.RaisePropertyChanged(nameof(HasElasticSources));
         this.RaisePropertyChanged(nameof(HasElasticWarning));
+        this.RaisePropertyChanged(nameof(ElasticSourceIcon));
     }
 
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";

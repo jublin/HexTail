@@ -14,9 +14,13 @@ public sealed class AppState : IAsyncDisposable
     private readonly ICredentialVault _credentials;
     private readonly IElasticApiClient _elastic;
     private readonly ElasticHealthMonitor _health;
+    private readonly CancellationTokenSource _healthStop = new();
+    private readonly SemaphoreSlim _healthSignal = new(0, 1);
     private readonly List<FileTabState> _files = [];
     private AppSettings _settings;
     private int _nextFileId;
+    private Task? _healthLoop;
+    private int _disposed;
 
     public AppState(
         LogSourceService tailers,
@@ -78,8 +82,6 @@ public sealed class AppState : IAsyncDisposable
                     }
                 );
             await SaveAsync(cancellationToken).ConfigureAwait(false);
-            if (!authenticated && previous is not null)
-                _credentials.Delete(connection.Id);
         }
         catch
         {
@@ -94,7 +96,10 @@ public sealed class AppState : IAsyncDisposable
             }
             throw;
         }
+        if (!authenticated && previous is not null)
+            _credentials.Delete(connection.Id);
         NotifyChanged();
+        SignalHealthCheck();
     }
 
     public async ValueTask RemoveElasticConnectionAsync(
@@ -129,6 +134,7 @@ public sealed class AppState : IAsyncDisposable
         finally
         {
             NotifyChanged();
+            SignalHealthCheck();
         }
     }
 
@@ -223,6 +229,7 @@ public sealed class AppState : IAsyncDisposable
         }
         if (_settings.ElasticConnections.Count > 0)
             await _health.CheckOnceAsync(_settings, cancellationToken).ConfigureAwait(false);
+        StartHealthLoop();
 
         lock (_gate)
         {
@@ -374,6 +381,7 @@ public sealed class AppState : IAsyncDisposable
         }
         await tab.DisposeAsync().ConfigureAwait(false);
         NotifyChanged();
+        SignalHealthCheck();
         await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -525,6 +533,7 @@ public sealed class AppState : IAsyncDisposable
         lock (_gate)
             _settings = NormalizeSettings(settings);
         NotifyChanged();
+        SignalHealthCheck();
         await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -565,7 +574,7 @@ public sealed class AppState : IAsyncDisposable
                     tab.Buffer.Clear();
                     break;
                 case SourceError error:
-                    tab.Error = $"Tailer error: {error.Message}";
+                    tab.Error = $"Source error: {error.Message}";
                     break;
                 case SourceRecovered:
                     tab.Error = null;
@@ -589,6 +598,7 @@ public sealed class AppState : IAsyncDisposable
             config = new AppConfig
             {
                 OpenFiles = _files
+                    .Where(tab => tab.Source.Kind == LogSourceKind.File)
                     .Select(tab => new PersistedFileTab
                     {
                         Path = tab.Path,
@@ -631,7 +641,8 @@ public sealed class AppState : IAsyncDisposable
                             .ToList(),
                     })
                     .ToList(),
-                SelectedFilePath = SelectedFile?.Path,
+                SelectedFilePath =
+                    SelectedFile?.Source.Kind == LogSourceKind.File ? SelectedFile.Path : null,
                 SelectedElasticSourceId = SelectedFile?.Source.ElasticSourceId,
                 Window = Window,
                 Settings = _settings,
@@ -642,6 +653,8 @@ public sealed class AppState : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
         await SaveAsync().ConfigureAwait(false);
         FileTabState[] files;
         lock (_gate)
@@ -650,10 +663,50 @@ public sealed class AppState : IAsyncDisposable
             await file.DisposeAsync().ConfigureAwait(false);
         await _tailers.DisposeAsync().ConfigureAwait(false);
         _health.Changed -= NotifyChanged;
+        _healthStop.Cancel();
+        SignalHealthCheck();
+        if (_healthLoop is not null)
+        {
+            try
+            {
+                await _healthLoop.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (_healthStop.IsCancellationRequested) { }
+        }
         await _health.DisposeAsync().ConfigureAwait(false);
+        _healthSignal.Dispose();
+        _healthStop.Dispose();
     }
 
     private void NotifyChanged() => Changed?.Invoke();
+
+    private void SignalHealthCheck()
+    {
+        if (_healthSignal.CurrentCount == 0)
+            _healthSignal.Release();
+    }
+
+    private void StartHealthLoop()
+    {
+        if (_healthLoop is not null)
+            return;
+        _healthLoop = Task.Run(
+            async () =>
+            {
+                while (!_healthStop.IsCancellationRequested)
+                {
+                    await _healthSignal
+                        .WaitAsync(TimeSpan.FromSeconds(30), _healthStop.Token)
+                        .ConfigureAwait(false);
+                    if (_settings.ElasticConnections.Count > 0)
+                        await _health
+                            .CheckOnceAsync(_settings, _healthStop.Token)
+                            .ConfigureAwait(false);
+                }
+            },
+            _healthStop.Token
+        );
+    }
 
     private static AppSettings NormalizeSettings(AppSettings settings)
     {
@@ -695,21 +748,14 @@ public sealed class AppState : IAsyncDisposable
     ) =>
         (connections ?? [])
             .Where(connection =>
-                connection is not null
-                && !string.IsNullOrWhiteSpace(connection.Id)
-                && !string.IsNullOrWhiteSpace(connection.Name)
+                connection is not null && !string.IsNullOrWhiteSpace(connection.Id)
             )
             .GroupBy(connection => connection.Id.Trim(), StringComparer.Ordinal)
             .Select(group =>
             {
                 var connection = group.First();
                 var sources = (connection.Sources ?? [])
-                    .Where(source =>
-                        source is not null
-                        && !string.IsNullOrWhiteSpace(source.Id)
-                        && !string.IsNullOrWhiteSpace(source.ServerValue)
-                        && !string.IsNullOrWhiteSpace(source.NamespaceValue)
-                    )
+                    .Where(source => source is not null && !string.IsNullOrWhiteSpace(source.Id))
                     .GroupBy(source => source.Id.Trim(), StringComparer.Ordinal)
                     .Select(sourceGroup =>
                     {
@@ -800,6 +846,23 @@ public sealed class AppState : IAsyncDisposable
         )
             throw new ArgumentException(
                 "The Elastic data view and field mappings are incomplete.",
+                nameof(connection)
+            );
+        var pairs = connection
+            .Sources.Select(source => (source.ServerValue.Trim(), source.NamespaceValue.Trim()))
+            .ToArray();
+        if (
+            pairs.Any(pair =>
+                string.IsNullOrWhiteSpace(pair.Item1) || string.IsNullOrWhiteSpace(pair.Item2)
+            )
+        )
+            throw new ArgumentException(
+                "Elastic source values cannot be blank.",
+                nameof(connection)
+            );
+        if (pairs.Distinct().Count() != pairs.Length)
+            throw new ArgumentException(
+                "Elastic source values must be unique.",
                 nameof(connection)
             );
     }

@@ -108,7 +108,11 @@ internal sealed class ElasticTailer : ILogTailer
         }
         finally
         {
-            await _client.ClosePitAsync(_connection, _secret, pitId, CancellationToken.None);
+            try
+            {
+                await _client.ClosePitAsync(_connection, _secret, pitId, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         }
     }
 
@@ -131,6 +135,7 @@ internal sealed class ElasticTailer : ILogTailer
     private async Task RunAsync()
     {
         var reportedError = false;
+        var transientAttempt = 0;
         while (!_stop.IsCancellationRequested)
         {
             try
@@ -139,6 +144,7 @@ internal sealed class ElasticTailer : ILogTailer
                 if (reportedError)
                     _events.TryWrite(new SourceRecovered(SourceId));
                 reportedError = false;
+                transientAttempt = 0;
                 await _delay(PollInterval, _stop.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (_stop.IsCancellationRequested)
@@ -153,7 +159,8 @@ internal sealed class ElasticTailer : ILogTailer
             catch (ElasticTransientException exception)
             {
                 ReportError(exception.Message, ref reportedError);
-                await _delay(TimeSpan.FromSeconds(2), _stop.Token).ConfigureAwait(false);
+                var seconds = Math.Min(30, 1 << Math.Min(transientAttempt++, 4));
+                await _delay(TimeSpan.FromSeconds(seconds), _stop.Token).ConfigureAwait(false);
             }
             catch (Exception exception)
             {

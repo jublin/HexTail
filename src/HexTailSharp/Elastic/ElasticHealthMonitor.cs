@@ -34,6 +34,20 @@ public sealed class ElasticHealthMonitor : IAsyncDisposable
         CancellationToken cancellationToken = default
     )
     {
+        var checking = settings
+            .ElasticConnections.SelectMany(connection => connection.Sources)
+            .GroupBy(source => source.Id, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => new ElasticSourceHealth(
+                    group.Key,
+                    ElasticConnectionStatus.Checking,
+                    "Checking",
+                    _now()
+                ),
+                StringComparer.Ordinal
+            );
+        Publish(checking);
         var next = new Dictionary<string, ElasticSourceHealth>(StringComparer.Ordinal);
         foreach (var connection in settings.ElasticConnections)
         {
@@ -46,9 +60,11 @@ public sealed class ElasticHealthMonitor : IAsyncDisposable
                     : null;
                 if (
                     string.IsNullOrWhiteSpace(connection.DataViewId)
+                    || string.IsNullOrWhiteSpace(connection.DataViewTitle)
                     || string.IsNullOrWhiteSpace(connection.TimeFieldName)
                     || string.IsNullOrWhiteSpace(connection.ServerField)
                     || string.IsNullOrWhiteSpace(connection.NamespaceField)
+                    || connection.OutputFields.Count == 0
                 )
                     throw new ArgumentException("The Elastic connection is incomplete.");
                 view = await _client.GetDataViewAsync(
@@ -126,14 +142,25 @@ public sealed class ElasticHealthMonitor : IAsyncDisposable
                 next[source.Id] = new ElasticSourceHealth(source.Id, status, message, _now());
             }
         }
-        if (!_statuses.OrderBy(item => item.Key).SequenceEqual(next.OrderBy(item => item.Key)))
-        {
-            _statuses.Clear();
-            foreach (var item in next)
-                _statuses[item.Key] = item.Value;
-            Changed?.Invoke();
-        }
+        Publish(next);
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+    private void Publish(IReadOnlyDictionary<string, ElasticSourceHealth> next)
+    {
+        var changed =
+            _statuses.Count != next.Count
+            || next.Any(item =>
+                !_statuses.TryGetValue(item.Key, out var previous)
+                || previous.Status != item.Value.Status
+                || previous.Message != item.Value.Message
+            );
+        if (!changed)
+            return;
+        _statuses.Clear();
+        foreach (var item in next)
+            _statuses[item.Key] = item.Value;
+        Changed?.Invoke();
+    }
 }

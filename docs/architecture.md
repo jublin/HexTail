@@ -19,8 +19,8 @@ flowchart LR
     B[Native picker] --> S
     C[Drag and drop] --> S
     D[session.json] --> S
-    S --> T[TailerService]
-    T --> E[Tailer events]
+    S --> T[LogSourceService]
+    T --> E[Source events]
     E --> F[FileBuffer]
     F --> Q[Searches and highlights]
     F --> V[Virtualized Avalonia views]

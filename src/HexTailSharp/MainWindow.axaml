@@ -67,7 +67,7 @@
               AutomationProperties.Name="Elastic sources"
             >
               <CommandBarButton.Icon>
-                <i:Icon Value="mdi-cloud-check" FontSize="22" />
+                <i:Icon Value="{Binding ElasticSourceIcon}" FontSize="22" />
               </CommandBarButton.Icon>
               <CommandBarButton.Flyout>
                 <Flyout>
@@ -77,6 +77,7 @@
                         <CheckBox
                           Content="{Binding DisplayName}"
                           ToolTip.Tip="{Binding ToolTip}"
+                          AutomationProperties.Name="{Binding ToolTip}"
                           IsChecked="{Binding IsOpen, Mode=TwoWay}"
                         />
                       </DataTemplate>
