@@ -74,12 +74,15 @@
                   <ItemsControl ItemsSource="{Binding ElasticSources}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:ElasticSourceOptionViewModel">
-                        <CheckBox
-                          Content="{Binding DisplayName}"
-                          ToolTip.Tip="{Binding ToolTip}"
-                          AutomationProperties.Name="{Binding ToolTip}"
-                          IsChecked="{Binding IsOpen, Mode=TwoWay}"
-                        />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <i:Icon Value="{Binding StatusGlyph}" />
+                          <CheckBox
+                            Content="{Binding DisplayName}"
+                            ToolTip.Tip="{Binding ToolTip}"
+                            AutomationProperties.Name="{Binding ToolTip}"
+                            IsChecked="{Binding IsOpen, Mode=TwoWay}"
+                          />
+                        </StackPanel>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>

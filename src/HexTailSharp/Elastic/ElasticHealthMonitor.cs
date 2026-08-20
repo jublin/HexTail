@@ -157,7 +157,11 @@ public sealed class ElasticHealthMonitor : IAsyncDisposable
                 || previous.Message != item.Value.Message
             );
         if (!changed)
+        {
+            foreach (var item in next)
+                _statuses[item.Key] = item.Value;
             return;
+        }
         _statuses.Clear();
         foreach (var item in next)
             _statuses[item.Key] = item.Value;
