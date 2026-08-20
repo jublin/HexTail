@@ -141,12 +141,16 @@
             <TextBlock Text="Density" />
             <ComboBox
               x:Name="DensityBox"
+              HorizontalContentAlignment="Left"
+              HorizontalAlignment="Stretch"
               Name="DensityBox"
               ItemsSource="{Binding Settings.DensityOptions}"
               SelectedItem="{Binding Settings.Density, Mode=TwoWay}"
             />
             <TextBlock Text="Log font size" />
             <ComboBox
+              HorizontalContentAlignment="Left"
+              HorizontalAlignment="Stretch"
               x:Name="FontSizeBox"
               Name="FontSizeBox"
               ItemsSource="{Binding Settings.FontSizeOptions}"
