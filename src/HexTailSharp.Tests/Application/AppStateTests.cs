@@ -80,6 +80,8 @@ public sealed class AppStateTests
         Assert.Empty(tab.Searches);
         Assert.Equal(3, tab.ContextAbove);
         Assert.Equal(10, tab.ContextBelow);
+        Assert.Empty(config.OpenElasticTabs);
+        Assert.Empty(config.Settings.ElasticConnections);
     }
 
     [Fact]

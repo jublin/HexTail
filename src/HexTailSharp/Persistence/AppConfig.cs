@@ -7,9 +7,23 @@ namespace HexTailSharp.Persistence;
 public sealed class AppConfig
 {
     public List<PersistedFileTab> OpenFiles { get; init; } = [];
+    public List<PersistedElasticTab> OpenElasticTabs { get; init; } = [];
     public string? SelectedFilePath { get; init; }
+    public string? SelectedElasticSourceId { get; init; }
     public AppWindowState Window { get; init; } = new();
     public AppSettings Settings { get; init; } = new();
+}
+
+public sealed class PersistedElasticTab
+{
+    public required string SourceId { get; init; }
+    public List<PersistedSearch> Searches { get; init; } = [];
+    public bool FollowAll { get; init; } = true;
+    public List<bool> FollowSearches { get; init; } = [];
+    public bool ShowContext { get; init; }
+    public int? SelectedLine { get; init; }
+    public int ContextAbove { get; init; } = 3;
+    public int ContextBelow { get; init; } = 10;
 }
 
 public sealed class PersistedFileTab
@@ -53,6 +67,7 @@ public sealed record AppSettings
     public UiDensity Density { get; init; } = UiDensity.Comfortable;
     public LogFontSize LogFontSize { get; init; } = LogFontSize.Medium;
     public SettingsMenuAlignment SettingsMenuAlignment { get; init; } = SettingsMenuAlignment.Right;
+    public List<ElasticConnectionSettings> ElasticConnections { get; init; } = [];
 
     public bool Excludes(string text) =>
         GlobalExcludeLabels.Any(label => text.Contains(label, StringComparison.OrdinalIgnoreCase));
@@ -69,6 +84,38 @@ public sealed record AppSettings
                 yield return new LabelHighlight(start, label.Text.Length, label.Color);
         }
     }
+}
+
+public enum ElasticAuthMode
+{
+    Anonymous,
+    Basic,
+    ApiKey,
+}
+
+public sealed record ElasticConnectionSettings
+{
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public required string KibanaUrl { get; init; }
+    public required string ElasticsearchUrl { get; init; }
+    public ElasticAuthMode AuthMode { get; init; }
+    public string? Username { get; init; }
+    public string? DataViewId { get; init; }
+    public string? DataViewTitle { get; init; }
+    public string? TimeFieldName { get; init; }
+    public string? ServerField { get; init; }
+    public string? NamespaceField { get; init; }
+    public List<string> OutputFields { get; init; } = [];
+    public List<ElasticSourceSettings> Sources { get; init; } = [];
+}
+
+public sealed record ElasticSourceSettings
+{
+    public required string Id { get; init; }
+    public required string ServerValue { get; init; }
+    public required string NamespaceValue { get; init; }
+    public string DisplayName => $"{ServerValue}-{NamespaceValue}";
 }
 
 public static class ThemeCatalog
