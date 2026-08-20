@@ -6,7 +6,9 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using HexTailSharp.Application;
+using HexTailSharp.Elastic;
 using HexTailSharp.Persistence;
+using HexTailSharp.Security;
 using HexTailSharp.Tailing;
 using HexTailSharp.ViewModels;
 using HexTailSharp.Views;
@@ -24,7 +26,12 @@ public partial class MainWindow : Window
     public MainWindow(string[]? startupPaths)
         : this(
             new MainWindowViewModel(
-                new AppState(new LogSourceService(), new JsonFileAppPersistence()),
+                new AppState(
+                    new LogSourceService(),
+                    new JsonFileAppPersistence(),
+                    credentials: new OsCredentialVault(),
+                    elastic: new ElasticApiClient(new HttpClient())
+                ),
                 startupPaths
             )
         ) { }

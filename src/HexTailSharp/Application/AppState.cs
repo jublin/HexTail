@@ -1,5 +1,7 @@
 using HexTailSharp.Domain;
+using HexTailSharp.Elastic;
 using HexTailSharp.Persistence;
+using HexTailSharp.Security;
 using HexTailSharp.Tailing;
 
 namespace HexTailSharp.Application;
@@ -9,6 +11,8 @@ public sealed class AppState : IAsyncDisposable
     private readonly LogSourceService _tailers;
     private readonly IAppPersistence _persistence;
     private readonly object _gate = new();
+    private readonly ICredentialVault _credentials;
+    private readonly IElasticApiClient _elastic;
     private readonly List<FileTabState> _files = [];
     private AppSettings _settings;
     private int _nextFileId;
@@ -16,11 +20,15 @@ public sealed class AppState : IAsyncDisposable
     public AppState(
         LogSourceService tailers,
         IAppPersistence persistence,
-        AppSettings? settings = null
+        AppSettings? settings = null,
+        ICredentialVault? credentials = null,
+        IElasticApiClient? elastic = null
     )
     {
         _tailers = tailers;
         _persistence = persistence;
+        _credentials = credentials ?? new OsCredentialVault();
+        _elastic = elastic ?? new ElasticApiClient(new HttpClient());
         _settings = NormalizeSettings(settings ?? new AppSettings());
     }
 
@@ -36,6 +44,102 @@ public sealed class AppState : IAsyncDisposable
     public AppWindowState Window { get; private set; } = new();
     public AppSettings Settings => _settings;
     public event Action? Changed;
+
+    internal string? GetElasticSecret(string connectionId) => _credentials.Get(connectionId);
+
+    public async ValueTask SaveElasticConnectionAsync(
+        ElasticConnectionSettings connection,
+        string? secret,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ValidateElasticConnection(connection, secret);
+        var previousSettings = _settings;
+        var previous = previousSettings.ElasticConnections.FirstOrDefault(item =>
+            item.Id == connection.Id
+        );
+        var previousSecret = previous is null ? null : _credentials.Get(connection.Id);
+        var authenticated = connection.AuthMode is ElasticAuthMode.Basic or ElasticAuthMode.ApiKey;
+        if (authenticated)
+            _credentials.Set(connection.Id, secret!);
+        try
+        {
+            lock (_gate)
+                _settings = NormalizeSettings(
+                    previousSettings with
+                    {
+                        ElasticConnections = previousSettings
+                            .ElasticConnections.Where(item => item.Id != connection.Id)
+                            .Append(connection)
+                            .ToList(),
+                    }
+                );
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
+            if (!authenticated && previous is not null)
+                _credentials.Delete(connection.Id);
+        }
+        catch
+        {
+            lock (_gate)
+                _settings = previousSettings;
+            if (authenticated)
+            {
+                if (previousSecret is null)
+                    _credentials.Delete(connection.Id);
+                else
+                    _credentials.Set(connection.Id, previousSecret);
+            }
+            throw;
+        }
+        NotifyChanged();
+    }
+
+    public async ValueTask RemoveElasticConnectionAsync(
+        string connectionId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var previous = _settings;
+        lock (_gate)
+            _settings = NormalizeSettings(
+                previous with
+                {
+                    ElasticConnections = previous
+                        .ElasticConnections.Where(item => item.Id != connectionId)
+                        .ToList(),
+                }
+            );
+        try
+        {
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            lock (_gate)
+                _settings = previous;
+            throw;
+        }
+        try
+        {
+            _credentials.Delete(connectionId);
+        }
+        finally
+        {
+            NotifyChanged();
+        }
+    }
+
+    public Task<IReadOnlyList<ElasticDataViewSummary>> GetDataViewsAsync(
+        ElasticConnectionSettings connection,
+        CancellationToken cancellationToken = default
+    ) => _elastic.GetDataViewsAsync(connection, SecretFor(connection), cancellationToken);
+
+    public Task<ElasticDataView> GetDataViewAsync(
+        ElasticConnectionSettings connection,
+        string dataViewId,
+        CancellationToken cancellationToken = default
+    ) =>
+        _elastic.GetDataViewAsync(connection, SecretFor(connection), dataViewId, cancellationToken);
 
     public async ValueTask RestoreAsync(CancellationToken cancellationToken = default)
     {
@@ -503,6 +607,61 @@ public sealed class AppState : IAsyncDisposable
         color is { Length: 4 or 7 } && color[0] == '#' && color[1..].All(Uri.IsHexDigit)
             ? color
             : "#f59e0b";
+
+    private string? SecretFor(ElasticConnectionSettings connection) =>
+        connection.AuthMode is ElasticAuthMode.Basic or ElasticAuthMode.ApiKey
+            ? _credentials.Get(connection.Id)
+            : null;
+
+    private static void ValidateElasticConnection(
+        ElasticConnectionSettings connection,
+        string? secret
+    )
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        if (!Guid.TryParse(connection.Id, out _) && string.IsNullOrWhiteSpace(connection.Id))
+            throw new ArgumentException("A connection ID is required.", nameof(connection));
+        if (
+            !Uri.TryCreate(connection.KibanaUrl, UriKind.Absolute, out var kibana)
+            || kibana.Scheme is not ("http" or "https")
+        )
+            throw new ArgumentException(
+                "Kibana URL must be absolute HTTP or HTTPS.",
+                nameof(connection)
+            );
+        if (
+            !Uri.TryCreate(connection.ElasticsearchUrl, UriKind.Absolute, out var elastic)
+            || elastic.Scheme is not ("http" or "https")
+        )
+            throw new ArgumentException(
+                "Elasticsearch URL must be absolute HTTP or HTTPS.",
+                nameof(connection)
+            );
+        if (
+            connection.AuthMode == ElasticAuthMode.Basic
+            && (string.IsNullOrWhiteSpace(connection.Username) || string.IsNullOrWhiteSpace(secret))
+        )
+            throw new ArgumentException(
+                "Basic authentication requires a username and secret.",
+                nameof(connection)
+            );
+        if (connection.AuthMode == ElasticAuthMode.ApiKey && string.IsNullOrWhiteSpace(secret))
+            throw new ArgumentException(
+                "API-key authentication requires a secret.",
+                nameof(connection)
+            );
+        if (
+            string.IsNullOrWhiteSpace(connection.DataViewTitle)
+            || string.IsNullOrWhiteSpace(connection.TimeFieldName)
+            || string.IsNullOrWhiteSpace(connection.ServerField)
+            || string.IsNullOrWhiteSpace(connection.NamespaceField)
+            || connection.OutputFields.Count == 0
+        )
+            throw new ArgumentException(
+                "The Elastic data view and field mappings are incomplete.",
+                nameof(connection)
+            );
+    }
 }
 
 public static class LogParserSelector
