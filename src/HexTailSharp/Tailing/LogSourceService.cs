@@ -7,20 +7,20 @@ namespace HexTailSharp.Tailing;
 /// all tailers push immutable <see cref="TailerEvent"/>s into a single unbounded channel
 /// that the state layer drains. Dispose to stop all tailers and complete the channel.
 /// </summary>
-public sealed class TailerService : IAsyncDisposable
+public sealed class LogSourceService : IAsyncDisposable
 {
-    private readonly Channel<TailerEvent> _channel = Channel.CreateUnbounded<TailerEvent>();
+    private readonly Channel<SourceEvent> _channel = Channel.CreateUnbounded<SourceEvent>();
     private readonly TailerOptions _options;
     private readonly List<FileTailer> _tailers = [];
     private readonly Lock _gate = new();
 
-    public TailerService(TailerOptions? options = null)
+    public LogSourceService(TailerOptions? options = null)
     {
         _options = options ?? TailerOptions.Default;
     }
 
     /// <summary>Stream of events from all started tailers. Drained by the state layer each frame.</summary>
-    public ChannelReader<TailerEvent> Events => _channel.Reader;
+    public ChannelReader<SourceEvent> Events => _channel.Reader;
 
     /// <summary>
     /// Starts a background tailer for <paramref name="path"/>. The tailer reads the current
@@ -29,12 +29,13 @@ public sealed class TailerService : IAsyncDisposable
     /// </summary>
     /// <param name="fileId">Caller-assigned identifier carried by every event from this file.</param>
     /// <param name="path">Path of the file to tail. The file does not need to exist yet.</param>
-    public IFileTailer StartTailer(string fileId, string path)
+    public ILogTailer StartFile(string sourceId, string path, Domain.ILogParser parser)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(fileId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentNullException.ThrowIfNull(parser);
 
-        var tailer = new FileTailer(fileId, path, _channel.Writer, _options);
+        var tailer = new FileTailer(sourceId, path, parser, _channel.Writer, _options);
         lock (_gate)
         {
             _tailers.Add(tailer);

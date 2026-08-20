@@ -200,7 +200,7 @@ public sealed class LogViewTests
         try
         {
             await using var viewModel = new MainWindowViewModel(
-                new AppState(new TailerService(), new TestPersistence()),
+                new AppState(new LogSourceService(), new TestPersistence()),
                 scheduler: ImmediateScheduler.Instance,
                 startPolling: false
             );

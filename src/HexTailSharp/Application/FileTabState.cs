@@ -10,7 +10,7 @@ public sealed class FileTabState : IAsyncDisposable
         string path,
         FileBuffer buffer,
         ILogParser parser,
-        IFileTailer tailer
+        ILogTailer tailer
     )
     {
         Id = id;
@@ -34,7 +34,7 @@ public sealed class FileTabState : IAsyncDisposable
     public int ContextAbove { get; set; } = 3;
     public int ContextBelow { get; set; } = 10;
     public string? Error { get; internal set; }
-    public IFileTailer Tailer { get; }
+    public ILogTailer Tailer { get; }
     public string DisplayName =>
         System.IO.Path.GetFileName(Path) is { Length: > 0 } name ? name : Path;
 

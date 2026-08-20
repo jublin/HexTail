@@ -12,7 +12,7 @@ public sealed class AppStateTests
     {
         var path = CreateTempFile("level=info\n", ".logfmt");
         var persistence = new MemoryPersistence();
-        await using var tailers = new TailerService(
+        await using var tailers = new LogSourceService(
             new TailerOptions
             {
                 PollInterval = TimeSpan.FromMilliseconds(10),
@@ -174,7 +174,7 @@ public sealed class AppStateTests
         Assert.IsType<PlainTextParser>(LogParserSelector.ForPath("app.log"));
     }
 
-    private static TailerService NewTailers() =>
+    private static LogSourceService NewTailers() =>
         new(
             new TailerOptions
             {

@@ -402,7 +402,7 @@ public sealed class MainWindowInteractionTests
     public async Task OpenShortcutAcceptsControlOrMeta()
     {
         var viewModel = new MainWindowViewModel(
-            new AppState(new TailerService(), new TestPersistence()),
+            new AppState(new LogSourceService(), new TestPersistence()),
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
@@ -512,7 +512,7 @@ public sealed class MainWindowInteractionTests
             },
         };
         var viewModel = new MainWindowViewModel(
-            new AppState(new TailerService(), persistence),
+            new AppState(new LogSourceService(), persistence),
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );

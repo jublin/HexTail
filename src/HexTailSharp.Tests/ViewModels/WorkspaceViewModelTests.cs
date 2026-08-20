@@ -19,7 +19,7 @@ public sealed class WorkspaceViewModelTests
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
         var persistence = new TestPersistence();
-        var state = new AppState(new TailerService(), persistence);
+        var state = new AppState(new LogSourceService(), persistence);
         await using var viewModel = new MainWindowViewModel(
             state,
             scheduler: ImmediateScheduler.Instance

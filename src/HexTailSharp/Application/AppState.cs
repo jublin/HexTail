@@ -6,7 +6,7 @@ namespace HexTailSharp.Application;
 
 public sealed class AppState : IAsyncDisposable
 {
-    private readonly TailerService _tailers;
+    private readonly LogSourceService _tailers;
     private readonly IAppPersistence _persistence;
     private readonly object _gate = new();
     private readonly List<FileTabState> _files = [];
@@ -14,7 +14,7 @@ public sealed class AppState : IAsyncDisposable
     private int _nextFileId;
 
     public AppState(
-        TailerService tailers,
+        LogSourceService tailers,
         IAppPersistence persistence,
         AppSettings? settings = null
     )
@@ -116,7 +116,7 @@ public sealed class AppState : IAsyncDisposable
                 var id = $"file-{++_nextFileId}";
                 var buffer = new FileBuffer(_settings.MaxLines);
                 var parser = LogParserSelector.ForPath(fullPath);
-                var tailer = _tailers.StartTailer(id, fullPath);
+                var tailer = _tailers.StartFile(id, fullPath, parser);
                 tab = new FileTabState(id, fullPath, buffer, parser, tailer)
                 {
                     ContextAbove = _settings.ContextAbove,
@@ -324,29 +324,28 @@ public sealed class AppState : IAsyncDisposable
     public bool DrainTailerEvents()
     {
         var changed = false;
-        while (_tailers.Events.TryRead(out var tailerEvent))
+        while (_tailers.Events.TryRead(out var sourceEvent))
         {
             FileTabState? tab;
             lock (_gate)
-                tab = _files.FirstOrDefault(file => file.Id == tailerEvent.FileId);
+                tab = _files.FirstOrDefault(file => file.Id == sourceEvent.SourceId);
             if (tab is null)
                 continue;
 
-            switch (tailerEvent)
+            switch (sourceEvent)
             {
-                case NewLines newLines:
+                case SourceLines newLines:
                     tab.Error = null;
-                    tab.Buffer.Append(newLines.Lines.Select(tab.Parser.Parse));
+                    tab.Buffer.Append(newLines.Lines);
                     break;
-                case FileRotated:
-                case FileTruncated:
+                case SourceReset:
                     tab.Error = null;
                     tab.Buffer.Clear();
                     break;
-                case TailerError error:
+                case SourceError error:
                     tab.Error = $"Tailer error: {error.Message}";
                     break;
-                case TailerRecovered:
+                case SourceRecovered:
                     tab.Error = null;
                     break;
             }
@@ -388,7 +387,9 @@ public sealed class AppState : IAsyncDisposable
                             .ToList(),
                     })
                     .ToList(),
+                OpenElasticTabs = [],
                 SelectedFilePath = SelectedFile?.Path,
+                SelectedElasticSourceId = null,
                 Window = Window,
                 Settings = _settings,
             };
@@ -440,8 +441,63 @@ public sealed class AppState : IAsyncDisposable
                 ? settings.LogFontSize
                 : LogFontSize.Medium,
             SettingsMenuAlignment = SettingsMenuAlignment.Right,
+            ElasticConnections = NormalizeElasticConnections(settings.ElasticConnections),
         };
     }
+
+    private static List<ElasticConnectionSettings> NormalizeElasticConnections(
+        IEnumerable<ElasticConnectionSettings>? connections
+    ) =>
+        (connections ?? [])
+            .Where(connection =>
+                connection is not null
+                && !string.IsNullOrWhiteSpace(connection.Id)
+                && !string.IsNullOrWhiteSpace(connection.Name)
+            )
+            .GroupBy(connection => connection.Id.Trim(), StringComparer.Ordinal)
+            .Select(group =>
+            {
+                var connection = group.First();
+                var sources = (connection.Sources ?? [])
+                    .Where(source =>
+                        source is not null
+                        && !string.IsNullOrWhiteSpace(source.Id)
+                        && !string.IsNullOrWhiteSpace(source.ServerValue)
+                        && !string.IsNullOrWhiteSpace(source.NamespaceValue)
+                    )
+                    .GroupBy(source => source.Id.Trim(), StringComparer.Ordinal)
+                    .Select(sourceGroup =>
+                    {
+                        var source = sourceGroup.First();
+                        return source with
+                        {
+                            Id = source.Id.Trim(),
+                            ServerValue = source.ServerValue.Trim(),
+                            NamespaceValue = source.NamespaceValue.Trim(),
+                        };
+                    })
+                    .ToList();
+                return connection with
+                {
+                    Id = connection.Id.Trim(),
+                    Name = connection.Name.Trim(),
+                    KibanaUrl = connection.KibanaUrl.Trim(),
+                    ElasticsearchUrl = connection.ElasticsearchUrl.Trim(),
+                    Username = connection.Username?.Trim(),
+                    DataViewId = connection.DataViewId?.Trim(),
+                    DataViewTitle = connection.DataViewTitle?.Trim(),
+                    TimeFieldName = connection.TimeFieldName?.Trim(),
+                    ServerField = connection.ServerField?.Trim(),
+                    NamespaceField = connection.NamespaceField?.Trim(),
+                    OutputFields = (connection.OutputFields ?? [])
+                        .Select(field => field.Trim())
+                        .Where(field => field.Length > 0)
+                        .Distinct(StringComparer.Ordinal)
+                        .ToList(),
+                    Sources = sources,
+                };
+            })
+            .ToList();
 
     private static string NormalizeColor(string? color) =>
         color is { Length: 4 or 7 } && color[0] == '#' && color[1..].All(Uri.IsHexDigit)

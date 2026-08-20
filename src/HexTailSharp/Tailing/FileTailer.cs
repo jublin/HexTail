@@ -6,9 +6,10 @@ using Polly.Retry;
 
 namespace HexTailSharp.Tailing;
 
-internal sealed class FileTailer : IFileTailer
+internal sealed class FileTailer : ILogTailer
 {
-    private readonly ChannelWriter<TailerEvent> _events;
+    private readonly Domain.ILogParser _parser;
+    private readonly ChannelWriter<SourceEvent> _events;
     private readonly TailerOptions _options;
     private readonly CancellationTokenSource _stop = new();
     private readonly ResiliencePipeline _retryPipeline;
@@ -25,14 +26,16 @@ internal sealed class FileTailer : IFileTailer
     private string? _lastError;
 
     public FileTailer(
-        string fileId,
+        string sourceId,
         string path,
-        ChannelWriter<TailerEvent> events,
+        Domain.ILogParser parser,
+        ChannelWriter<SourceEvent> events,
         TailerOptions options
     )
     {
-        FileId = fileId;
+        SourceId = sourceId;
         Path = System.IO.Path.GetFullPath(path);
+        _parser = parser;
         _events = events;
         _options = options;
         _retryPipeline = new ResiliencePipelineBuilder()
@@ -52,8 +55,9 @@ internal sealed class FileTailer : IFileTailer
             .Build();
     }
 
-    public string FileId { get; }
+    public string SourceId { get; }
     public string Path { get; }
+    public string DisplayName => Path;
     public Task Completion => _completion ?? Task.CompletedTask;
 
     public void Start()
@@ -139,13 +143,13 @@ internal sealed class FileTailer : IFileTailer
             ResetReadState();
             _missing = false;
             _rotationHint = false;
-            Write(new FileRotated(FileId));
+            Write(new SourceReset(SourceId));
         }
 
         if (info.Length < _offset)
         {
             ResetReadState();
-            Write(new FileTruncated(FileId));
+            Write(new SourceReset(SourceId));
         }
 
         _hasObservedFile = true;
@@ -153,7 +157,7 @@ internal sealed class FileTailer : IFileTailer
         if (_lastError is not null)
         {
             _lastError = null;
-            Write(new TailerRecovered(FileId));
+            Write(new SourceRecovered(SourceId));
         }
     }
 
@@ -175,7 +179,7 @@ internal sealed class FileTailer : IFileTailer
         if (stream.Length < _offset)
         {
             ResetReadState();
-            Write(new FileTruncated(FileId));
+            Write(new SourceReset(SourceId));
         }
 
         stream.Position = _offset;
@@ -194,7 +198,7 @@ internal sealed class FileTailer : IFileTailer
         }
 
         if (lines.Count > 0)
-            Write(new NewLines(FileId, lines));
+            Write(new SourceLines(SourceId, lines.Select(_parser.Parse).ToArray()));
     }
 
     private void AppendCompleteLines(ReadOnlySpan<byte> bytes, List<string> lines)
@@ -220,14 +224,14 @@ internal sealed class FileTailer : IFileTailer
         _pendingBytes.Clear();
     }
 
-    private void Write(TailerEvent tailerEvent) => _events.TryWrite(tailerEvent);
+    private void Write(SourceEvent tailerEvent) => _events.TryWrite(tailerEvent);
 
     private void ReportError(string message)
     {
         if (string.Equals(_lastError, message, StringComparison.Ordinal))
             return;
         _lastError = message;
-        Write(new TailerError(FileId, message));
+        Write(new SourceError(SourceId, message));
     }
 
     private async Task WaitForWakeOrPollAsync(CancellationToken cancellationToken)

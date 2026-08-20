@@ -24,7 +24,7 @@ public partial class MainWindow : Window
     public MainWindow(string[]? startupPaths)
         : this(
             new MainWindowViewModel(
-                new AppState(new TailerService(), new JsonFileAppPersistence()),
+                new AppState(new LogSourceService(), new JsonFileAppPersistence()),
                 startupPaths
             )
         ) { }
