@@ -242,6 +242,74 @@ public sealed class AppState : IAsyncDisposable
         return opened;
     }
 
+    public async ValueTask<FileTabState> OpenElasticSourceAsync(
+        string sourceId,
+        bool save = true,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var match = _settings
+            .ElasticConnections.SelectMany(connection =>
+                connection.Sources.Select(source => (connection, source))
+            )
+            .FirstOrDefault(item => item.source.Id == sourceId);
+        if (match.source is null)
+            throw new ArgumentException("The Elastic source is not configured.", nameof(sourceId));
+        lock (_gate)
+        {
+            var existing = _files.FirstOrDefault(file => file.Id == sourceId);
+            if (existing is not null)
+            {
+                SelectedFile = existing;
+                return existing;
+            }
+        }
+        var connection = match.connection;
+        if (
+            string.IsNullOrWhiteSpace(connection.DataViewTitle)
+            || string.IsNullOrWhiteSpace(connection.TimeFieldName)
+            || string.IsNullOrWhiteSpace(connection.ServerField)
+            || string.IsNullOrWhiteSpace(connection.NamespaceField)
+        )
+            throw new ArgumentException(
+                "The Elastic source configuration is incomplete.",
+                nameof(sourceId)
+            );
+        var secret = connection.AuthMode is ElasticAuthMode.Basic or ElasticAuthMode.ApiKey
+            ? _credentials.Get(connection.Id)
+                ?? throw new InvalidOperationException("The Elastic credential is unavailable.")
+            : string.Empty;
+        var tailer = _tailers.StartElastic(connection, match.source, secret, _elastic);
+        var tab = new FileTabState(
+            new LogSourceDescriptor(
+                sourceId,
+                LogSourceKind.Elastic,
+                match.source.DisplayName,
+                $"{match.connection.Name}: {match.source.DisplayName}",
+                ElasticSourceId: sourceId
+            ),
+            new FileBuffer(_settings.MaxLines),
+            new PlainTextParser(),
+            tailer
+        )
+        {
+            ContextAbove = _settings.ContextAbove,
+            ContextBelow = _settings.ContextBelow,
+        };
+        lock (_gate)
+        {
+            _files.Add(tab);
+            SelectedFile = tab;
+        }
+        NotifyChanged();
+        if (save)
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
+        return tab;
+    }
+
+    public bool IsElasticSourceOpen(string sourceId) =>
+        Files.Any(file => file.Source.ElasticSourceId == sourceId);
+
     public async ValueTask CloseFileAsync(
         FileTabState tab,
         CancellationToken cancellationToken = default
@@ -491,9 +559,30 @@ public sealed class AppState : IAsyncDisposable
                             .ToList(),
                     })
                     .ToList(),
-                OpenElasticTabs = [],
+                OpenElasticTabs = _files
+                    .Where(tab => tab.Source.Kind == LogSourceKind.Elastic)
+                    .Select(tab => new PersistedElasticTab
+                    {
+                        SourceId = tab.Source.ElasticSourceId!,
+                        FollowAll = tab.FollowAll,
+                        FollowSearches = [.. tab.FollowSearches],
+                        ShowContext = tab.ShowContext,
+                        SelectedLine = tab.SelectedLine,
+                        ContextAbove = tab.ContextAbove,
+                        ContextBelow = tab.ContextBelow,
+                        Searches = tab
+                            .Searches.Select(search => new PersistedSearch
+                            {
+                                Query = search.Query.Query,
+                                Mode = search.Query.Mode,
+                                CaseSensitive = search.Query.CaseSensitive,
+                                Color = search.Color,
+                            })
+                            .ToList(),
+                    })
+                    .ToList(),
                 SelectedFilePath = SelectedFile?.Path,
-                SelectedElasticSourceId = null,
+                SelectedElasticSourceId = SelectedFile?.Source.ElasticSourceId,
                 Window = Window,
                 Settings = _settings,
             };

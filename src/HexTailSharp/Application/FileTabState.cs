@@ -12,17 +12,36 @@ public sealed class FileTabState : IAsyncDisposable
         ILogParser parser,
         ILogTailer tailer
     )
+        : this(
+            new LogSourceDescriptor(
+                id,
+                LogSourceKind.File,
+                System.IO.Path.GetFileName(path),
+                path,
+                path
+            ),
+            buffer,
+            parser,
+            tailer
+        ) { }
+
+    internal FileTabState(
+        LogSourceDescriptor source,
+        FileBuffer buffer,
+        ILogParser parser,
+        ILogTailer tailer
+    )
     {
-        Id = id;
-        Path = path;
+        Source = source;
         Buffer = buffer;
         Parser = parser;
         Tailer = tailer;
         Buffer.Changed += OnBufferChanged;
     }
 
-    public string Id { get; }
-    public string Path { get; }
+    public LogSourceDescriptor Source { get; }
+    public string Id => Source.Id;
+    public string Path => Source.LocalPath ?? string.Empty;
     public FileBuffer Buffer { get; }
     public ILogParser Parser { get; }
     public List<Search> Searches { get; } = [];
@@ -35,8 +54,7 @@ public sealed class FileTabState : IAsyncDisposable
     public int ContextBelow { get; set; } = 10;
     public string? Error { get; internal set; }
     public ILogTailer Tailer { get; }
-    public string DisplayName =>
-        System.IO.Path.GetFileName(Path) is { Length: > 0 } name ? name : Path;
+    public string DisplayName => Source.DisplayName;
 
     public IReadOnlyList<Line> ContextLines =>
         SelectedLine is int selected && selected >= 0 && selected < Buffer.Count
