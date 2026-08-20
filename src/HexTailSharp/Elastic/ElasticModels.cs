@@ -37,6 +37,22 @@ public sealed record ElasticHit(
 
 public sealed record ElasticSearchPage(string PitId, IReadOnlyList<ElasticHit> Hits);
 
+public enum ElasticConnectionStatus
+{
+    Checking,
+    Connected,
+    Unreachable,
+    Unauthorized,
+    Misconfigured,
+}
+
+public sealed record ElasticSourceHealth(
+    string SourceId,
+    ElasticConnectionStatus Status,
+    string Message,
+    DateTimeOffset CheckedAt
+);
+
 public class ElasticHttpException(int statusCode, string reason)
     : Exception($"Elastic request failed ({statusCode}): {reason}")
 {
