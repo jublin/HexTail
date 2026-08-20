@@ -70,18 +70,30 @@ public sealed record AppSettings
     public List<ElasticConnectionSettings> ElasticConnections { get; init; } = [];
 
     public bool Excludes(string text) =>
-        GlobalExcludeLabels.Any(label => text.Contains(label, StringComparison.OrdinalIgnoreCase));
+        GlobalExcludeLabels.Any(label => CreateGlobalQuery(label)?.IsMatch(text) is true);
 
     public IEnumerable<LabelHighlight> GetLabelHighlights(string text)
     {
         foreach (var label in GlobalLabels)
         {
-            for (
-                var start = 0;
-                (start = text.IndexOf(label.Text, start, StringComparison.OrdinalIgnoreCase)) >= 0;
-                start += label.Text.Length
-            )
-                yield return new LabelHighlight(start, label.Text.Length, label.Color);
+            var query = CreateGlobalQuery(label.Text);
+            if (query is null)
+                continue;
+
+            foreach (var range in query.GetHighlights(text))
+                yield return new LabelHighlight(range.Start, range.Length, label.Color);
+        }
+    }
+
+    private static CompiledQuery? CreateGlobalQuery(string query)
+    {
+        try
+        {
+            return new CompiledQuery(query, CompiledQuery.DetectMode(query), caseSensitive: false);
+        }
+        catch (ArgumentException)
+        {
+            return null;
         }
     }
 }

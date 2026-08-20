@@ -187,14 +187,14 @@ public sealed class AppStateTests
     {
         var settings = new AppSettings
         {
-            GlobalLabels = [new GlobalLabel { Text = "warn", Color = "#f59e0b" }],
-            GlobalExcludeLabels = ["health"],
+            GlobalLabels = [new GlobalLabel { Text = @"warn\s+id", Color = "#f59e0b" }],
+            GlobalExcludeLabels = [@"health\s+check"],
         };
 
-        Assert.True(settings.Excludes("GET /HEALTH"));
-        var highlight = settings.GetLabelHighlights("WARN: warn").First();
+        Assert.True(settings.Excludes("GET /HEALTH CHECK"));
+        var highlight = settings.GetLabelHighlights("WARN ID: warn id").First();
         Assert.Equal(0, highlight.Start);
-        Assert.Equal(4, highlight.Length);
+        Assert.Equal(7, highlight.Length);
     }
 
     [Theory]
