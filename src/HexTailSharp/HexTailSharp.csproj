@@ -15,6 +15,7 @@
     <PackageReference Include="Avalonia.Themes.Fluent" />
     <PackageReference Include="Optris.Icons.Avalonia.MaterialDesign" />
     <PackageReference Include="Polly" />
+    <PackageReference Include="GnomeStack.Os.Secrets" />
     <PackageReference Include="ReactiveUI.Avalonia.Reactive" />
     <PackageReference Include="System.Reactive" />
     <PackageReference Include="Xaml.Behaviors.Interactivity" />
