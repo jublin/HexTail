@@ -11,7 +11,7 @@ public sealed class LogSourceService : IAsyncDisposable
 {
     private readonly Channel<SourceEvent> _channel = Channel.CreateUnbounded<SourceEvent>();
     private readonly TailerOptions _options;
-    private readonly List<FileTailer> _tailers = [];
+    private readonly List<ILogTailer> _tailers = [];
     private readonly Lock _gate = new();
 
     public LogSourceService(TailerOptions? options = null)
@@ -45,10 +45,24 @@ public sealed class LogSourceService : IAsyncDisposable
         return tailer;
     }
 
+    public ILogTailer StartElastic(
+        Persistence.ElasticConnectionSettings connection,
+        Persistence.ElasticSourceSettings source,
+        string secret,
+        Elastic.IElasticApiClient client
+    )
+    {
+        var tailer = new Elastic.ElasticTailer(connection, source, secret, client, _channel.Writer);
+        lock (_gate)
+            _tailers.Add(tailer);
+        tailer.Start();
+        return tailer;
+    }
+
     /// <summary>Stops all tailers and completes the event channel.</summary>
     public async ValueTask DisposeAsync()
     {
-        List<FileTailer> tailers;
+        List<ILogTailer> tailers;
         lock (_gate)
         {
             tailers = [.. _tailers];
