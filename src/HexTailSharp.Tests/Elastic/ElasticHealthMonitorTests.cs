@@ -24,7 +24,10 @@ public sealed class ElasticHealthMonitorTests
     [Fact]
     public async Task CheckOnce_MarksIncompleteConnectionsMisconfigured()
     {
-        var connection = Connection() with { DataViewId = null };
+        var connection = Connection() with
+        {
+            Views = [Connection().Views[0] with { DataViewId = null }],
+        };
         await using var monitor = new ElasticHealthMonitor(
             new FakeElasticApiClient(),
             new InMemoryCredentialVault()
@@ -42,19 +45,27 @@ public sealed class ElasticHealthMonitorTests
             Name = "ops",
             KibanaUrl = "https://kibana/",
             ElasticsearchUrl = "https://elastic/",
-            DataViewId = "view",
-            DataViewTitle = "logs-*",
-            TimeFieldName = "@timestamp",
-            ServerField = "server",
-            NamespaceField = "namespace",
-            OutputFields = ["message"],
-            Sources =
+            Views =
             [
-                new ElasticSourceSettings
+                new ElasticViewSettings
                 {
-                    Id = "s1",
-                    ServerValue = "api",
-                    NamespaceValue = "prod",
+                    Id = "v1",
+                    Name = "Logs",
+                    DataViewId = "view",
+                    DataViewTitle = "logs-*",
+                    TimeFieldName = "@timestamp",
+                    ServerField = "server",
+                    NamespaceField = "namespace",
+                    OutputFields = ["message"],
+                    Sources =
+                    [
+                        new ElasticSourceSettings
+                        {
+                            Id = "s1",
+                            ServerValue = "api",
+                            NamespaceValue = "prod",
+                        },
+                    ],
                 },
             ],
         };

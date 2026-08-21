@@ -50,7 +50,8 @@ public sealed class LogSourceService : IAsyncDisposable
         Persistence.ElasticViewSettings view,
         Persistence.ElasticSourceSettings source,
         string secret,
-        Elastic.IElasticApiClient client
+        Elastic.IElasticApiClient client,
+        Func<DateTimeOffset>? now = null
     )
     {
         var tailer = new Elastic.ElasticTailer(
@@ -59,7 +60,8 @@ public sealed class LogSourceService : IAsyncDisposable
             source,
             secret,
             client,
-            _channel.Writer
+            _channel.Writer,
+            now
         );
         lock (_gate)
             _tailers.Add(tailer);

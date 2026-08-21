@@ -24,6 +24,7 @@ internal sealed class SettingsViewModel : ReactiveObject
     private bool _isSaving;
     private bool _syncing;
     private ThemeOption _selectedTheme;
+    private AppTimeZoneMode _timeZoneMode;
     private ElasticConnectionEditorViewModel? _selectedElasticConnection;
 
     internal SettingsViewModel(MainWindowViewModel owner, IScheduler scheduler)
@@ -52,6 +53,8 @@ internal sealed class SettingsViewModel : ReactiveObject
     [UiDensity.Comfortable, UiDensity.Cozy, UiDensity.Compact];
     public IReadOnlyList<LogFontSize> FontSizeOptions { get; } =
     [LogFontSize.Small, LogFontSize.Medium, LogFontSize.Large, LogFontSize.ExtraLarge];
+    public IReadOnlyList<AppTimeZoneMode> TimeZoneModes { get; } =
+        Enum.GetValues<AppTimeZoneMode>();
     public IReadOnlyList<ThemeOption> ThemeOptions { get; } =
         ThemeCatalog
             .Names.Select(id => new ThemeOption(id, ThemeCatalog.DisplayNames[id]))
@@ -223,6 +226,19 @@ internal sealed class SettingsViewModel : ReactiveObject
         }
     }
 
+    public AppTimeZoneMode TimeZoneMode
+    {
+        get => _timeZoneMode;
+        set
+        {
+            if (_timeZoneMode == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _timeZoneMode, value);
+            if (!_syncing)
+                _ = CommitAsync(_owner.State.Settings with { TimeZoneMode = value });
+        }
+    }
+
     public ThemeOption SelectedTheme
     {
         get => _selectedTheme;
@@ -261,6 +277,7 @@ internal sealed class SettingsViewModel : ReactiveObject
         {
             Density = settings.Density;
             FontSize = settings.LogFontSize;
+            TimeZoneMode = settings.TimeZoneMode;
             SelectedTheme = ThemeOptions.First(option =>
                 option.Id == ThemeCatalog.Normalize(settings.Theme)
             );

@@ -35,7 +35,7 @@ internal sealed class ElasticTailer : ILogTailer
         string secret,
         IElasticApiClient client,
         ChannelWriter<SourceEvent> events,
-        Func<DateTimeOffset>? utcNow = null,
+        Func<DateTimeOffset>? now = null,
         Func<TimeSpan, CancellationToken, Task>? delay = null
     )
     {
@@ -45,7 +45,7 @@ internal sealed class ElasticTailer : ILogTailer
         _secret = secret;
         _client = client;
         _events = events;
-        _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
+        _utcNow = now ?? (() => DateTimeOffset.UtcNow);
         _delay = delay ?? Task.Delay;
         SourceId = source.Id;
         DisplayName = source.DisplayName;

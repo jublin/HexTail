@@ -29,7 +29,15 @@ internal sealed class FakeElasticApiClient : IElasticApiClient
     {
         if (DataViewError is not null)
             throw DataViewError;
-        return Task.FromResult(new ElasticDataView(id, c.DataViewTitle!, c.TimeFieldName, []));
+        var view = c.Views.FirstOrDefault();
+        return Task.FromResult(
+            new ElasticDataView(
+                id,
+                view?.DataViewTitle ?? c.DataViewTitle!,
+                view?.TimeFieldName ?? c.TimeFieldName,
+                []
+            )
+        );
     }
 
     public Task<string> OpenPitAsync(

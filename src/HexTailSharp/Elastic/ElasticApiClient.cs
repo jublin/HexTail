@@ -6,9 +6,17 @@ using HexTailSharp.Persistence;
 
 namespace HexTailSharp.Elastic;
 
-public sealed class ElasticApiClient(HttpClient httpClient) : IElasticApiClient
+public sealed class ElasticApiClient : IElasticApiClient
 {
+    private readonly HttpClient httpClient;
+    private readonly Func<DateTimeOffset> now;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    public ElasticApiClient(HttpClient httpClient, Func<DateTimeOffset>? now = null)
+    {
+        this.httpClient = httpClient;
+        this.now = now ?? (() => DateTimeOffset.UtcNow);
+    }
 
     public async Task<IReadOnlyList<ElasticDataViewSummary>> GetDataViewsAsync(
         ElasticConnectionSettings connection,
@@ -342,8 +350,7 @@ public sealed class ElasticApiClient(HttpClient httpClient) : IElasticApiClient
         }
     }
 
-    private static void Log(string message) =>
-        Console.Error.WriteLine($"[Elastic] {DateTimeOffset.UtcNow:O} {message}");
+    private void Log(string message) => Console.Error.WriteLine($"[Elastic] {now():O} {message}");
 
     private static void AddAuthorization(
         HttpRequestMessage request,

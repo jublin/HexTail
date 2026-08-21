@@ -33,10 +33,10 @@ public sealed class AppState : IAsyncDisposable
         _tailers = tailers;
         _persistence = persistence;
         _credentials = credentials ?? new OsCredentialVault();
-        _elastic = elastic ?? new ElasticApiClient(new HttpClient());
-        _health = new ElasticHealthMonitor(_elastic, _credentials);
-        _health.Changed += NotifyChanged;
         _settings = NormalizeSettings(settings ?? new AppSettings());
+        _elastic = elastic ?? new ElasticApiClient(new HttpClient(), Now);
+        _health = new ElasticHealthMonitor(_elastic, _credentials, Now);
+        _health.Changed += NotifyChanged;
     }
 
     public IReadOnlyList<FileTabState> Files
@@ -66,6 +66,7 @@ public sealed class AppState : IAsyncDisposable
         );
         var previousSecret = previous is null ? null : _credentials.Get(connection.Id);
         secret = string.IsNullOrWhiteSpace(secret) ? previousSecret : secret;
+        connection = NormalizeElasticConnections([connection]).Single();
         ValidateElasticConnection(connection, secret);
         var authenticated = connection.AuthMode is ElasticAuthMode.Basic or ElasticAuthMode.ApiKey;
         if (authenticated)
@@ -348,7 +349,7 @@ public sealed class AppState : IAsyncDisposable
             ? _credentials.Get(connection.Id)
                 ?? throw new InvalidOperationException("The Elastic credential is unavailable.")
             : string.Empty;
-        var tailer = _tailers.StartElastic(connection, view, match.source, secret, _elastic);
+        var tailer = _tailers.StartElastic(connection, view, match.source, secret, _elastic, Now);
         var tab = new FileTabState(
             new LogSourceDescriptor(
                 sourceId,
@@ -825,8 +826,8 @@ public sealed class AppState : IAsyncDisposable
         ElasticConnectionSettings connection
     )
     {
-        var views = connection
-            .Views.Where(view => view is not null && !string.IsNullOrWhiteSpace(view.Id))
+        var views = (connection.Views ?? [])
+            .Where(view => view is not null && !string.IsNullOrWhiteSpace(view.Id))
             .GroupBy(view => view.Id.Trim(), StringComparer.Ordinal)
             .Select(group => NormalizeElasticView(group.First()))
             .ToList();
@@ -935,35 +936,44 @@ public sealed class AppState : IAsyncDisposable
                 "API-key authentication requires a secret.",
                 nameof(connection)
             );
-        if (
-            string.IsNullOrWhiteSpace(connection.DataViewTitle)
-            || string.IsNullOrWhiteSpace(connection.TimeFieldName)
-            || string.IsNullOrWhiteSpace(connection.ServerField)
-            || string.IsNullOrWhiteSpace(connection.NamespaceField)
-            || connection.OutputFields.Count == 0
-        )
-            throw new ArgumentException(
-                "The Elastic data view and field mappings are incomplete.",
-                nameof(connection)
-            );
-        var pairs = connection
-            .Sources.Select(source => (source.ServerValue.Trim(), source.NamespaceValue.Trim()))
-            .ToArray();
-        if (
-            pairs.Any(pair =>
-                string.IsNullOrWhiteSpace(pair.Item1) || string.IsNullOrWhiteSpace(pair.Item2)
+        foreach (var view in connection.Views)
+        {
+            if (
+                string.IsNullOrWhiteSpace(view.Name)
+                || string.IsNullOrWhiteSpace(view.DataViewTitle)
+                || string.IsNullOrWhiteSpace(view.TimeFieldName)
+                || string.IsNullOrWhiteSpace(view.ServerField)
+                || string.IsNullOrWhiteSpace(view.NamespaceField)
+                || view.OutputFields.Count == 0
             )
-        )
-            throw new ArgumentException(
-                "Elastic source values cannot be blank.",
-                nameof(connection)
-            );
-        if (pairs.Distinct().Count() != pairs.Length)
-            throw new ArgumentException(
-                "Elastic source values must be unique.",
-                nameof(connection)
-            );
+                throw new ArgumentException(
+                    "The Elastic view and field mappings are incomplete.",
+                    nameof(connection)
+                );
+            var pairs = view
+                .Sources.Select(source => (source.ServerValue.Trim(), source.NamespaceValue.Trim()))
+                .ToArray();
+            if (
+                pairs.Any(pair =>
+                    string.IsNullOrWhiteSpace(pair.Item1) || string.IsNullOrWhiteSpace(pair.Item2)
+                )
+            )
+                throw new ArgumentException(
+                    "Elastic source values cannot be blank.",
+                    nameof(connection)
+                );
+            if (pairs.Distinct().Count() != pairs.Length)
+                throw new ArgumentException(
+                    "Elastic source values must be unique.",
+                    nameof(connection)
+                );
+        }
     }
+
+    private DateTimeOffset Now() =>
+        _settings.TimeZoneMode == AppTimeZoneMode.Local
+            ? DateTimeOffset.Now
+            : DateTimeOffset.UtcNow;
 }
 
 public static class LogParserSelector
