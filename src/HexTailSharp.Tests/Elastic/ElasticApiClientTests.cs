@@ -154,4 +154,30 @@ public sealed class ElasticApiClientTests
 
         Assert.Null(handler.Requests[0].Headers.Authorization);
     }
+
+    [Fact]
+    public async Task Client_ReportsHtmlInsteadOfJson()
+    {
+        var handler = new RecordingHttpMessageHandler(_ => new HttpResponseMessage(
+            HttpStatusCode.OK
+        )
+        {
+            Content = new StringContent("<html>Sign in</html>", Encoding.UTF8, "text/html"),
+        });
+        var client = new ElasticApiClient(new HttpClient(handler));
+        var connection = new ElasticConnectionSettings
+        {
+            Id = "c1",
+            Name = "ops",
+            KibanaUrl = "https://kibana/",
+            ElasticsearchUrl = "https://elastic/",
+        };
+
+        var exception = await Assert.ThrowsAsync<ElasticHttpException>(() =>
+            client.GetDataViewsAsync(connection, null)
+        );
+
+        Assert.Contains("returned text/html instead of JSON", exception.Message);
+        Assert.Contains("Elasticsearch URL", exception.Message);
+    }
 }
