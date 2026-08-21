@@ -130,4 +130,28 @@ public sealed class ElasticApiClientTests
             client.GetDataViewsAsync(connection, null)
         );
     }
+
+    [Fact]
+    public async Task Client_AnonymousDoesNotSendAuthorizationHeader()
+    {
+        var handler = new RecordingHttpMessageHandler(_ => new HttpResponseMessage(
+            HttpStatusCode.OK
+        )
+        {
+            Content = new StringContent("{\"data_view\":[]}"),
+        });
+        var client = new ElasticApiClient(new HttpClient(handler));
+        var connection = new ElasticConnectionSettings
+        {
+            Id = "c1",
+            Name = "public",
+            KibanaUrl = "https://kibana/",
+            ElasticsearchUrl = "https://elastic/",
+            AuthMode = ElasticAuthMode.Anonymous,
+        };
+
+        await client.GetDataViewsAsync(connection, null);
+
+        Assert.Null(handler.Requests[0].Headers.Authorization);
+    }
 }

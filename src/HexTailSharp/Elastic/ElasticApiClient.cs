@@ -297,7 +297,18 @@ public sealed class ElasticApiClient(HttpClient httpClient) : IElasticApiClient
                     ? response.ReasonPhrase ?? "Unknown error"
                     : text;
                 if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                {
+                    if (
+                        response.StatusCode == HttpStatusCode.Unauthorized
+                        && connection.AuthMode == ElasticAuthMode.Anonymous
+                    )
+                        reason =
+                            "The Elastic server rejected anonymous access (401). "
+                            + "Grant anonymous access to the requested Kibana/Elasticsearch APIs "
+                            + "or choose Basic authentication/API key."
+                            + (string.IsNullOrWhiteSpace(text) ? string.Empty : $" {text}");
                     throw new ElasticUnauthorizedException((int)response.StatusCode, reason);
+                }
                 if (
                     (int)response.StatusCode == 408
                     || response.StatusCode == HttpStatusCode.TooManyRequests

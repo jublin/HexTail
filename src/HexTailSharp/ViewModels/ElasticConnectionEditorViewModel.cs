@@ -15,6 +15,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     private string? _error;
     private string? _status;
     private ElasticAuthMode _authMode;
+    private string _outputFieldQuery = string.Empty;
 
     public ElasticConnectionEditorViewModel(SettingsViewModel owner, string id)
     {
@@ -89,6 +90,23 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     public ObservableCollection<ElasticFieldOptionViewModel> Fields { get; } = [];
     public ObservableCollection<ElasticSourceSettingViewModel> Sources { get; } = [];
     public IEnumerable<string> FieldNames => Fields.Select(option => option.Name);
+    public IEnumerable<ElasticFieldOptionViewModel> FilteredFields =>
+        string.IsNullOrWhiteSpace(OutputFieldQuery)
+            ? Fields
+            : Fields.Where(option =>
+                option.Name.Contains(OutputFieldQuery.Trim(), StringComparison.OrdinalIgnoreCase)
+            );
+    public string OutputFieldQuery
+    {
+        get => _outputFieldQuery;
+        set
+        {
+            if (string.Equals(_outputFieldQuery, value, StringComparison.Ordinal))
+                return;
+            this.RaiseAndSetIfChanged(ref _outputFieldQuery, value);
+            this.RaisePropertyChanged(nameof(FilteredFields));
+        }
+    }
     public string FilterValue
     {
         get => Sources.FirstOrDefault()?.ServerValue ?? string.Empty;

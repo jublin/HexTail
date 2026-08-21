@@ -292,7 +292,11 @@
                         <Border Classes="elastic-section">
                           <StackPanel Spacing="8">
                             <TextBlock Text="Output fields" Classes="section-label" />
-                            <ItemsControl ItemsSource="{Binding Fields}">
+                            <TextBox
+                              Text="{Binding OutputFieldQuery, Mode=TwoWay}"
+                              PlaceholderText="Find output fields"
+                            />
+                            <ItemsControl ItemsSource="{Binding FilteredFields}">
                               <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:ElasticFieldOptionViewModel">
                                   <CheckBox
