@@ -67,6 +67,7 @@ public sealed record AppSettings
     public UiDensity Density { get; init; } = UiDensity.Comfortable;
     public LogFontSize LogFontSize { get; init; } = LogFontSize.Medium;
     public SettingsMenuAlignment SettingsMenuAlignment { get; init; } = SettingsMenuAlignment.Right;
+    public AppTimeZoneMode TimeZoneMode { get; init; } = AppTimeZoneMode.Local;
     public List<ElasticConnectionSettings> ElasticConnections { get; init; } = [];
 
     public bool Excludes(string text) =>

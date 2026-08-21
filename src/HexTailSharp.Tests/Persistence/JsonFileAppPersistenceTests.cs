@@ -54,6 +54,43 @@ public sealed class JsonFileAppPersistenceTests
     }
 
     [Fact]
+    public void AppConfigJson_RoundTripsNestedElasticViewAndLocalTimeDefault()
+    {
+        var server = new ElasticConnectionSettings
+        {
+            Id = "server-1",
+            Name = "Production",
+            KibanaUrl = "https://kibana.example/",
+            ElasticsearchUrl = "https://elastic.example/",
+            Views =
+            [
+                new ElasticViewSettings
+                {
+                    Id = "view-1",
+                    Name = "Application logs",
+                    DataViewId = "logs-view",
+                    DataViewTitle = "logs-*",
+                    TimeFieldName = "@timestamp",
+                    ServerField = "ident",
+                    NamespaceField = "service.name",
+                    OutputFields = ["message"],
+                },
+            ],
+        };
+
+        var restored = AppConfigJson.Deserialize(
+            AppConfigJson.Serialize(
+                new AppConfig { Settings = new AppSettings { ElasticConnections = [server] } }
+            )
+        );
+
+        var view = Assert.Single(Assert.Single(restored.Settings.ElasticConnections).Views);
+        Assert.Equal("Application logs", view.Name);
+        Assert.Equal("logs-view", view.DataViewId);
+        Assert.Equal(AppTimeZoneMode.Local, restored.Settings.TimeZoneMode);
+    }
+
+    [Fact]
     public async Task SaveAndLoad_RoundTripsConfigAndCreatesParentDirectory()
     {
         using var directory = new TempDirectory();

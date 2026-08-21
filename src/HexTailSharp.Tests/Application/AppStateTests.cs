@@ -30,6 +30,25 @@ public sealed class AppStateTests
     }
 
     [Fact]
+    public async Task AppState_NormalizesLegacyElasticConnectionIntoView()
+    {
+        var connection = ElasticConnection("Ops");
+        await using var state = new AppState(
+            NewTailers(),
+            new MemoryPersistence(),
+            new AppSettings { ElasticConnections = [connection] },
+            new InMemoryCredentialVault(),
+            new FakeElasticApiClient()
+        );
+
+        var view = Assert.Single(Assert.Single(state.Settings.ElasticConnections).Views);
+
+        Assert.Equal(connection.DataViewId, view.DataViewId);
+        Assert.Equal(connection.DataViewTitle, view.DataViewTitle);
+        Assert.Equal(connection.Sources, view.Sources);
+    }
+
+    [Fact]
     public async Task SaveElasticConnection_RestoresSecretAndSettingsWhenJsonSaveFails()
     {
         var old = ElasticConnection("Old name");

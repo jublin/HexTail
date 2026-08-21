@@ -762,6 +762,9 @@ public sealed class AppState : IAsyncDisposable
                 ? settings.LogFontSize
                 : LogFontSize.Medium,
             SettingsMenuAlignment = SettingsMenuAlignment.Right,
+            TimeZoneMode = Enum.IsDefined(settings.TimeZoneMode)
+                ? settings.TimeZoneMode
+                : AppTimeZoneMode.Local,
             ElasticConnections = NormalizeElasticConnections(settings.ElasticConnections),
         };
     }
@@ -777,6 +780,7 @@ public sealed class AppState : IAsyncDisposable
             .Select(group =>
             {
                 var connection = group.First();
+                var views = NormalizeElasticViews(connection);
                 var sources = (connection.Sources ?? [])
                     .Where(source => source is not null && !string.IsNullOrWhiteSpace(source.Id))
                     .GroupBy(source => source.Id.Trim(), StringComparer.Ordinal)
@@ -809,9 +813,77 @@ public sealed class AppState : IAsyncDisposable
                         .Distinct(StringComparer.Ordinal)
                         .ToList(),
                     Sources = sources,
+                    Views = views,
                 };
             })
             .ToList();
+
+    private static List<ElasticViewSettings> NormalizeElasticViews(
+        ElasticConnectionSettings connection
+    )
+    {
+        var views = connection
+            .Views.Where(view => view is not null && !string.IsNullOrWhiteSpace(view.Id))
+            .GroupBy(view => view.Id.Trim(), StringComparer.Ordinal)
+            .Select(group => NormalizeElasticView(group.First()))
+            .ToList();
+        if (views.Count > 0)
+            return views;
+
+        return
+        [
+            NormalizeElasticView(
+                new ElasticViewSettings
+                {
+                    Id = connection.Id,
+                    Name = connection.DataViewTitle ?? "View",
+                    DataViewId = connection.DataViewId,
+                    DataViewTitle = connection.DataViewTitle,
+                    TimeFieldName = connection.TimeFieldName,
+                    ServerField = connection.ServerField,
+                    NamespaceField = connection.NamespaceField,
+                    OutputFields = connection.OutputFields,
+                    Sources = connection.Sources,
+                }
+            ),
+        ];
+    }
+
+    private static ElasticViewSettings NormalizeElasticView(ElasticViewSettings view)
+    {
+        var sources = (view.Sources ?? [])
+            .Where(source => source is not null && !string.IsNullOrWhiteSpace(source.Id))
+            .GroupBy(source => source.Id.Trim(), StringComparer.Ordinal)
+            .Select(group =>
+            {
+                var source = group.First();
+                return source with
+                {
+                    Id = source.Id.Trim(),
+                    ServerValue = source.ServerValue.Trim(),
+                    NamespaceValue = source.NamespaceValue.Trim(),
+                };
+            })
+            .ToList();
+        return view with
+        {
+            Id = view.Id.Trim(),
+            Name = string.IsNullOrWhiteSpace(view.Name)
+                ? view.DataViewTitle?.Trim() ?? "View"
+                : view.Name.Trim(),
+            DataViewId = view.DataViewId?.Trim(),
+            DataViewTitle = view.DataViewTitle?.Trim(),
+            TimeFieldName = view.TimeFieldName?.Trim(),
+            ServerField = view.ServerField?.Trim(),
+            NamespaceField = view.NamespaceField?.Trim(),
+            OutputFields = (view.OutputFields ?? [])
+                .Select(field => field.Trim())
+                .Where(field => field.Length > 0)
+                .Distinct(StringComparer.Ordinal)
+                .ToList(),
+            Sources = sources,
+        };
+    }
 
     private static string NormalizeColor(string? color) =>
         color is { Length: 4 or 7 } && color[0] == '#' && color[1..].All(Uri.IsHexDigit)
