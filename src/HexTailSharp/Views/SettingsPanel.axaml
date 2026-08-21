@@ -268,18 +268,20 @@
                           <StackPanel Spacing="8">
                             <TextBlock Text="Filter fields" Classes="section-label" />
                             <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                              <ComboBox
+                              <AutoCompleteBox
                                 ItemsSource="{Binding FieldNames}"
                                 SelectedItem="{Binding ServerField, Mode=TwoWay}"
                                 PlaceholderText="Identity field · e.g. ident"
-                                HorizontalContentAlignment="Left"
+                                FilterMode="Contains"
+                                MinimumPrefixLength="0"
                               />
-                              <ComboBox
+                              <AutoCompleteBox
                                 Grid.Column="1"
                                 ItemsSource="{Binding FieldNames}"
                                 SelectedItem="{Binding NamespaceField, Mode=TwoWay}"
                                 PlaceholderText="Namespace field · e.g. environment"
-                                HorizontalContentAlignment="Left"
+                                FilterMode="Contains"
+                                MinimumPrefixLength="0"
                               />
                             </Grid>
                             <TextBlock

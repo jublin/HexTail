@@ -305,9 +305,7 @@ internal sealed class SettingsViewModel : ReactiveObject
                 );
             var connection = settings.ElasticConnections[connectionIndex];
             var editor = ElasticConnections[connectionIndex];
-            editor.Name = connection.Name;
-            editor.KibanaUrl = connection.KibanaUrl;
-            editor.ElasticsearchUrl = connection.ElasticsearchUrl;
+            editor.Sync(connection);
         }
         SelectedElasticConnection ??= ElasticConnections.FirstOrDefault();
     }

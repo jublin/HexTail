@@ -90,6 +90,36 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     public ObservableCollection<ElasticSourceSettingViewModel> Sources { get; } = [];
     public IEnumerable<string> FieldNames => Fields.Select(option => option.Name);
 
+    internal void Sync(ElasticConnectionSettings settings)
+    {
+        Name = settings.Name;
+        KibanaUrl = settings.KibanaUrl;
+        ElasticsearchUrl = settings.ElasticsearchUrl;
+        AuthMode = settings.AuthMode;
+        Username = settings.Username ?? string.Empty;
+        DataViewId = settings.DataViewId;
+        _selectedDataViewId = settings.DataViewId;
+        DataViewTitle = settings.DataViewTitle;
+        TimeFieldName = settings.TimeFieldName;
+        ServerField = settings.ServerField;
+        NamespaceField = settings.NamespaceField;
+
+        Fields.Clear();
+        foreach (var field in settings.OutputFields.Distinct(StringComparer.Ordinal))
+            Fields.Add(new ElasticFieldOptionViewModel(field) { IsOutput = true });
+        this.RaisePropertyChanged(nameof(FieldNames));
+
+        Sources.Clear();
+        foreach (var source in settings.Sources)
+            Sources.Add(
+                new ElasticSourceSettingViewModel(source.Id)
+                {
+                    ServerValue = source.ServerValue,
+                    NamespaceValue = source.NamespaceValue,
+                }
+            );
+    }
+
     public ElasticConnectionSettings ToSettings() =>
         new()
         {
