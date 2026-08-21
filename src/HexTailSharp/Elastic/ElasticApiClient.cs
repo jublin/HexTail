@@ -326,7 +326,7 @@ public sealed class ElasticApiClient(HttpClient httpClient) : IElasticApiClient
                 var contentType = response.Content.Headers.ContentType?.MediaType ?? "unknown";
                 throw new ElasticHttpException(
                     (int)response.StatusCode,
-                    $"The endpoint returned {contentType} instead of JSON. Check that the "
+                    $"{request.Method} {request.RequestUri} returned {contentType} instead of JSON. Check that the "
                         + "Elasticsearch URL points to Elasticsearch and the Kibana URL points "
                         + "to Kibana, including any reverse-proxy path."
                 );

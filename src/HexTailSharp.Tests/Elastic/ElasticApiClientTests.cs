@@ -178,6 +178,7 @@ public sealed class ElasticApiClientTests
         );
 
         Assert.Contains("returned text/html instead of JSON", exception.Message);
+        Assert.Contains("https://kibana/api/data_views", exception.Message);
         Assert.Contains("Elasticsearch URL", exception.Message);
     }
 }
