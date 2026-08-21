@@ -270,6 +270,7 @@ public sealed class ElasticApiClient(HttpClient httpClient) : IElasticApiClient
             method,
             new Uri(new Uri(baseUrl.TrimEnd('/') + "/"), path)
         );
+        Log($"{method} {request.RequestUri} auth={connection.AuthMode}");
         AddAuthorization(request, connection, secret);
         if (body is not null)
             request.Content = new StringContent(
@@ -284,6 +285,7 @@ public sealed class ElasticApiClient(HttpClient httpClient) : IElasticApiClient
         }
         catch (HttpRequestException exception)
         {
+            Log($"{method} {request.RequestUri} transport failure: {exception.Message}");
             throw new ElasticTransientException(0, exception.Message);
         }
         using (response)
@@ -291,6 +293,11 @@ public sealed class ElasticApiClient(HttpClient httpClient) : IElasticApiClient
             var text = await response
                 .Content.ReadAsStringAsync(cancellationToken)
                 .ConfigureAwait(false);
+            Log(
+                $"{method} {request.RequestUri} -> {(int)response.StatusCode} "
+                    + $"{response.Content.Headers.ContentType?.MediaType ?? "unknown"} "
+                    + $"bytes={text.Length}"
+            );
             if (!response.IsSuccessStatusCode)
             {
                 var reason = string.IsNullOrWhiteSpace(text)
@@ -324,6 +331,7 @@ public sealed class ElasticApiClient(HttpClient httpClient) : IElasticApiClient
             catch (JsonException)
             {
                 var contentType = response.Content.Headers.ContentType?.MediaType ?? "unknown";
+                Log($"{method} {request.RequestUri} returned non-JSON content");
                 throw new ElasticHttpException(
                     (int)response.StatusCode,
                     $"{request.Method} {request.RequestUri} returned {contentType} instead of JSON. Check that the "
@@ -333,6 +341,9 @@ public sealed class ElasticApiClient(HttpClient httpClient) : IElasticApiClient
             }
         }
     }
+
+    private static void Log(string message) =>
+        Console.Error.WriteLine($"[Elastic] {DateTimeOffset.UtcNow:O} {message}");
 
     private static void AddAuthorization(
         HttpRequestMessage request,

@@ -58,6 +58,10 @@ internal sealed class ElasticTailer : ILogTailer
     {
         var toInclusive = ParseTime(_toExpression, _utcNow());
         var fromInclusive = _cursorTimestamp ?? ParseTime(_fromExpression, toInclusive);
+        Log(
+            $"source={SourceId} poll dataView={_connection.DataViewTitle} "
+                + $"from={fromInclusive:O} to={toInclusive:O}"
+        );
         var pitId = await _client.OpenPitAsync(
             _connection,
             _secret,
@@ -89,6 +93,7 @@ internal sealed class ElasticTailer : ILogTailer
                     cancellationToken
                 );
                 pitId = page.PitId;
+                Log($"source={SourceId} search page hits={page.Hits.Count}");
                 foreach (var hit in page.Hits)
                 {
                     if (_cursorTimestamp == hit.Timestamp && _idsAtCursor.Contains(hit.Id))
@@ -106,7 +111,10 @@ internal sealed class ElasticTailer : ILogTailer
                 searchAfter = page.Hits[^1].SortValues;
             }
             if (accepted.Count > 0)
+            {
+                Log($"source={SourceId} emitting lines={accepted.Count}");
                 _events.TryWrite(new SourceLines(SourceId, accepted));
+            }
         }
         finally
         {
@@ -166,17 +174,20 @@ internal sealed class ElasticTailer : ILogTailer
             }
             catch (ElasticUnauthorizedException exception)
             {
+                Log($"source={SourceId} unauthorized: {exception.Message}");
                 ReportError(exception.Message, ref reportedError);
                 await _delay(UnauthorizedDelay, _stop.Token).ConfigureAwait(false);
             }
             catch (ElasticTransientException exception)
             {
+                Log($"source={SourceId} transient failure: {exception.Message}");
                 ReportError(exception.Message, ref reportedError);
                 var seconds = Math.Min(30, 1 << Math.Min(transientAttempt++, 4));
                 await _delay(TimeSpan.FromSeconds(seconds), _stop.Token).ConfigureAwait(false);
             }
             catch (Exception exception)
             {
+                Log($"source={SourceId} failure: {exception.Message}");
                 ReportError(exception.Message, ref reportedError);
                 await _delay(PollInterval, _stop.Token).ConfigureAwait(false);
             }
@@ -189,6 +200,9 @@ internal sealed class ElasticTailer : ILogTailer
             _events.TryWrite(new SourceError(SourceId, message));
         reportedError = true;
     }
+
+    private static void Log(string message) =>
+        Console.Error.WriteLine($"[Elastic] {DateTimeOffset.UtcNow:O} {message}");
 
     private static DateTimeOffset ParseTime(string expression, DateTimeOffset now)
     {
