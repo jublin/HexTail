@@ -52,7 +52,9 @@ public sealed class ElasticApiClient(HttpClient httpClient) : IElasticApiClient
             null,
             cancellationToken
         );
-        var root = document.RootElement;
+        var root = document.RootElement.TryGetProperty("data_view", out var dataView)
+            ? dataView
+            : document.RootElement;
         var fields =
             root.TryGetProperty("fields", out var fieldObject)
             && fieldObject.ValueKind == JsonValueKind.Object
@@ -70,7 +72,9 @@ public sealed class ElasticApiClient(HttpClient httpClient) : IElasticApiClient
                 : [];
         return new ElasticDataView(
             root.GetProperty("id").GetString() ?? dataViewId,
-            root.GetProperty("title").GetString() ?? string.Empty,
+            root.TryGetProperty("title", out var title)
+                ? title.GetString() ?? string.Empty
+                : root.GetProperty("name").GetString() ?? string.Empty,
             root.TryGetProperty("timeFieldName", out var time) ? time.GetString() : null,
             fields
         );

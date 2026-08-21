@@ -266,22 +266,33 @@
 
                         <Border Classes="elastic-section">
                           <StackPanel Spacing="8">
-                            <TextBlock Text="Output fields" Classes="section-label" />
+                            <TextBlock Text="Filter fields" Classes="section-label" />
                             <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                               <ComboBox
                                 ItemsSource="{Binding FieldNames}"
                                 SelectedItem="{Binding ServerField, Mode=TwoWay}"
-                                PlaceholderText="Server field"
+                                PlaceholderText="Identity field · e.g. ident"
                                 HorizontalContentAlignment="Left"
                               />
                               <ComboBox
                                 Grid.Column="1"
                                 ItemsSource="{Binding FieldNames}"
                                 SelectedItem="{Binding NamespaceField, Mode=TwoWay}"
-                                PlaceholderText="Namespace field"
+                                PlaceholderText="Namespace field · e.g. environment"
                                 HorizontalContentAlignment="Left"
                               />
                             </Grid>
+                            <TextBlock
+                              Text="Choose the fields used to identify and filter each source."
+                              Foreground="{DynamicResource MutedBrush}"
+                              TextWrapping="Wrap"
+                            />
+                          </StackPanel>
+                        </Border>
+
+                        <Border Classes="elastic-section">
+                          <StackPanel Spacing="8">
+                            <TextBlock Text="Output fields" Classes="section-label" />
                             <ItemsControl ItemsSource="{Binding Fields}">
                               <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:ElasticFieldOptionViewModel">
@@ -299,7 +310,7 @@
                           <StackPanel Spacing="8">
                             <TextBlock Text="Sources" Classes="section-label" />
                             <TextBlock
-                              Text="Add the server and namespace values used to filter this data view."
+                              Text="Add the identity and namespace values used to filter this data view."
                               Foreground="{DynamicResource MutedBrush}"
                               TextWrapping="Wrap"
                             />
@@ -309,7 +320,7 @@
                                   <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="8">
                                     <TextBox
                                       Text="{Binding ServerValue, Mode=TwoWay}"
-                                      PlaceholderText="Server value"
+                                      PlaceholderText="Identity value · e.g. app1"
                                     />
                                     <TextBox
                                       Grid.Column="1"

@@ -71,6 +71,47 @@ public sealed class ElasticApiClientTests
     }
 
     [Fact]
+    public async Task Client_ParsesKibana811WrappedDataViewFields()
+    {
+        var handler = new RecordingHttpMessageHandler(_ => new HttpResponseMessage(
+            HttpStatusCode.OK
+        )
+        {
+            Content = new StringContent(
+                """
+                {
+                  "data_view": {
+                    "id": "view-1",
+                    "title": "logs-*",
+                    "timeFieldName": "@timestamp",
+                    "fields": {
+                      "ident": { "type": "string", "searchable": true },
+                      "jsonmessage.service": { "type": "string", "searchable": true }
+                    }
+                  }
+                }
+                """,
+                Encoding.UTF8,
+                "application/json"
+            ),
+        });
+        var client = new ElasticApiClient(new HttpClient(handler));
+        var connection = new ElasticConnectionSettings
+        {
+            Id = "c1",
+            Name = "ops",
+            KibanaUrl = "https://kibana/",
+            ElasticsearchUrl = "https://elastic/",
+        };
+
+        var view = await client.GetDataViewAsync(connection, null, "view-1");
+
+        Assert.Equal("logs-*", view.Title);
+        Assert.Equal("@timestamp", view.TimeFieldName);
+        Assert.Equal(["ident", "jsonmessage.service"], view.Fields.Select(field => field.Name));
+    }
+
+    [Fact]
     public async Task Client_MapsUnauthorizedAndTransientResponses()
     {
         var unauthorized = new RecordingHttpMessageHandler(_ => new HttpResponseMessage(
