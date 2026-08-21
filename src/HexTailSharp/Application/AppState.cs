@@ -60,12 +60,13 @@ public sealed class AppState : IAsyncDisposable
         CancellationToken cancellationToken = default
     )
     {
-        ValidateElasticConnection(connection, secret);
         var previousSettings = _settings;
         var previous = previousSettings.ElasticConnections.FirstOrDefault(item =>
             item.Id == connection.Id
         );
         var previousSecret = previous is null ? null : _credentials.Get(connection.Id);
+        secret = string.IsNullOrWhiteSpace(secret) ? previousSecret : secret;
+        ValidateElasticConnection(connection, secret);
         var authenticated = connection.AuthMode is ElasticAuthMode.Basic or ElasticAuthMode.ApiKey;
         if (authenticated)
             _credentials.Set(connection.Id, secret!);

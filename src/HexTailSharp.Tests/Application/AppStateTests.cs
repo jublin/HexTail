@@ -10,6 +10,26 @@ namespace HexTailSharp.Tests.Application;
 public sealed class AppStateTests
 {
     [Fact]
+    public async Task SaveElasticConnection_PreservesExistingApiKeyWhenSecretIsBlank()
+    {
+        var connection = ElasticConnection("Ops") with { AuthMode = ElasticAuthMode.ApiKey };
+        var vault = new InMemoryCredentialVault();
+        vault.Set(connection.Id, "saved-api-key");
+        await using var state = new AppState(
+            NewTailers(),
+            new MemoryPersistence(),
+            new AppSettings { ElasticConnections = [connection] },
+            vault,
+            new FakeElasticApiClient()
+        );
+
+        await state.SaveElasticConnectionAsync(connection with { Name = "Updated" }, null);
+
+        Assert.Equal("saved-api-key", vault.Get(connection.Id));
+        Assert.Equal("Updated", Assert.Single(state.Settings.ElasticConnections).Name);
+    }
+
+    [Fact]
     public async Task SaveElasticConnection_RestoresSecretAndSettingsWhenJsonSaveFails()
     {
         var old = ElasticConnection("Old name");
