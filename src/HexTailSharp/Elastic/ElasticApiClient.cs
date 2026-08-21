@@ -323,8 +323,13 @@ public sealed class ElasticApiClient(HttpClient httpClient) : IElasticApiClient
                     )
                 ),
             ElasticAuthMode.ApiKey when !string.IsNullOrWhiteSpace(secret) =>
-                new AuthenticationHeaderValue("ApiKey", secret),
+                new AuthenticationHeaderValue("ApiKey", NormalizeApiKey(secret)),
             _ => throw new InvalidOperationException("Elastic authentication is incomplete."),
         };
     }
+
+    private static string NormalizeApiKey(string secret) =>
+        secret.Contains(':', StringComparison.Ordinal)
+            ? Convert.ToBase64String(Encoding.UTF8.GetBytes(secret))
+            : secret.Trim();
 }

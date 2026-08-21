@@ -132,7 +132,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         Status = "Checking…";
         try
         {
-            var views = await _owner.GetDataViewsAsync(ToSettings());
+            var views = await _owner.GetDataViewsAsync(ToSettings(), Secret);
             DataViews.Clear();
             foreach (var view in views)
                 DataViews.Add(view);
@@ -154,7 +154,14 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     {
         try
         {
-            var view = await _owner.GetDataViewAsync(ToSettings() with { DataViewId = id }, id);
+            var view = await _owner.GetDataViewAsync(
+                ToSettings() with
+                {
+                    DataViewId = id,
+                },
+                id,
+                Secret
+            );
             DataViewId = view.Id;
             DataViewTitle = view.Title;
             TimeFieldName = view.TimeFieldName;

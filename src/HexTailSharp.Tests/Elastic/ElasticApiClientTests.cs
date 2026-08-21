@@ -43,6 +43,34 @@ public sealed class ElasticApiClientTests
     }
 
     [Fact]
+    public async Task Client_PreservesNonDefaultPortAndEncodesApiKeyPair()
+    {
+        var handler = new RecordingHttpMessageHandler(_ => new HttpResponseMessage(
+            HttpStatusCode.OK
+        )
+        {
+            Content = new StringContent("{\"data_view\":[]}", Encoding.UTF8, "application/json"),
+        });
+        var client = new ElasticApiClient(new HttpClient(handler));
+        var connection = new ElasticConnectionSettings
+        {
+            Id = "c1",
+            Name = "ops",
+            KibanaUrl = "http://127.0.0.1:5602/",
+            ElasticsearchUrl = "http://127.0.0.1:9202/",
+            AuthMode = ElasticAuthMode.ApiKey,
+        };
+
+        await client.GetDataViewsAsync(connection, "api-id:api-secret");
+
+        Assert.Equal(5602, handler.Requests[0].RequestUri!.Port);
+        Assert.Equal(
+            "ApiKey " + Convert.ToBase64String(Encoding.UTF8.GetBytes("api-id:api-secret")),
+            handler.Requests[0].Headers.Authorization!.ToString()
+        );
+    }
+
+    [Fact]
     public async Task Client_MapsUnauthorizedAndTransientResponses()
     {
         var unauthorized = new RecordingHttpMessageHandler(_ => new HttpResponseMessage(

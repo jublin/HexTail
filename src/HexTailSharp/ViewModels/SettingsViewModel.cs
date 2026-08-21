@@ -414,13 +414,15 @@ internal sealed class SettingsViewModel : ReactiveObject
         _owner.State.SaveElasticConnectionAsync(connection, secret).AsTask();
 
     internal Task<IReadOnlyList<ElasticDataViewSummary>> GetDataViewsAsync(
-        ElasticConnectionSettings connection
-    ) => _owner.State.GetDataViewsAsync(connection);
+        ElasticConnectionSettings connection,
+        string? secret = null
+    ) => _owner.State.GetDataViewsAsync(connection, secret);
 
     internal Task<ElasticDataView> GetDataViewAsync(
         ElasticConnectionSettings connection,
-        string dataViewId
-    ) => _owner.State.GetDataViewAsync(connection, dataViewId);
+        string dataViewId,
+        string? secret = null
+    ) => _owner.State.GetDataViewAsync(connection, dataViewId, secret);
 
     private void AddElasticConnection()
     {

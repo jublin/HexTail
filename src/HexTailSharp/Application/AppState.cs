@@ -140,15 +140,27 @@ public sealed class AppState : IAsyncDisposable
 
     public Task<IReadOnlyList<ElasticDataViewSummary>> GetDataViewsAsync(
         ElasticConnectionSettings connection,
+        string? secret = null,
         CancellationToken cancellationToken = default
-    ) => _elastic.GetDataViewsAsync(connection, SecretFor(connection), cancellationToken);
+    ) =>
+        _elastic.GetDataViewsAsync(
+            connection,
+            string.IsNullOrWhiteSpace(secret) ? SecretFor(connection) : secret,
+            cancellationToken
+        );
 
     public Task<ElasticDataView> GetDataViewAsync(
         ElasticConnectionSettings connection,
         string dataViewId,
+        string? secret = null,
         CancellationToken cancellationToken = default
     ) =>
-        _elastic.GetDataViewAsync(connection, SecretFor(connection), dataViewId, cancellationToken);
+        _elastic.GetDataViewAsync(
+            connection,
+            string.IsNullOrWhiteSpace(secret) ? SecretFor(connection) : secret,
+            dataViewId,
+            cancellationToken
+        );
 
     public async ValueTask RestoreAsync(CancellationToken cancellationToken = default)
     {
