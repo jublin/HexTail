@@ -152,8 +152,9 @@ internal sealed class FileTailer : ILogTailer
             Write(new SourceReset(SourceId));
         }
 
+        var initialRead = !_hasObservedFile;
         _hasObservedFile = true;
-        await ReadAvailableBytesAsync(cancellationToken).ConfigureAwait(false);
+        await ReadAvailableBytesAsync(cancellationToken, initialRead).ConfigureAwait(false);
         if (_lastError is not null)
         {
             _lastError = null;
@@ -161,9 +162,14 @@ internal sealed class FileTailer : ILogTailer
         }
     }
 
-    private async ValueTask ReadAvailableBytesAsync(CancellationToken cancellationToken)
+    private async ValueTask ReadAvailableBytesAsync(
+        CancellationToken cancellationToken,
+        bool initialRead = false
+    )
     {
-        var lines = new List<string>();
+        var lines = initialRead ? null : new List<string>();
+        var maxInitialLines = Math.Max(1, _options.MaxInitialLines);
+        var initialLines = initialRead ? new Queue<string>(maxInitialLines) : null;
         await using var stream = new FileStream(
             Path,
             new FileStreamOptions
@@ -194,14 +200,28 @@ internal sealed class FileTailer : ILogTailer
         )
         {
             _offset += read;
-            AppendCompleteLines(buffer.AsSpan(0, read), lines);
+            AppendCompleteLines(
+                buffer.AsSpan(0, read),
+                line =>
+                {
+                    if (initialLines is not null)
+                    {
+                        if (initialLines.Count == maxInitialLines)
+                            initialLines.Dequeue();
+                        initialLines.Enqueue(line);
+                    }
+                    else
+                        lines!.Add(line);
+                }
+            );
         }
 
-        if (lines.Count > 0)
-            Write(new SourceLines(SourceId, lines.Select(_parser.Parse).ToArray()));
+        var completeLines = initialLines?.ToArray() ?? lines!.ToArray();
+        if (completeLines.Length > 0)
+            Write(new SourceLines(SourceId, completeLines.Select(_parser.Parse).ToArray()));
     }
 
-    private void AppendCompleteLines(ReadOnlySpan<byte> bytes, List<string> lines)
+    private void AppendCompleteLines(ReadOnlySpan<byte> bytes, Action<string> addLine)
     {
         for (var i = 0; i < bytes.Length; i++)
         {
@@ -213,7 +233,7 @@ internal sealed class FileTailer : ILogTailer
             if (length > 0 && _pendingBytes[length - 1] == (byte)'\r')
                 length--;
 
-            lines.Add(Encoding.UTF8.GetString(CollectionsMarshal.AsSpan(_pendingBytes)[..length]));
+            addLine(Encoding.UTF8.GetString(CollectionsMarshal.AsSpan(_pendingBytes)[..length]));
             _pendingBytes.Clear();
         }
     }

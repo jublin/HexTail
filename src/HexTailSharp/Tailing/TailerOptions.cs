@@ -14,6 +14,9 @@ public sealed record TailerOptions
     /// </summary>
     public TimeSpan PollInterval { get; init; } = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>Maximum number of complete lines read when a file is first opened.</summary>
+    public int MaxInitialLines { get; init; } = 10_000;
+
     /// <summary>
     /// Whether to attempt using a <see cref="FileSystemWatcher"/>. Watcher creation failures
     /// (e.g. unsupported in browser WASM) silently fall back to polling regardless.

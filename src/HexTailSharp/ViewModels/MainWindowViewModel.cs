@@ -44,6 +44,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private string? _searchError;
     private bool _started;
     private bool _closed;
+    private bool _restoring;
 
     public MainWindowViewModel(
         AppState state,
@@ -106,7 +107,11 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                     return Disposable.Create(() => _state.Changed -= Changed);
                 })
                 .ObserveOn(_scheduler)
-                .Subscribe(_ => SyncFromState())
+                .Subscribe(_ =>
+                {
+                    if (!_restoring)
+                        SyncFromState();
+                })
         );
 
         _subscriptions.Add(
@@ -235,6 +240,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             return;
 
         _started = true;
+        _restoring = true;
         try
         {
             await _state.RestoreAsync();
@@ -260,6 +266,10 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         {
             SetFileError(ex.Message);
             SyncFromState();
+        }
+        finally
+        {
+            _restoring = false;
         }
     }
 

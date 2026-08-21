@@ -7,6 +7,25 @@ namespace HexTailSharp.Tests.Tailing;
 public sealed class TailerServiceTests
 {
     [Fact]
+    public async Task StartTailer_LimitsInitialReadToConfiguredTail()
+    {
+        var path = CreateTempFile("one\ntwo\nthree\n");
+        await using var service = new LogSourceService(
+            new TailerOptions
+            {
+                MaxInitialLines = 2,
+                PollInterval = TimeSpan.FromMilliseconds(10),
+                UseFileSystemWatcher = false,
+            }
+        );
+        await using var tailer = service.StartFile("file-1", path, new PlainTextParser());
+
+        var initial = await ReadEventAsync<SourceLines>(service.Events);
+
+        Assert.Equal(["two", "three"], initial.Lines.Select(line => line.Raw));
+    }
+
+    [Fact]
     public async Task StartTailer_EmitsInitialAndAppendedCompleteLines()
     {
         var path = CreateTempFile("first\n");

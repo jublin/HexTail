@@ -227,9 +227,9 @@ public sealed class AppState : IAsyncDisposable
             catch (ArgumentException) { }
             catch (InvalidOperationException) { }
         }
-        if (_settings.ElasticConnections.Count > 0)
-            await _health.CheckOnceAsync(_settings, cancellationToken).ConfigureAwait(false);
         StartHealthLoop();
+        if (_settings.ElasticConnections.Count > 0)
+            SignalHealthCheck();
 
         lock (_gate)
         {
