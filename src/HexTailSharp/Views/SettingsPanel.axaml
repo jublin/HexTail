@@ -275,13 +275,10 @@
                                 FilterMode="Contains"
                                 MinimumPrefixLength="0"
                               />
-                              <AutoCompleteBox
+                              <TextBox
                                 Grid.Column="1"
-                                ItemsSource="{Binding FieldNames}"
-                                SelectedItem="{Binding NamespaceField, Mode=TwoWay}"
-                                PlaceholderText="Namespace field · e.g. environment"
-                                FilterMode="Contains"
-                                MinimumPrefixLength="0"
+                                Text="{Binding FilterValue, Mode=TwoWay}"
+                                PlaceholderText="Filter value · e.g. app1"
                               />
                             </Grid>
                             <TextBlock

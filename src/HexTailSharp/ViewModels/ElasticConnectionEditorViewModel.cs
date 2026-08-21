@@ -89,6 +89,21 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     public ObservableCollection<ElasticFieldOptionViewModel> Fields { get; } = [];
     public ObservableCollection<ElasticSourceSettingViewModel> Sources { get; } = [];
     public IEnumerable<string> FieldNames => Fields.Select(option => option.Name);
+    public string FilterValue
+    {
+        get => Sources.FirstOrDefault()?.ServerValue ?? string.Empty;
+        set
+        {
+            var source = Sources.FirstOrDefault();
+            if (source is null)
+            {
+                AddSource();
+                source = Sources[0];
+            }
+            source.ServerValue = value;
+            this.RaisePropertyChanged();
+        }
+    }
 
     internal void Sync(ElasticConnectionSettings settings)
     {
@@ -118,6 +133,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
                     NamespaceValue = source.NamespaceValue,
                 }
             );
+        this.RaisePropertyChanged(nameof(FilterValue));
     }
 
     public ElasticConnectionSettings ToSettings() =>
@@ -133,12 +149,23 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             DataViewTitle = DataViewTitle,
             TimeFieldName = TimeFieldName,
             ServerField = ServerField,
-            NamespaceField = NamespaceField,
+            NamespaceField = NamespaceField ?? ServerField,
             OutputFields = Fields
                 .Where(field => field.IsOutput)
                 .Select(field => field.Name)
                 .ToList(),
-            Sources = Sources.Select(source => source.ToSettings()).ToList(),
+            Sources = Sources
+                .Select(source =>
+                {
+                    var settings = source.ToSettings();
+                    return string.IsNullOrWhiteSpace(settings.NamespaceValue)
+                        ? settings with
+                        {
+                            NamespaceValue = settings.ServerValue,
+                        }
+                        : settings;
+                })
+                .ToList(),
         };
 
     internal async Task SaveAsync()
