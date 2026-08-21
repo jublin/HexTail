@@ -375,6 +375,16 @@ public sealed class AppState : IAsyncDisposable
     public bool IsElasticSourceOpen(string sourceId) =>
         Files.Any(file => file.Source.ElasticSourceId == sourceId);
 
+    internal void SetElasticTimeRange(FileTabState tab, string from, string to)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        if (tab.Source.Kind != LogSourceKind.Elastic || tab.Tailer is not ElasticTailer tailer)
+            throw new ArgumentException("The selected tab is not an Elastic tab.", nameof(tab));
+        tailer.SetTimeRange(from, to);
+        tab.ElasticFrom = from.Trim();
+        tab.ElasticTo = to.Trim();
+    }
+
     public IReadOnlyDictionary<string, ElasticSourceHealth> ElasticSourceStatuses =>
         _health.Statuses;
     public bool HasElasticWarning => _health.HasWarning;

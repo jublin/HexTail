@@ -52,6 +52,8 @@ public sealed class FileTabState : IAsyncDisposable
     public int? ExpandedLine { get; set; }
     public int ContextAbove { get; set; } = 3;
     public int ContextBelow { get; set; } = 10;
+    public string ElasticFrom { get; set; } = "now-5m";
+    public string ElasticTo { get; set; } = "now";
     public string? Error { get; internal set; }
     public ILogTailer Tailer { get; }
     public string DisplayName => Source.DisplayName;

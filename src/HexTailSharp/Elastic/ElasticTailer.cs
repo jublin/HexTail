@@ -21,6 +21,8 @@ internal sealed class ElasticTailer : ILogTailer
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly CancellationTokenSource _stop = new();
     private readonly HashSet<string> _idsAtCursor = new(StringComparer.Ordinal);
+    private string _fromExpression = $"now-{InitialLookback.TotalMinutes:0}m";
+    private string _toExpression = "now";
     private Task? _completion;
     private DateTimeOffset? _cursorTimestamp;
     private int _disposed;
@@ -54,8 +56,8 @@ internal sealed class ElasticTailer : ILogTailer
 
     internal async Task PollOnceAsync(CancellationToken cancellationToken)
     {
-        var toInclusive = _utcNow();
-        var fromInclusive = _cursorTimestamp ?? toInclusive - InitialLookback;
+        var toInclusive = ParseTime(_toExpression, _utcNow());
+        var fromInclusive = _cursorTimestamp ?? ParseTime(_fromExpression, toInclusive);
         var pitId = await _client.OpenPitAsync(
             _connection,
             _secret,
@@ -114,6 +116,17 @@ internal sealed class ElasticTailer : ILogTailer
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         }
+    }
+
+    internal void SetTimeRange(string from, string to)
+    {
+        var now = _utcNow();
+        _ = ParseTime(from, now);
+        _ = ParseTime(to, now);
+        _fromExpression = from.Trim();
+        _toExpression = to.Trim();
+        _cursorTimestamp = null;
+        _idsAtCursor.Clear();
     }
 
     public async ValueTask DisposeAsync()
@@ -175,5 +188,34 @@ internal sealed class ElasticTailer : ILogTailer
         if (!reportedError)
             _events.TryWrite(new SourceError(SourceId, message));
         reportedError = true;
+    }
+
+    private static DateTimeOffset ParseTime(string expression, DateTimeOffset now)
+    {
+        var value = expression.Trim();
+        if (string.Equals(value, "now", StringComparison.OrdinalIgnoreCase))
+            return now;
+        if (value.StartsWith("now-", StringComparison.OrdinalIgnoreCase))
+        {
+            var relative = value[4..];
+            if (relative.Length > 1 && double.TryParse(relative[..^1], out var amount))
+            {
+                var duration = relative[^1] switch
+                {
+                    's' => TimeSpan.FromSeconds(amount),
+                    'm' => TimeSpan.FromMinutes(amount),
+                    'h' => TimeSpan.FromHours(amount),
+                    'd' => TimeSpan.FromDays(amount),
+                    _ => TimeSpan.MinValue,
+                };
+                if (duration != TimeSpan.MinValue)
+                    return now - duration;
+            }
+        }
+        if (DateTimeOffset.TryParse(value, out var timestamp))
+            return timestamp;
+        throw new ArgumentException(
+            $"Invalid Elastic time expression '{expression}'. Use now, now-5m, or an ISO timestamp."
+        );
     }
 }

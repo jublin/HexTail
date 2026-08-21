@@ -45,6 +45,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private bool _started;
     private bool _closed;
     private bool _restoring;
+    private string _elasticFrom = "now-5m";
+    private string _elasticTo = "now";
 
     public MainWindowViewModel(
         AppState state,
@@ -74,6 +76,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             _scheduler
         );
         SelectFileCommand = ReactiveCommand.Create<FileTabViewModel>(SelectFile, _scheduler);
+        ApplyElasticTimeRangeCommand = ReactiveCommand.Create(ApplyElasticTimeRange, _scheduler);
         CloseFileCommand = ReactiveCommand.CreateFromTask<FileTabViewModel>(
             CloseFileAsync,
             _scheduler
@@ -141,6 +144,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSettingsCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> SelectFileCommand { get; }
+    public ReactiveCommand<Unit, Unit> ApplyElasticTimeRangeCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> CloseFileCommand { get; }
     public ReactiveCommand<LogViewViewModel, Unit> RemoveSearchCommand { get; }
     public ReactiveCommand<Unit, Unit> AddSearchCommand { get; }
@@ -157,11 +161,27 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             var previous = _selectedFile;
             this.RaiseAndSetIfChanged(ref _selectedFile, value);
             previous?.RaiseSelectionChanged();
+            if (value is not null)
+            {
+                ElasticFrom = value.Model.ElasticFrom;
+                ElasticTo = value.Model.ElasticTo;
+            }
             value?.RaiseSelectionChanged();
         }
     }
 
     public bool HasFile => SelectedFile is not null;
+    public bool IsElasticSelected => SelectedFile?.Model.Source.Kind == LogSourceKind.Elastic;
+    public string ElasticFrom
+    {
+        get => _elasticFrom;
+        set => this.RaiseAndSetIfChanged(ref _elasticFrom, value);
+    }
+    public string ElasticTo
+    {
+        get => _elasticTo;
+        set => this.RaiseAndSetIfChanged(ref _elasticTo, value);
+    }
     public bool ShowEmpty => !HasFile;
     public int FileCount => Files.Count;
     public int LineCount => SelectedFile?.Model.Buffer.Count ?? 0;
@@ -518,6 +538,21 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         this.RaisePropertyChanged(nameof(HasElasticSources));
         this.RaisePropertyChanged(nameof(HasElasticWarning));
         this.RaisePropertyChanged(nameof(ElasticSourceIcon));
+    }
+
+    private void ApplyElasticTimeRange()
+    {
+        if (!IsElasticSelected || SelectedFile is null)
+            return;
+        try
+        {
+            _state.SetElasticTimeRange(SelectedFile.Model, ElasticFrom, ElasticTo);
+            SetFileError(null);
+        }
+        catch (ArgumentException exception)
+        {
+            SetFileError(exception.Message);
+        }
     }
 
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
