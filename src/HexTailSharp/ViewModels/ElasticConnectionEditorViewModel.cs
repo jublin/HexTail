@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using Avalonia.Threading;
 using HexTailSharp.Elastic;
 using HexTailSharp.Persistence;
 using ReactiveUI;
@@ -16,6 +17,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     private string? _status;
     private ElasticAuthMode _authMode;
     private string _outputFieldQuery = string.Empty;
+    private CancellationTokenSource? _fieldFilterCancellation;
 
     public ElasticConnectionEditorViewModel(SettingsViewModel owner, string id)
     {
@@ -90,12 +92,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     public ObservableCollection<ElasticFieldOptionViewModel> Fields { get; } = [];
     public ObservableCollection<ElasticSourceSettingViewModel> Sources { get; } = [];
     public IEnumerable<string> FieldNames => Fields.Select(option => option.Name);
-    public IEnumerable<ElasticFieldOptionViewModel> FilteredFields =>
-        string.IsNullOrWhiteSpace(OutputFieldQuery)
-            ? Fields.Where(option => option.IsOutput)
-            : Fields.Where(option =>
-                option.Name.Contains(OutputFieldQuery.Trim(), StringComparison.OrdinalIgnoreCase)
-            );
+    public ObservableCollection<ElasticFieldOptionViewModel> VisibleFields { get; } = [];
     public string OutputFieldQuery
     {
         get => _outputFieldQuery;
@@ -104,7 +101,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             if (string.Equals(_outputFieldQuery, value, StringComparison.Ordinal))
                 return;
             this.RaiseAndSetIfChanged(ref _outputFieldQuery, value);
-            this.RaisePropertyChanged(nameof(FilteredFields));
+            QueueFieldFilter();
         }
     }
     public string FilterValue
@@ -139,8 +136,9 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
 
         Fields.Clear();
         foreach (var field in settings.OutputFields.Distinct(StringComparer.Ordinal))
-            Fields.Add(new ElasticFieldOptionViewModel(field) { IsOutput = true });
+            AddField(new ElasticFieldOptionViewModel(field) { IsOutput = true });
         this.RaisePropertyChanged(nameof(FieldNames));
+        RefreshVisibleFields();
 
         Sources.Clear();
         foreach (var source in settings.Sources)
@@ -242,8 +240,9 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             TimeFieldName = view.TimeFieldName;
             Fields.Clear();
             foreach (var field in view.Fields)
-                Fields.Add(new ElasticFieldOptionViewModel(field.Name));
+                AddField(new ElasticFieldOptionViewModel(field.Name));
             this.RaisePropertyChanged(nameof(FieldNames));
+            RefreshVisibleFields();
         }
         catch (Exception exception)
         {
@@ -255,4 +254,55 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         Sources.Add(new ElasticSourceSettingViewModel(Guid.NewGuid().ToString("N")));
 
     private void RemoveSource(ElasticSourceSettingViewModel source) => Sources.Remove(source);
+
+    private void AddField(ElasticFieldOptionViewModel field)
+    {
+        field.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ElasticFieldOptionViewModel.IsOutput))
+                RefreshVisibleFields();
+        };
+        Fields.Add(field);
+    }
+
+    private void QueueFieldFilter()
+    {
+        _fieldFilterCancellation?.Cancel();
+        var cancellation = new CancellationTokenSource();
+        _fieldFilterCancellation = cancellation;
+        _ = ApplyFieldFilterAsync(cancellation);
+    }
+
+    private async Task ApplyFieldFilterAsync(CancellationTokenSource cancellation)
+    {
+        try
+        {
+            await Task.Delay(150, cancellation.Token).ConfigureAwait(false);
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!cancellation.IsCancellationRequested)
+                    RefreshVisibleFields();
+            });
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private void RefreshVisibleFields()
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(RefreshVisibleFields);
+            return;
+        }
+
+        var query = OutputFieldQuery.Trim();
+        var fields = string.IsNullOrWhiteSpace(query)
+            ? Fields.Where(option => option.IsOutput)
+            : Fields.Where(option =>
+                option.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+            );
+        VisibleFields.Clear();
+        foreach (var field in fields)
+            VisibleFields.Add(field);
+    }
 }
