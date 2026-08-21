@@ -504,11 +504,13 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         Settings.Sync(_state.Settings);
         var configured = _state
             .Settings.ElasticConnections.SelectMany(connection =>
-                connection.Sources.Select(source =>
-                    (
-                        source.Id,
-                        source.DisplayName,
-                        ToolTip: $"{connection.Name}: {source.DisplayName}"
+                connection.Views.SelectMany(view =>
+                    view.Sources.Select(source =>
+                        (
+                            source.Id,
+                            source.DisplayName,
+                            ToolTip: $"{connection.Name} / {view.Name}: {source.DisplayName}"
+                        )
                     )
                 )
             )

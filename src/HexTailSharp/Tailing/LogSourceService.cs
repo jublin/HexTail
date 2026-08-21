@@ -47,12 +47,20 @@ public sealed class LogSourceService : IAsyncDisposable
 
     public ILogTailer StartElastic(
         Persistence.ElasticConnectionSettings connection,
+        Persistence.ElasticViewSettings view,
         Persistence.ElasticSourceSettings source,
         string secret,
         Elastic.IElasticApiClient client
     )
     {
-        var tailer = new Elastic.ElasticTailer(connection, source, secret, client, _channel.Writer);
+        var tailer = new Elastic.ElasticTailer(
+            connection,
+            view,
+            source,
+            secret,
+            client,
+            _channel.Writer
+        );
         lock (_gate)
             _tailers.Add(tailer);
         tailer.Start();

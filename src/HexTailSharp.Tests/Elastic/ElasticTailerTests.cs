@@ -26,7 +26,8 @@ public sealed class ElasticTailerTests
         var now = new DateTimeOffset(2026, 8, 20, 10, 5, 0, TimeSpan.Zero);
         await using var tailer = new ElasticTailer(
             connection,
-            connection.Sources[0],
+            connection.Views[0],
+            connection.Views[0].Sources[0],
             "secret",
             client,
             channel.Writer,
@@ -57,13 +58,25 @@ public sealed class ElasticTailerTests
             ServerField = "server",
             NamespaceField = "namespace",
             OutputFields = ["message"],
-            Sources =
+            Views =
             [
-                new ElasticSourceSettings
+                new ElasticViewSettings
                 {
-                    Id = "s1",
-                    ServerValue = "api",
-                    NamespaceValue = "prod",
+                    Id = "v1",
+                    DataViewTitle = "logs-*",
+                    TimeFieldName = "@timestamp",
+                    ServerField = "server",
+                    NamespaceField = "namespace",
+                    OutputFields = ["message"],
+                    Sources =
+                    [
+                        new ElasticSourceSettings
+                        {
+                            Id = "s1",
+                            ServerValue = "api",
+                            NamespaceValue = "prod",
+                        },
+                    ],
                 },
             ],
         };

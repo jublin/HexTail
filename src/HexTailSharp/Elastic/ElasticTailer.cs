@@ -13,6 +13,7 @@ internal sealed class ElasticTailer : ILogTailer
     internal const int PageSize = 1_000;
 
     private readonly ElasticConnectionSettings _connection;
+    private readonly ElasticViewSettings _view;
     private readonly ElasticSourceSettings _source;
     private readonly string _secret;
     private readonly IElasticApiClient _client;
@@ -29,6 +30,7 @@ internal sealed class ElasticTailer : ILogTailer
 
     internal ElasticTailer(
         ElasticConnectionSettings connection,
+        ElasticViewSettings view,
         ElasticSourceSettings source,
         string secret,
         IElasticApiClient client,
@@ -38,6 +40,7 @@ internal sealed class ElasticTailer : ILogTailer
     )
     {
         _connection = connection;
+        _view = view;
         _source = source;
         _secret = secret;
         _client = client;
@@ -65,7 +68,7 @@ internal sealed class ElasticTailer : ILogTailer
         var pitId = await _client.OpenPitAsync(
             _connection,
             _secret,
-            _connection.DataViewTitle!,
+            _view.DataViewTitle!,
             cancellationToken
         );
         var accepted = new List<Domain.Line>();
@@ -79,15 +82,15 @@ internal sealed class ElasticTailer : ILogTailer
                     _secret,
                     pitId,
                     new ElasticSearchRequest(
-                        _connection.DataViewTitle!,
-                        _connection.TimeFieldName!,
+                        _view.DataViewTitle!,
+                        _view.TimeFieldName!,
                         fromInclusive,
                         toInclusive,
-                        _connection.ServerField!,
+                        _view.ServerField!,
                         _source.ServerValue,
-                        _connection.NamespaceField!,
+                        _view.NamespaceField!,
                         _source.NamespaceValue,
-                        _connection.OutputFields,
+                        _view.OutputFields,
                         searchAfter
                     ),
                     cancellationToken

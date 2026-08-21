@@ -35,7 +35,9 @@ public sealed class ElasticHealthMonitor : IAsyncDisposable
     )
     {
         var checking = settings
-            .ElasticConnections.SelectMany(connection => connection.Sources)
+            .ElasticConnections.SelectMany(connection =>
+                connection.Views.SelectMany(view => view.Sources)
+            )
             .GroupBy(source => source.Id, StringComparer.Ordinal)
             .ToDictionary(
                 group => group.Key,
@@ -51,95 +53,99 @@ public sealed class ElasticHealthMonitor : IAsyncDisposable
         var next = new Dictionary<string, ElasticSourceHealth>(StringComparer.Ordinal);
         foreach (var connection in settings.ElasticConnections)
         {
-            ElasticDataView? view = null;
-            Exception? connectionError = null;
-            try
+            foreach (var view in connection.Views)
             {
-                var secret = connection.AuthMode is ElasticAuthMode.Basic or ElasticAuthMode.ApiKey
-                    ? _vault.Get(connection.Id)
-                    : null;
-                if (
-                    string.IsNullOrWhiteSpace(connection.DataViewId)
-                    || string.IsNullOrWhiteSpace(connection.DataViewTitle)
-                    || string.IsNullOrWhiteSpace(connection.TimeFieldName)
-                    || string.IsNullOrWhiteSpace(connection.ServerField)
-                    || string.IsNullOrWhiteSpace(connection.NamespaceField)
-                    || connection.OutputFields.Count == 0
-                )
-                    throw new ArgumentException("The Elastic connection is incomplete.");
-                view = await _client.GetDataViewAsync(
-                    connection,
-                    secret,
-                    connection.DataViewId,
-                    cancellationToken
-                );
-            }
-            catch (ElasticUnauthorizedException exception)
-            {
-                connectionError = exception;
-            }
-            catch (ElasticTransientException exception)
-            {
-                connectionError = exception;
-            }
-            catch (Exception exception)
-            {
-                connectionError = exception;
-            }
-            foreach (var source in connection.Sources)
-            {
-                var status = connectionError switch
-                {
-                    ElasticUnauthorizedException => ElasticConnectionStatus.Unauthorized,
-                    ElasticTransientException => ElasticConnectionStatus.Unreachable,
-                    ArgumentException => ElasticConnectionStatus.Misconfigured,
-                    not null => ElasticConnectionStatus.Unreachable,
-                    _ => ElasticConnectionStatus.Connected,
-                };
-                var message = connectionError?.Message ?? "Connected";
-                if (connectionError is null)
+                Exception? connectionError = null;
+                try
                 {
                     var secret = connection.AuthMode
                         is ElasticAuthMode.Basic
                             or ElasticAuthMode.ApiKey
                         ? _vault.Get(connection.Id)
                         : null;
-                    try
-                    {
-                        await _client.CheckHealthAsync(
-                            connection,
-                            secret,
-                            new ElasticSearchRequest(
-                                connection.DataViewTitle!,
-                                connection.TimeFieldName!,
-                                _now().AddMinutes(-1),
-                                _now(),
-                                connection.ServerField!,
-                                source.ServerValue,
-                                connection.NamespaceField!,
-                                source.NamespaceValue,
-                                []
-                            ),
-                            cancellationToken
-                        );
-                    }
-                    catch (ElasticUnauthorizedException exception)
-                    {
-                        status = ElasticConnectionStatus.Unauthorized;
-                        message = exception.Message;
-                    }
-                    catch (ElasticTransientException exception)
-                    {
-                        status = ElasticConnectionStatus.Unreachable;
-                        message = exception.Message;
-                    }
-                    catch (Exception exception)
-                    {
-                        status = ElasticConnectionStatus.Unreachable;
-                        message = exception.Message;
-                    }
+                    if (
+                        string.IsNullOrWhiteSpace(view.DataViewId)
+                        || string.IsNullOrWhiteSpace(view.DataViewTitle)
+                        || string.IsNullOrWhiteSpace(view.TimeFieldName)
+                        || string.IsNullOrWhiteSpace(view.ServerField)
+                        || string.IsNullOrWhiteSpace(view.NamespaceField)
+                        || view.OutputFields.Count == 0
+                    )
+                        throw new ArgumentException("The Elastic view is incomplete.");
+                    await _client.GetDataViewAsync(
+                        connection,
+                        secret,
+                        view.DataViewId,
+                        cancellationToken
+                    );
                 }
-                next[source.Id] = new ElasticSourceHealth(source.Id, status, message, _now());
+                catch (ElasticUnauthorizedException exception)
+                {
+                    connectionError = exception;
+                }
+                catch (ElasticTransientException exception)
+                {
+                    connectionError = exception;
+                }
+                catch (Exception exception)
+                {
+                    connectionError = exception;
+                }
+                foreach (var source in view.Sources)
+                {
+                    var status = connectionError switch
+                    {
+                        ElasticUnauthorizedException => ElasticConnectionStatus.Unauthorized,
+                        ElasticTransientException => ElasticConnectionStatus.Unreachable,
+                        ArgumentException => ElasticConnectionStatus.Misconfigured,
+                        not null => ElasticConnectionStatus.Unreachable,
+                        _ => ElasticConnectionStatus.Connected,
+                    };
+                    var message = connectionError?.Message ?? "Connected";
+                    if (connectionError is null)
+                    {
+                        var secret = connection.AuthMode
+                            is ElasticAuthMode.Basic
+                                or ElasticAuthMode.ApiKey
+                            ? _vault.Get(connection.Id)
+                            : null;
+                        try
+                        {
+                            await _client.CheckHealthAsync(
+                                connection,
+                                secret,
+                                new ElasticSearchRequest(
+                                    view.DataViewTitle!,
+                                    view.TimeFieldName!,
+                                    _now().AddMinutes(-1),
+                                    _now(),
+                                    view.ServerField!,
+                                    source.ServerValue,
+                                    view.NamespaceField!,
+                                    source.NamespaceValue,
+                                    []
+                                ),
+                                cancellationToken
+                            );
+                        }
+                        catch (ElasticUnauthorizedException exception)
+                        {
+                            status = ElasticConnectionStatus.Unauthorized;
+                            message = exception.Message;
+                        }
+                        catch (ElasticTransientException exception)
+                        {
+                            status = ElasticConnectionStatus.Unreachable;
+                            message = exception.Message;
+                        }
+                        catch (Exception exception)
+                        {
+                            status = ElasticConnectionStatus.Unreachable;
+                            message = exception.Message;
+                        }
+                    }
+                    next[source.Id] = new ElasticSourceHealth(source.Id, status, message, _now());
+                }
             }
         }
         Publish(next);

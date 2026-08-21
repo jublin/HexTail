@@ -316,7 +316,9 @@ public sealed class AppState : IAsyncDisposable
     {
         var match = _settings
             .ElasticConnections.SelectMany(connection =>
-                connection.Sources.Select(source => (connection, source))
+                connection.Views.SelectMany(view =>
+                    view.Sources.Select(source => (connection, view, source))
+                )
             )
             .FirstOrDefault(item => item.source.Id == sourceId);
         if (match.source is null)
@@ -331,11 +333,12 @@ public sealed class AppState : IAsyncDisposable
             }
         }
         var connection = match.connection;
+        var view = match.view;
         if (
-            string.IsNullOrWhiteSpace(connection.DataViewTitle)
-            || string.IsNullOrWhiteSpace(connection.TimeFieldName)
-            || string.IsNullOrWhiteSpace(connection.ServerField)
-            || string.IsNullOrWhiteSpace(connection.NamespaceField)
+            string.IsNullOrWhiteSpace(view.DataViewTitle)
+            || string.IsNullOrWhiteSpace(view.TimeFieldName)
+            || string.IsNullOrWhiteSpace(view.ServerField)
+            || string.IsNullOrWhiteSpace(view.NamespaceField)
         )
             throw new ArgumentException(
                 "The Elastic source configuration is incomplete.",
@@ -345,7 +348,7 @@ public sealed class AppState : IAsyncDisposable
             ? _credentials.Get(connection.Id)
                 ?? throw new InvalidOperationException("The Elastic credential is unavailable.")
             : string.Empty;
-        var tailer = _tailers.StartElastic(connection, match.source, secret, _elastic);
+        var tailer = _tailers.StartElastic(connection, view, match.source, secret, _elastic);
         var tab = new FileTabState(
             new LogSourceDescriptor(
                 sourceId,
