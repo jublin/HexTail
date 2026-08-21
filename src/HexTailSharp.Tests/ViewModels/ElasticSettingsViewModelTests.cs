@@ -12,6 +12,27 @@ namespace HexTailSharp.Tests.ViewModels;
 public sealed class ElasticSettingsViewModelTests
 {
     [Fact]
+    public async Task ChangingAuthModeNotifiesCredentialVisibility()
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var state = new AppState(new LogSourceService(), new TestPersistence());
+        await using var owner = new MainWindowViewModel(
+            state,
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        var editor = Assert.Single(owner.Settings.ElasticConnections);
+        var changed = new List<string>();
+        editor.PropertyChanged += (_, args) => changed.Add(args.PropertyName!);
+
+        editor.AuthMode = ElasticAuthMode.Basic;
+
+        Assert.Contains(nameof(editor.IsBasic), changed);
+        Assert.Contains(nameof(editor.IsAuthenticated), changed);
+    }
+
+    [Fact]
     public async Task TestConnection_PopulatesDataViewsAndReportsConnected()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();

@@ -14,6 +14,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     private string? _selectedDataViewId;
     private string? _error;
     private string? _status;
+    private ElasticAuthMode _authMode;
 
     public ElasticConnectionEditorViewModel(SettingsViewModel owner, string id)
     {
@@ -29,7 +30,18 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     public string Name { get; set; } = string.Empty;
     public string KibanaUrl { get; set; } = string.Empty;
     public string ElasticsearchUrl { get; set; } = string.Empty;
-    public ElasticAuthMode AuthMode { get; set; }
+    public ElasticAuthMode AuthMode
+    {
+        get => _authMode;
+        set
+        {
+            if (_authMode == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _authMode, value);
+            this.RaisePropertyChanged(nameof(IsAuthenticated));
+            this.RaisePropertyChanged(nameof(IsBasic));
+        }
+    }
     public IReadOnlyList<ElasticAuthMode> AuthModes { get; } = Enum.GetValues<ElasticAuthMode>();
     public bool IsAuthenticated => AuthMode != ElasticAuthMode.Anonymous;
     public bool IsBasic => AuthMode == ElasticAuthMode.Basic;
