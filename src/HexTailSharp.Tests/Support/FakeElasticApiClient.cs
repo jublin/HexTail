@@ -12,12 +12,13 @@ internal sealed class FakeElasticApiClient : IElasticApiClient
     public string PitId { get; set; } = "pit-1";
     public Exception? DataViewError { get; set; }
     public Exception? HealthError { get; set; }
+    public IReadOnlyList<ElasticDataViewSummary> DataViews { get; set; } = [];
 
     public Task<IReadOnlyList<ElasticDataViewSummary>> GetDataViewsAsync(
         ElasticConnectionSettings c,
         string? s,
         CancellationToken t = default
-    ) => Task.FromResult<IReadOnlyList<ElasticDataViewSummary>>([]);
+    ) => Task.FromResult(DataViews);
 
     public Task<ElasticDataView> GetDataViewAsync(
         ElasticConnectionSettings c,

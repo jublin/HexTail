@@ -12,6 +12,8 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     private readonly SettingsViewModel _owner;
     private bool _isTesting;
     private string? _selectedDataViewId;
+    private string? _error;
+    private string? _status;
 
     public ElasticConnectionEditorViewModel(SettingsViewModel owner, string id)
     {
@@ -38,7 +40,16 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> AddSourceCommand { get; }
     public ReactiveCommand<ElasticSourceSettingViewModel, Unit> RemoveSourceCommand { get; }
     public ObservableCollection<ElasticDataViewSummary> DataViews { get; } = [];
-    public string? Error { get; private set; }
+    public string? Error
+    {
+        get => _error;
+        private set => this.RaiseAndSetIfChanged(ref _error, value);
+    }
+    public string? Status
+    {
+        get => _status;
+        private set => this.RaiseAndSetIfChanged(ref _status, value);
+    }
     public bool IsTesting
     {
         get => _isTesting;
@@ -106,16 +117,20 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     {
         IsTesting = true;
         Error = null;
+        Status = "Checking…";
         try
         {
             var views = await _owner.GetDataViewsAsync(ToSettings());
             DataViews.Clear();
             foreach (var view in views)
                 DataViews.Add(view);
+            Status =
+                $"Connected ({views.Count} data view{(views.Count == 1 ? string.Empty : "s")})";
         }
         catch (Exception exception)
         {
             Error = exception.Message;
+            Status = "Connection failed";
         }
         finally
         {
