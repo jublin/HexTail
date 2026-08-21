@@ -92,7 +92,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     public IEnumerable<string> FieldNames => Fields.Select(option => option.Name);
     public IEnumerable<ElasticFieldOptionViewModel> FilteredFields =>
         string.IsNullOrWhiteSpace(OutputFieldQuery)
-            ? Fields
+            ? Fields.Where(option => option.IsOutput)
             : Fields.Where(option =>
                 option.Name.Contains(OutputFieldQuery.Trim(), StringComparison.OrdinalIgnoreCase)
             );
