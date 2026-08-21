@@ -53,6 +53,38 @@ public sealed class ElasticSettingsViewModelTests
     }
 
     [Fact]
+    public async Task StateSync_DoesNotClearUnsavedElasticEditorValues()
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var state = new AppState(new LogSourceService(), new TestPersistence());
+        await using var owner = new MainWindowViewModel(
+            state,
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        var connection = new ElasticConnectionSettings
+        {
+            Id = "c1",
+            Name = "ops",
+            KibanaUrl = "https://kibana/",
+            ElasticsearchUrl = "https://elastic/",
+            AuthMode = ElasticAuthMode.ApiKey,
+            ServerField = "ident",
+            NamespaceField = "service.name",
+        };
+        owner.Settings.Sync(new AppSettings { ElasticConnections = [connection] });
+        var editor = Assert.Single(owner.Settings.ElasticConnections);
+        editor.Secret = "typed-api-key";
+        editor.ServerField = "updated.ident";
+
+        owner.Settings.Sync(new AppSettings { ElasticConnections = [connection] });
+
+        Assert.Equal(ElasticAuthMode.ApiKey, editor.AuthMode);
+        Assert.Equal("typed-api-key", editor.Secret);
+        Assert.Equal("updated.ident", editor.ServerField);
+    }
+
+    [Fact]
     public async Task Settings_ExposesElasticSectionAndManualSourceEditors()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();

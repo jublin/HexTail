@@ -297,15 +297,16 @@ internal sealed class SettingsViewModel : ReactiveObject
         )
         {
             if (connectionIndex == ElasticConnections.Count)
+            {
                 ElasticConnections.Add(
                     new ElasticConnectionEditorViewModel(
                         this,
                         settings.ElasticConnections[connectionIndex].Id
                     )
                 );
-            var connection = settings.ElasticConnections[connectionIndex];
-            var editor = ElasticConnections[connectionIndex];
-            editor.Sync(connection);
+                ElasticConnections[connectionIndex]
+                    .Sync(settings.ElasticConnections[connectionIndex]);
+            }
         }
         SelectedElasticConnection ??= ElasticConnections.FirstOrDefault();
     }
