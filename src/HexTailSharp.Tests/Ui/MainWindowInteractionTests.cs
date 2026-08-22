@@ -39,6 +39,59 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
+    public async Task ElasticTimeRangePanelIsVisibleForAnOpenElasticTab()
+    {
+        var connection = new ElasticConnectionSettings
+        {
+            Id = "server-1",
+            Name = "Elastic",
+            KibanaUrl = "https://kibana/",
+            ElasticsearchUrl = "https://elastic/",
+            Views =
+            [
+                new ElasticViewSettings
+                {
+                    Id = "view-1",
+                    Name = "Logs",
+                    DataViewTitle = "logs-*",
+                    TimeFieldName = "@timestamp",
+                    ServerField = "ident",
+                    NamespaceField = "service.name",
+                    OutputFields = ["message"],
+                    Sources =
+                    [
+                        new ElasticSourceSettings
+                        {
+                            Id = "source-1",
+                            ServerValue = "app1",
+                            NamespaceValue = "prod",
+                        },
+                    ],
+                },
+            ],
+        };
+        await using var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            new AppSettings { ElasticConnections = [connection] },
+            elastic: new FakeElasticApiClient()
+        );
+        var viewModel = new MainWindowViewModel(
+            state,
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        await state.OpenElasticSourceAsync("source-1", save: false);
+        var window = new MainWindow(viewModel, registerNativePicker: false);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(viewModel.IsElasticSelected);
+        Assert.True(window.FindControl<StackPanel>("ElasticTimeRangePanel")!.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void MainWindowComposesDedicatedWorkspaceControls()
     {
         var window = TestWindow.Create(out _);

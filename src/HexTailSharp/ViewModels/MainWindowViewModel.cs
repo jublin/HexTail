@@ -160,6 +160,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
             var previous = _selectedFile;
             this.RaiseAndSetIfChanged(ref _selectedFile, value);
+            this.RaisePropertyChanged(nameof(IsElasticSelected));
             previous?.RaiseSelectionChanged();
             if (value is not null)
             {

@@ -130,6 +130,7 @@
           <views:SearchBar DataContext="{Binding }" DockPanel.Dock="Left" />
 
           <StackPanel
+            x:Name="ElasticTimeRangePanel"
             Orientation="Horizontal"
             Spacing="4"
             Margin="6,0,0,0"
