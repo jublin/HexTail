@@ -8,11 +8,10 @@
 >
   <Border
     Classes="settings-modal"
-    Width="1200"
-    Height="820"
-    MinWidth="640"
-    MaxWidth="{Binding Bounds.Width, RelativeSource={RelativeSource AncestorType=Window}}"
-    MaxHeight="{Binding Bounds.Height, RelativeSource={RelativeSource AncestorType=Window}}"
+    Width="{Binding Bounds.Width, RelativeSource={RelativeSource AncestorType=Window}}"
+    Height="{Binding Bounds.Height, RelativeSource={RelativeSource AncestorType=Window}}"
+    MinWidth="1200"
+    MinHeight="820"
     Margin="24"
   >
     <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="16">
