@@ -9,6 +9,7 @@
   <Border
     Classes="settings-modal"
     Width="1200"
+    Height="820"
     MinWidth="640"
     MaxWidth="{Binding Bounds.Width, RelativeSource={RelativeSource AncestorType=Window}}"
     MaxHeight="{Binding Bounds.Height, RelativeSource={RelativeSource AncestorType=Window}}"
