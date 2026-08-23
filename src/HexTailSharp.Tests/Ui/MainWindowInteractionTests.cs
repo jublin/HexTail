@@ -38,7 +38,7 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
-    public void SettingsAreHostedInTheWindowModal()
+    public void SettingsModalClosesWhenTheBackdropIsClicked()
     {
         var window = TestWindow.Create(out var viewModel);
         viewModel.SettingsOpen = true;
@@ -47,7 +47,10 @@ public sealed class MainWindowInteractionTests
         var host = window.FindControl<DialogHost>("SettingsDialogHost");
         Assert.NotNull(host);
         Assert.True(host.IsOpen);
-        Assert.True(host.CloseOnClickAway);
+        window.MouseDown(new Point(8, 8), MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(new Point(8, 8), MouseButton.Left, RawInputModifiers.None);
+
+        Assert.False(viewModel.SettingsOpen);
         window.Close();
     }
 
