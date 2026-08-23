@@ -178,7 +178,7 @@
         </TabItem>
         <TabItem Header="Elastic">
           <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="8" Margin="0,12,0,0">
+            <StackPanel Spacing="8" Margin="0,10,0,0">
               <TextBlock Text="Elastic servers" FontWeight="SemiBold" />
               <Button
                 Content="Add server"
@@ -187,144 +187,217 @@
               <ItemsControl ItemsSource="{Binding Settings.ElasticConnections}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:ElasticConnectionEditorViewModel">
-                    <Expander Classes="elastic-card" Margin="0,4,0,8" IsExpanded="True">
-                      <Expander.Header>
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                          <TextBox
-                            Text="{Binding Name, Mode=TwoWay}"
-                            PlaceholderText="Server name"
-                            Classes="elastic-title"
-                          />
-                          <Button
-                            Grid.Column="1"
-                            Content="Remove server"
-                            Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveElasticConnectionCommand}"
-                            CommandParameter="{Binding}"
-                          />
-                        </Grid>
-                      </Expander.Header>
-                      <StackPanel Spacing="12">
-                        <Border Classes="elastic-section">
-                          <StackPanel Spacing="8">
+                    <Expander
+                      Classes="elastic-card"
+                      Margin="0,2,0,2"
+                      IsExpanded="True"
+                      Header="{Binding Name}"
+                    >
+                      <Border Classes="elastic-section">
+                        <StackPanel HorizontalAlignment="Stretch">
+                          <StackPanel Spacing="0">
                             <TextBlock Text="Server connection" Classes="section-label" />
-                            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="3,3">
                               <TextBox
+                                Text="{Binding Name, Mode=TwoWay}"
+                                PlaceholderText="Server name"
+                                Classes="elastic-title"
+                              />
+                              <Button
+                                Grid.Column="1"
+                                Content="Remove server"
+                                Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveElasticConnectionCommand}"
+                                CommandParameter="{Binding}"
+                              />
+                            </Grid>
+                            <Grid
+                              ColumnDefinitions="*,*"
+                              RowDefinitions="*,*"
+                              ColumnSpacing="4"
+                              Margin="3,3"
+                            >
+                              <TextBlock
+                                Grid.Row="0"
+                                Grid.Column="0"
+                                Text="Kibana Url"
+                                Classes="section-label"
+                              />
+                              <TextBox
+                                Grid.Row="1"
+                                Grid.Column="0"
                                 Text="{Binding KibanaUrl, Mode=TwoWay}"
                                 PlaceholderText="Kibana URL · https://host:5601"
                               />
+                              <TextBlock
+                                Grid.Row="0"
+                                Grid.Column="1"
+                                Text="Elastic Url"
+                                Classes="section-label"
+                              />
                               <TextBox
+                                Grid.Row="1"
                                 Grid.Column="1"
                                 Text="{Binding ElasticsearchUrl, Mode=TwoWay}"
                                 PlaceholderText="Elasticsearch URL · https://host:9200"
                               />
                             </Grid>
                           </StackPanel>
-                        </Border>
 
-                        <Border Classes="elastic-section">
-                          <StackPanel Spacing="8">
-                            <TextBlock Text="Authentication" Classes="section-label" />
-                            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                              <ComboBox
-                                ItemsSource="{Binding AuthModes}"
-                                SelectedItem="{Binding AuthMode, Mode=TwoWay}"
-                                HorizontalContentAlignment="Left"
-                              />
+                          <Border Classes="elastic-section">
+                            <StackPanel Spacing="2">
+                              <TextBlock Text="Authentication" Classes="section-label" />
+                              <Grid ColumnDefinitions="*,*" ColumnSpacing="2">
+                                <ComboBox
+                                  ItemsSource="{Binding AuthModes}"
+                                  SelectedItem="{Binding AuthMode, Mode=TwoWay}"
+                                  HorizontalContentAlignment="Left"
+                                />
+                                <TextBox
+                                  Grid.Column="1"
+                                  Text="{Binding Username, Mode=TwoWay}"
+                                  IsVisible="{Binding IsBasic}"
+                                  PlaceholderText="Username"
+                                />
+                              </Grid>
                               <TextBox
-                                Grid.Column="1"
-                                Text="{Binding Username, Mode=TwoWay}"
-                                IsVisible="{Binding IsBasic}"
-                                PlaceholderText="Username"
+                                Text="{Binding Secret, Mode=TwoWay}"
+                                IsVisible="{Binding IsAuthenticated}"
+                                PasswordChar="•"
+                                PlaceholderText="Password or API key"
                               />
-                            </Grid>
-                            <TextBox
-                              Text="{Binding Secret, Mode=TwoWay}"
-                              IsVisible="{Binding IsAuthenticated}"
-                              PasswordChar="•"
-                              PlaceholderText="Password or API key"
+                            </StackPanel>
+                          </Border>
+                          <TextBlock Text="{Binding Error}" Classes="error" TextWrapping="Wrap" />
+
+                          <ItemsControl ItemsSource="{Binding Views}">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="vm:ElasticViewEditorViewModel">
+                                <Expander
+                                  Classes="elastic-section"
+                                  IsExpanded="True"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch"
+                                  Header="{Binding Name}"
+                                >
+                                  <StackPanel Spacing="1">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                      <TextBox
+                                        Text="{Binding Name, Mode=TwoWay}"
+                                        PlaceholderText="View name"
+                                      />
+                                      <Button
+                                        Grid.Column="1"
+                                        Content="Remove view"
+                                        Command="{Binding $parent[ItemsControl].DataContext.RemoveViewCommand}"
+                                        CommandParameter="{Binding}"
+                                      />
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal">
+                                      <Button
+                                        Content="Test connection"
+                                        Command="{Binding TestConnectionCommand}"
+                                        Classes="primary"
+                                      />
+                                      <Border Classes="elastic-status">
+                                        <TextBlock Text="{Binding Status}" />
+                                      </Border>
+                                    </StackPanel>
+                                    <TextBlock
+                                      Text="{Binding Error}"
+                                      Classes="error"
+                                      TextWrapping="Wrap"
+                                    />
+                                    <ComboBox
+                                      ItemsSource="{Binding DataViews}"
+                                      SelectedValue="{Binding SelectedDataViewId, Mode=TwoWay}"
+                                      SelectedValueBinding="{Binding Id}"
+                                      DisplayMemberBinding="{Binding Title}"
+                                      PlaceholderText="Select a data view after testing the connection"
+                                      HorizontalContentAlignment="Left"
+                                    />
+                                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                      <AutoCompleteBox
+                                        ItemsSource="{Binding FieldNames}"
+                                        SelectedItem="{Binding ServerField, Mode=TwoWay}"
+                                        PlaceholderText="Identity field · e.g. ident"
+                                        FilterMode="Contains"
+                                        MinimumPrefixLength="0"
+                                      />
+                                      <AutoCompleteBox
+                                        Grid.Column="1"
+                                        ItemsSource="{Binding FieldNames}"
+                                        SelectedItem="{Binding NamespaceField, Mode=TwoWay}"
+                                        PlaceholderText="Namespace field"
+                                        FilterMode="Contains"
+                                        MinimumPrefixLength="0"
+                                      />
+                                    </Grid>
+                                    <TextBlock
+                                      Text="Filter value is configured per source below."
+                                      Foreground="{DynamicResource MutedBrush}"
+                                    />
+                                    <TextBox
+                                      Text="{Binding OutputFieldQuery, Mode=TwoWay}"
+                                      PlaceholderText="Find output fields"
+                                    />
+                                    <ItemsControl ItemsSource="{Binding VisibleFields}">
+                                      <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ElasticFieldOptionViewModel">
+                                          <CheckBox
+                                            Content="{Binding Name}"
+                                            IsChecked="{Binding IsOutput, Mode=TwoWay}"
+                                          />
+                                        </DataTemplate>
+                                      </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Text="Sources" Classes="section-label" />
+                                    <ItemsControl ItemsSource="{Binding Sources}">
+                                      <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ElasticSourceSettingViewModel">
+                                          <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="8">
+                                            <TextBox
+                                              Text="{Binding ServerValue, Mode=TwoWay}"
+                                              PlaceholderText="Identity value · e.g. app1"
+                                            />
+                                            <TextBox
+                                              Grid.Column="1"
+                                              Text="{Binding NamespaceValue, Mode=TwoWay}"
+                                              PlaceholderText="Namespace value"
+                                            />
+                                            <Button
+                                              Grid.Column="2"
+                                              Content="Remove"
+                                              Command="{Binding $parent[ItemsControl].DataContext.RemoveSourceCommand}"
+                                              CommandParameter="{Binding}"
+                                            />
+                                          </Grid>
+                                        </DataTemplate>
+                                      </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Button
+                                      Content="Add source"
+                                      Command="{Binding AddSourceCommand}"
+                                      HorizontalAlignment="Left"
+                                    />
+                                  </StackPanel>
+                                </Expander>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <StackPanel
+                            Orientation="Horizontal"
+                            Spacing="8"
+                            HorizontalAlignment="Right"
+                          >
+                            <Button Content="Add view" Command="{Binding AddViewCommand}" />
+                            <Button
+                              Content="Save server"
+                              Command="{Binding SaveCommand}"
+                              Classes="primary"
                             />
                           </StackPanel>
-                        </Border>
-
-                        <TextBlock Text="{Binding Error}" Classes="error" TextWrapping="Wrap" />
-                        <ItemsControl ItemsSource="{Binding Views}">
-                          <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:ElasticViewEditorViewModel">
-                              <Expander Classes="elastic-section" IsExpanded="True">
-                                <Expander.Header>
-                                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                    <TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="View name" />
-                                    <Button
-                                      Grid.Column="1"
-                                      Content="Remove view"
-                                      Command="{Binding $parent[ItemsControl].DataContext.RemoveViewCommand}"
-                                      CommandParameter="{Binding}"
-                                    />
-                                  </Grid>
-                                </Expander.Header>
-                                <StackPanel Spacing="8">
-                                  <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Button Content="Test connection" Command="{Binding TestConnectionCommand}" Classes="primary" />
-                                    <Border Classes="elastic-status"><TextBlock Text="{Binding Status}" /></Border>
-                                  </StackPanel>
-                                  <TextBlock Text="{Binding Error}" Classes="error" TextWrapping="Wrap" />
-                                  <ComboBox
-                                    ItemsSource="{Binding DataViews}"
-                                    SelectedValue="{Binding SelectedDataViewId, Mode=TwoWay}"
-                                    SelectedValueBinding="{Binding Id}"
-                                    DisplayMemberBinding="{Binding Title}"
-                                    PlaceholderText="Select a data view after testing the connection"
-                                    HorizontalContentAlignment="Left"
-                                  />
-                                  <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                                    <AutoCompleteBox
-                                      ItemsSource="{Binding FieldNames}"
-                                      SelectedItem="{Binding ServerField, Mode=TwoWay}"
-                                      PlaceholderText="Identity field · e.g. ident"
-                                      FilterMode="Contains"
-                                      MinimumPrefixLength="0"
-                                    />
-                                    <AutoCompleteBox
-                                      Grid.Column="1"
-                                      ItemsSource="{Binding FieldNames}"
-                                      SelectedItem="{Binding NamespaceField, Mode=TwoWay}"
-                                      PlaceholderText="Namespace field"
-                                      FilterMode="Contains"
-                                      MinimumPrefixLength="0"
-                                    />
-                                  </Grid>
-                                  <TextBlock Text="Filter value is configured per source below." Foreground="{DynamicResource MutedBrush}" />
-                                  <TextBox Text="{Binding OutputFieldQuery, Mode=TwoWay}" PlaceholderText="Find output fields" />
-                                  <ItemsControl ItemsSource="{Binding VisibleFields}">
-                                    <ItemsControl.ItemTemplate>
-                                      <DataTemplate x:DataType="vm:ElasticFieldOptionViewModel">
-                                        <CheckBox Content="{Binding Name}" IsChecked="{Binding IsOutput, Mode=TwoWay}" />
-                                      </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                  </ItemsControl>
-                                  <TextBlock Text="Sources" Classes="section-label" />
-                                  <ItemsControl ItemsSource="{Binding Sources}">
-                                    <ItemsControl.ItemTemplate>
-                                      <DataTemplate x:DataType="vm:ElasticSourceSettingViewModel">
-                                        <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="8">
-                                          <TextBox Text="{Binding ServerValue, Mode=TwoWay}" PlaceholderText="Identity value · e.g. app1" />
-                                          <TextBox Grid.Column="1" Text="{Binding NamespaceValue, Mode=TwoWay}" PlaceholderText="Namespace value" />
-                                          <Button Grid.Column="2" Content="Remove" Command="{Binding $parent[ItemsControl].DataContext.RemoveSourceCommand}" CommandParameter="{Binding}" />
-                                        </Grid>
-                                      </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                  </ItemsControl>
-                                  <Button Content="Add source" Command="{Binding AddSourceCommand}" HorizontalAlignment="Left" />
-                                </StackPanel>
-                              </Expander>
-                            </DataTemplate>
-                          </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                          <Button Content="Add view" Command="{Binding AddViewCommand}" />
-                          <Button Content="Save server" Command="{Binding SaveCommand}" Classes="primary" />
                         </StackPanel>
-                      </StackPanel>
+                      </Border>
                     </Expander>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
