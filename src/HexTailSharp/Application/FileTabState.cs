@@ -1,4 +1,5 @@
 using HexTailSharp.Domain;
+using HexTailSharp.Persistence;
 using HexTailSharp.Tailing;
 
 namespace HexTailSharp.Application;
@@ -72,6 +73,8 @@ public sealed class FileTabState : IAsyncDisposable
 
     public bool RemoveSearch(Search search)
     {
+        if (search.IsGlobalLabel)
+            return false;
         var index = Searches.IndexOf(search);
         if (index < 0)
             return false;
@@ -79,6 +82,32 @@ public sealed class FileTabState : IAsyncDisposable
         Searches.RemoveAt(index);
         FollowSearches.RemoveAt(index);
         return Buffer.RemoveSearch(search);
+    }
+
+    public void SyncGlobalLabelSearches(IEnumerable<GlobalLabel> labels)
+    {
+        for (var index = Searches.Count - 1; index >= 0; index--)
+        {
+            if (!Searches[index].IsGlobalLabel)
+                continue;
+            Buffer.RemoveSearch(Searches[index]);
+            Searches.RemoveAt(index);
+            FollowSearches.RemoveAt(index);
+        }
+
+        foreach (var label in labels.Where(label => label.ShowInOpenFile))
+            try
+            {
+                AddSearch(
+                    new Search(
+                        new CompiledQuery(label.Text, CompiledQuery.DetectMode(label.Text), false),
+                        label.Color,
+                        Buffer,
+                        true
+                    )
+                );
+            }
+            catch (ArgumentException) { }
     }
 
     public async ValueTask DisposeAsync()

@@ -222,6 +222,31 @@ public sealed class AppStateTests
     }
 
     [Fact]
+    public async Task UpdateSettings_ShowsGlobalLabelsAsSearchTabsInOpenViews()
+    {
+        var path = CreateTempFile("error\n");
+        await using var state = new AppState(NewTailers(), new MemoryPersistence());
+        try
+        {
+            var tab = await state.OpenFileAsync(path, save: false);
+
+            await state.UpdateSettingsAsync(
+                new AppSettings
+                {
+                    GlobalLabels = [new GlobalLabel { Text = "error", Color = "#ff0000" }],
+                }
+            );
+
+            var search = Assert.Single(tab.Searches);
+            Assert.Equal("error", search.Query.Query);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void AppSettings_MatchesLabelsAndExclusionsCaseInsensitively()
     {
         var settings = new AppSettings

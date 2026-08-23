@@ -326,12 +326,17 @@ internal sealed class SettingsViewModel : ReactiveObject
         SelectedElasticConnection ??= ElasticConnections.FirstOrDefault();
     }
 
-    internal Task CommitLabelAsync(int index, string text, Color color)
+    internal Task CommitLabelAsync(int index, string text, Color color, bool showInOpenFile)
     {
         var labels = _owner.State.Settings.GlobalLabels.ToList();
         if (index < 0 || index >= labels.Count)
             return Task.CompletedTask;
-        labels[index] = new GlobalLabel { Text = text, Color = ColorToHex(color) };
+        labels[index] = new GlobalLabel
+        {
+            Text = text,
+            Color = ColorToHex(color),
+            ShowInOpenFile = showInOpenFile,
+        };
         return CommitAsync(_owner.State.Settings with { GlobalLabels = labels });
     }
 
@@ -354,7 +359,12 @@ internal sealed class SettingsViewModel : ReactiveObject
                 GlobalLabels =
                 [
                     .. _owner.State.Settings.GlobalLabels,
-                    new GlobalLabel { Text = NewLabelText, Color = ColorToHex(NewLabelColor) },
+                    new GlobalLabel
+                    {
+                        Text = NewLabelText,
+                        Color = ColorToHex(NewLabelColor),
+                        ShowInOpenFile = true,
+                    },
                 ],
             }
         );
@@ -460,6 +470,7 @@ internal sealed class LabelSettingViewModel : ReactiveObject
     private readonly SettingsViewModel _owner;
     private string _text = string.Empty;
     private Color _color = Color.Parse("#F59E0B");
+    private bool _showInOpenFile = true;
     private bool _syncing;
 
     internal LabelSettingViewModel(SettingsViewModel owner, int index)
@@ -479,7 +490,7 @@ internal sealed class LabelSettingViewModel : ReactiveObject
                 return;
             this.RaiseAndSetIfChanged(ref _text, value);
             if (!_syncing)
-                _ = _owner.CommitLabelAsync(Index, value, Color);
+                _ = _owner.CommitLabelAsync(Index, value, Color, ShowInOpenFile);
         }
     }
 
@@ -492,7 +503,18 @@ internal sealed class LabelSettingViewModel : ReactiveObject
                 return;
             this.RaiseAndSetIfChanged(ref _color, value);
             if (!_syncing)
-                _ = _owner.CommitLabelAsync(Index, Text, value);
+                _ = _owner.CommitLabelAsync(Index, Text, value, ShowInOpenFile);
+        }
+    }
+
+    public bool ShowInOpenFile
+    {
+        get => _showInOpenFile;
+        set
+        {
+            if (!this.RaiseAndSetIfChanged(ref _showInOpenFile, value) || _syncing)
+                return;
+            _ = _owner.CommitLabelAsync(Index, Text, Color, value);
         }
     }
 
@@ -503,6 +525,7 @@ internal sealed class LabelSettingViewModel : ReactiveObject
         {
             Text = label.Text;
             Color = Avalonia.Media.Color.Parse(label.Color);
+            ShowInOpenFile = label.ShowInOpenFile;
         }
         finally
         {

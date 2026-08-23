@@ -47,23 +47,31 @@
                 <StackPanel Spacing="10">
                   <TextBlock Text="Global Labels" FontSize="18" FontWeight="SemiBold" />
                   <TextBlock Text="Highlight case-insensitive text across every log view." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
+                  <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+                    <TextBlock Text="LABEL TEXT" Classes="elastic-form-label" />
+                    <TextBlock Grid.Column="1" Text="COLOR" Classes="elastic-form-label" />
+                    <TextBlock Grid.Column="2" Text="SHOW IN OPEN FILE" Classes="elastic-form-label" />
+                    <TextBlock Grid.Column="3" Text="ACTIONS" Classes="elastic-form-label" />
+                  </Grid>
                   <ItemsControl ItemsSource="{Binding Settings.Labels}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:LabelSettingViewModel">
-                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="0,2">
+                        <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8" Margin="0,2">
                           <TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to highlight" />
                           <ColorPicker Grid.Column="1" Color="{Binding Color, Mode=TwoWay}" Width="48" IsAlphaEnabled="False" />
-                          <Button Grid.Column="2" Classes="icon" ToolTip.Tip="Remove label" Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveLabelCommand}" CommandParameter="{Binding}">
+                          <CheckBox Grid.Column="2" IsChecked="{Binding ShowInOpenFile, Mode=TwoWay}" ToolTip.Tip="Show matching search tab in open files and Elastic views" />
+                          <Button Grid.Column="3" Classes="icon" ToolTip.Tip="Remove label" Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveLabelCommand}" CommandParameter="{Binding}">
                             <ic:Icon Value="mdi-delete-outline" FontSize="18" />
                           </Button>
                         </Grid>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                  <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                  <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
                     <TextBox Text="{Binding Settings.NewLabelText, Mode=TwoWay}" PlaceholderText="Text to highlight" />
                     <ColorPicker Grid.Column="1" Color="{Binding Settings.NewLabelColor, Mode=TwoWay}" Width="48" IsAlphaEnabled="False" />
-                    <Button x:Name="AddLabelButton" Grid.Column="2" Classes="icon" ToolTip.Tip="Add label" Command="{Binding Settings.AddLabelCommand}">
+                    <CheckBox Grid.Column="2" IsEnabled="False" IsChecked="True" />
+                    <Button x:Name="AddLabelButton" Grid.Column="3" Classes="icon" ToolTip.Tip="Add label" Command="{Binding Settings.AddLabelCommand}">
                       <ic:Icon Value="mdi-plus" FontSize="18" />
                     </Button>
                   </Grid>

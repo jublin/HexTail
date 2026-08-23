@@ -125,6 +125,7 @@ public sealed class GlobalLabel
 {
     public string Text { get; init; } = string.Empty;
     public string Color { get; init; } = "#f59e0b";
+    public bool ShowInOpenFile { get; init; } = true;
 }
 
 public readonly record struct LabelHighlight(int Start, int Length, string Color);

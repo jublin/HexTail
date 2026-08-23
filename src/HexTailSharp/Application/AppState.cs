@@ -294,6 +294,7 @@ public sealed class AppState : IAsyncDisposable
                     ContextBelow = _settings.ContextBelow,
                     Error = File.Exists(fullPath) ? null : "File missing",
                 };
+                tab.SyncGlobalLabelSearches(_settings.GlobalLabels);
                 _files.Add(tab);
                 SelectedFile = tab;
             }
@@ -366,6 +367,7 @@ public sealed class AppState : IAsyncDisposable
             ContextAbove = _settings.ContextAbove,
             ContextBelow = _settings.ContextBelow,
         };
+        tab.SyncGlobalLabelSearches(_settings.GlobalLabels);
         lock (_gate)
         {
             _files.Add(tab);
@@ -558,7 +560,11 @@ public sealed class AppState : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(settings);
         lock (_gate)
+        {
             _settings = NormalizeSettings(settings);
+            foreach (var file in _files)
+                file.SyncGlobalLabelSearches(_settings.GlobalLabels);
+        }
         NotifyChanged();
         SignalHealthCheck();
         await SaveAsync(cancellationToken).ConfigureAwait(false);
@@ -630,13 +636,18 @@ public sealed class AppState : IAsyncDisposable
                     {
                         Path = tab.Path,
                         FollowAll = tab.FollowAll,
-                        FollowSearches = [.. tab.FollowSearches],
+                        FollowSearches = tab
+                            .Searches.Select((search, index) => (search, index))
+                            .Where(item => !item.search.IsGlobalLabel)
+                            .Select(item => tab.FollowSearches[item.index])
+                            .ToList(),
                         ShowContext = tab.ShowContext,
                         SelectedLine = tab.SelectedLine,
                         ContextAbove = tab.ContextAbove,
                         ContextBelow = tab.ContextBelow,
                         Searches = tab
-                            .Searches.Select(search => new PersistedSearch
+                            .Searches.Where(search => !search.IsGlobalLabel)
+                            .Select(search => new PersistedSearch
                             {
                                 Query = search.Query.Query,
                                 Mode = search.Query.Mode,
@@ -652,13 +663,18 @@ public sealed class AppState : IAsyncDisposable
                     {
                         SourceId = tab.Source.ElasticSourceId!,
                         FollowAll = tab.FollowAll,
-                        FollowSearches = [.. tab.FollowSearches],
+                        FollowSearches = tab
+                            .Searches.Select((search, index) => (search, index))
+                            .Where(item => !item.search.IsGlobalLabel)
+                            .Select(item => tab.FollowSearches[item.index])
+                            .ToList(),
                         ShowContext = tab.ShowContext,
                         SelectedLine = tab.SelectedLine,
                         ContextAbove = tab.ContextAbove,
                         ContextBelow = tab.ContextBelow,
                         Searches = tab
-                            .Searches.Select(search => new PersistedSearch
+                            .Searches.Where(search => !search.IsGlobalLabel)
+                            .Select(search => new PersistedSearch
                             {
                                 Query = search.Query.Query,
                                 Mode = search.Query.Mode,
@@ -744,6 +760,7 @@ public sealed class AppState : IAsyncDisposable
             {
                 Text = label.Text.Trim(),
                 Color = NormalizeColor(label.Color),
+                ShowInOpenFile = label.ShowInOpenFile,
             })
             .DistinctBy(label => label.Text, StringComparer.OrdinalIgnoreCase)
             .ToList();
