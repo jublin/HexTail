@@ -61,7 +61,7 @@
                         <Grid ColumnDefinitions="*,64,144,48" ColumnSpacing="8" Margin="0,2">
                           <TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to highlight" />
                           <ColorPicker Grid.Column="1" Color="{Binding Color, Mode=TwoWay}" Width="48" HorizontalAlignment="Center" IsAlphaEnabled="False" />
-                          <CheckBox Grid.Column="2" IsChecked="{Binding ShowInOpenFile, Mode=TwoWay}" HorizontalAlignment="Center" ToolTip.Tip="Show matching search tab in open files and Elastic views" />
+                          <ToggleSwitch Grid.Column="2" IsChecked="{Binding ShowInOpenFile, Mode=TwoWay}" HorizontalAlignment="Center" ToolTip.Tip="Show matching search tab in open files and Elastic views" />
                           <Button Grid.Column="3" Classes="icon destructive" HorizontalAlignment="Center" ToolTip.Tip="Remove label" Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveLabelCommand}" CommandParameter="{Binding}">
                             <ic:Icon Value="mdi-delete-outline" />
                           </Button>
@@ -72,7 +72,7 @@
                   <Grid ColumnDefinitions="*,64,144,48" ColumnSpacing="8">
                     <TextBox Text="{Binding Settings.NewLabelText, Mode=TwoWay}" PlaceholderText="Text to highlight" />
                     <ColorPicker Grid.Column="1" Color="{Binding Settings.NewLabelColor, Mode=TwoWay}" Width="48" HorizontalAlignment="Center" IsAlphaEnabled="False" />
-                    <CheckBox Grid.Column="2" IsEnabled="False" IsChecked="True" HorizontalAlignment="Center" />
+                    <ToggleSwitch Grid.Column="2" IsEnabled="False" IsChecked="True" HorizontalAlignment="Center" />
                     <Button x:Name="AddLabelButton" Grid.Column="3" Classes="icon" HorizontalAlignment="Center" ToolTip.Tip="Add label" Command="{Binding Settings.AddLabelCommand}">
                       <ic:Icon Value="mdi-plus" />
                     </Button>
