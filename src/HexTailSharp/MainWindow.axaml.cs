@@ -6,7 +6,9 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using HexTailSharp.Application;
+using HexTailSharp.Elastic;
 using HexTailSharp.Persistence;
+using HexTailSharp.Security;
 using HexTailSharp.Tailing;
 using HexTailSharp.ViewModels;
 using HexTailSharp.Views;
@@ -24,7 +26,12 @@ public partial class MainWindow : Window
     public MainWindow(string[]? startupPaths)
         : this(
             new MainWindowViewModel(
-                new AppState(new TailerService(), new JsonFileAppPersistence()),
+                new AppState(
+                    new LogSourceService(),
+                    new JsonFileAppPersistence(),
+                    credentials: new OsCredentialVault(),
+                    elastic: new ElasticApiClient(new HttpClient())
+                ),
                 startupPaths
             )
         ) { }
@@ -48,8 +55,6 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, OnDrop);
         Opened += OnOpened;
         Closed += OnClosed;
-        SizeChanged += (_, args) => UpdateResponsiveLayout(args.NewSize.Width);
-        UpdateResponsiveLayout(Width);
     }
 
     internal MainWindowViewModel ViewModel { get; }
@@ -180,17 +185,5 @@ public partial class MainWindow : Window
         }
 
         e.Handled = true;
-    }
-
-    private void UpdateResponsiveLayout(double width) =>
-        SettingsSplitView.DisplayMode =
-            width < 960 ? SplitViewDisplayMode.Overlay : SplitViewDisplayMode.Inline;
-
-    private void MainWindowKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Escape && ViewModel.SettingsOpen)
-        {
-            ViewModel.SettingsOpen = false;
-        }
     }
 }

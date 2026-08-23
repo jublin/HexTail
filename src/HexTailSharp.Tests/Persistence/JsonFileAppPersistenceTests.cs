@@ -6,6 +6,91 @@ namespace HexTailSharp.Tests.Persistence;
 public sealed class JsonFileAppPersistenceTests
 {
     [Fact]
+    public void AppConfigJson_RoundTripsElasticSettingsWithoutSecretMaterial()
+    {
+        var connection = new ElasticConnectionSettings
+        {
+            Id = "elastic-1",
+            Name = "Production",
+            KibanaUrl = "https://kibana.example/space/default/",
+            ElasticsearchUrl = "https://elastic.example/",
+            AuthMode = ElasticAuthMode.Basic,
+            Username = "reader",
+            DataViewId = "logs-view",
+            DataViewTitle = "logs-*",
+            TimeFieldName = "@timestamp",
+            ServerField = "service.name.keyword",
+            NamespaceField = "labels.namespace.keyword",
+            OutputFields = ["@timestamp", "message"],
+            Sources =
+            [
+                new ElasticSourceSettings
+                {
+                    Id = "source-1",
+                    ServerValue = "Mystack1",
+                    NamespaceValue = "RhubarbPi",
+                },
+            ],
+        };
+        var json = AppConfigJson.Serialize(
+            new AppConfig
+            {
+                Settings = new AppSettings { ElasticConnections = [connection] },
+                OpenElasticTabs = [new PersistedElasticTab { SourceId = "source-1" }],
+                SelectedElasticSourceId = "source-1",
+            }
+        );
+
+        var restored = AppConfigJson.Deserialize(json);
+
+        Assert.Equal(
+            ["@timestamp", "message"],
+            restored.Settings.ElasticConnections[0].OutputFields
+        );
+        Assert.Equal("source-1", Assert.Single(restored.OpenElasticTabs).SourceId);
+        Assert.Equal("source-1", restored.SelectedElasticSourceId);
+        Assert.DoesNotContain("password", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("api-key", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AppConfigJson_RoundTripsNestedElasticViewAndLocalTimeDefault()
+    {
+        var server = new ElasticConnectionSettings
+        {
+            Id = "server-1",
+            Name = "Production",
+            KibanaUrl = "https://kibana.example/",
+            ElasticsearchUrl = "https://elastic.example/",
+            Views =
+            [
+                new ElasticViewSettings
+                {
+                    Id = "view-1",
+                    Name = "Application logs",
+                    DataViewId = "logs-view",
+                    DataViewTitle = "logs-*",
+                    TimeFieldName = "@timestamp",
+                    ServerField = "ident",
+                    NamespaceField = "service.name",
+                    OutputFields = ["message"],
+                },
+            ],
+        };
+
+        var restored = AppConfigJson.Deserialize(
+            AppConfigJson.Serialize(
+                new AppConfig { Settings = new AppSettings { ElasticConnections = [server] } }
+            )
+        );
+
+        var view = Assert.Single(Assert.Single(restored.Settings.ElasticConnections).Views);
+        Assert.Equal("Application logs", view.Name);
+        Assert.Equal("logs-view", view.DataViewId);
+        Assert.Equal(AppTimeZoneMode.Local, restored.Settings.TimeZoneMode);
+    }
+
+    [Fact]
     public async Task SaveAndLoad_RoundTripsConfigAndCreatesParentDirectory()
     {
         using var directory = new TempDirectory();

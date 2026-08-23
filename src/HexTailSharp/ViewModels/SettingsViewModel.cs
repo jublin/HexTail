@@ -3,6 +3,7 @@ using System.Reactive;
 using System.Reactive.Concurrency;
 using Avalonia;
 using Avalonia.Media;
+using HexTailSharp.Elastic;
 using HexTailSharp.Persistence;
 using ReactiveUI;
 using ReactiveUI.Reactive;
@@ -23,6 +24,8 @@ internal sealed class SettingsViewModel : ReactiveObject
     private bool _isSaving;
     private bool _syncing;
     private ThemeOption _selectedTheme;
+    private AppTimeZoneMode _timeZoneMode;
+    private ElasticConnectionEditorViewModel? _selectedElasticConnection;
 
     internal SettingsViewModel(MainWindowViewModel owner, IScheduler scheduler)
     {
@@ -34,15 +37,24 @@ internal sealed class SettingsViewModel : ReactiveObject
             RemoveExclusion,
             scheduler
         );
+        AddElasticConnectionCommand = ReactiveCommand.Create(AddElasticConnection, scheduler);
+        RemoveElasticConnectionCommand =
+            ReactiveCommand.CreateFromTask<ElasticConnectionEditorViewModel>(
+                RemoveElasticConnectionAsync,
+                scheduler
+            );
         _selectedTheme = ThemeOptions[0];
     }
 
     public ObservableCollection<LabelSettingViewModel> Labels { get; } = [];
     public ObservableCollection<ExclusionSettingViewModel> Exclusions { get; } = [];
+    public ObservableCollection<ElasticConnectionEditorViewModel> ElasticConnections { get; } = [];
     public IReadOnlyList<UiDensity> DensityOptions { get; } =
     [UiDensity.Comfortable, UiDensity.Cozy, UiDensity.Compact];
     public IReadOnlyList<LogFontSize> FontSizeOptions { get; } =
     [LogFontSize.Small, LogFontSize.Medium, LogFontSize.Large, LogFontSize.ExtraLarge];
+    public IReadOnlyList<AppTimeZoneMode> TimeZoneModes { get; } =
+        Enum.GetValues<AppTimeZoneMode>();
     public IReadOnlyList<ThemeOption> ThemeOptions { get; } =
         ThemeCatalog
             .Names.Select(id => new ThemeOption(id, ThemeCatalog.DisplayNames[id]))
@@ -51,6 +63,17 @@ internal sealed class SettingsViewModel : ReactiveObject
     public ReactiveCommand<LabelSettingViewModel, Unit> RemoveLabelCommand { get; }
     public ReactiveCommand<Unit, Unit> AddExclusionCommand { get; }
     public ReactiveCommand<ExclusionSettingViewModel, Unit> RemoveExclusionCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddElasticConnectionCommand { get; }
+    public ReactiveCommand<
+        ElasticConnectionEditorViewModel,
+        Unit
+    > RemoveElasticConnectionCommand { get; }
+
+    public ElasticConnectionEditorViewModel? SelectedElasticConnection
+    {
+        get => _selectedElasticConnection;
+        set => this.RaiseAndSetIfChanged(ref _selectedElasticConnection, value);
+    }
 
     public string Section
     {
@@ -63,15 +86,14 @@ internal sealed class SettingsViewModel : ReactiveObject
         get => _sectionIndex;
         set
         {
-            var index = Math.Clamp(value, 0, 3);
+            var index = Math.Clamp(value, 0, 2);
             if (_sectionIndex == index)
                 return;
             this.RaiseAndSetIfChanged(ref _sectionIndex, index);
             _section = index switch
             {
-                1 => "exclusions",
-                2 => "display",
-                3 => "appearance",
+                1 => "appearance",
+                2 => "elastic",
                 _ => "labels",
             };
         }
@@ -202,6 +224,19 @@ internal sealed class SettingsViewModel : ReactiveObject
         }
     }
 
+    public AppTimeZoneMode TimeZoneMode
+    {
+        get => _timeZoneMode;
+        set
+        {
+            if (_timeZoneMode == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _timeZoneMode, value);
+            if (!_syncing)
+                _ = CommitAsync(_owner.State.Settings with { TimeZoneMode = value });
+        }
+    }
+
     public ThemeOption SelectedTheme
     {
         get => _selectedTheme;
@@ -240,6 +275,7 @@ internal sealed class SettingsViewModel : ReactiveObject
         {
             Density = settings.Density;
             FontSize = settings.LogFontSize;
+            TimeZoneMode = settings.TimeZoneMode;
             SelectedTheme = ThemeOptions.First(option =>
                 option.Id == ThemeCatalog.Normalize(settings.Theme)
             );
@@ -266,14 +302,41 @@ internal sealed class SettingsViewModel : ReactiveObject
                 Exclusions.Add(new ExclusionSettingViewModel(this, index));
             Exclusions[index].Sync(settings.GlobalExcludeLabels[index]);
         }
+
+        while (ElasticConnections.Count > settings.ElasticConnections.Count)
+            ElasticConnections.RemoveAt(ElasticConnections.Count - 1);
+        for (
+            var connectionIndex = 0;
+            connectionIndex < settings.ElasticConnections.Count;
+            connectionIndex++
+        )
+        {
+            if (connectionIndex == ElasticConnections.Count)
+            {
+                ElasticConnections.Add(
+                    new ElasticConnectionEditorViewModel(
+                        this,
+                        settings.ElasticConnections[connectionIndex].Id
+                    )
+                );
+                ElasticConnections[connectionIndex]
+                    .Sync(settings.ElasticConnections[connectionIndex]);
+            }
+        }
+        SelectedElasticConnection ??= ElasticConnections.FirstOrDefault();
     }
 
-    internal Task CommitLabelAsync(int index, string text, Color color)
+    internal Task CommitLabelAsync(int index, string text, Color color, bool showInOpenFile)
     {
         var labels = _owner.State.Settings.GlobalLabels.ToList();
         if (index < 0 || index >= labels.Count)
             return Task.CompletedTask;
-        labels[index] = new GlobalLabel { Text = text, Color = ColorToHex(color) };
+        labels[index] = new GlobalLabel
+        {
+            Text = text,
+            Color = ColorToHex(color),
+            ShowInOpenFile = showInOpenFile,
+        };
         return CommitAsync(_owner.State.Settings with { GlobalLabels = labels });
     }
 
@@ -296,7 +359,12 @@ internal sealed class SettingsViewModel : ReactiveObject
                 GlobalLabels =
                 [
                     .. _owner.State.Settings.GlobalLabels,
-                    new GlobalLabel { Text = NewLabelText, Color = ColorToHex(NewLabelColor) },
+                    new GlobalLabel
+                    {
+                        Text = NewLabelText,
+                        Color = ColorToHex(NewLabelColor),
+                        ShowInOpenFile = true,
+                    },
                 ],
             }
         );
@@ -354,6 +422,46 @@ internal sealed class SettingsViewModel : ReactiveObject
         }
     }
 
+    internal AppSettings ConnectionSettingsWith(ElasticConnectionSettings connection, string secret)
+    {
+        _ = secret;
+        return _owner.State.Settings with
+        {
+            ElasticConnections = _owner
+                .State.Settings.ElasticConnections.Where(item => item.Id != connection.Id)
+                .Append(connection)
+                .ToList(),
+        };
+    }
+
+    internal Task SaveElasticConnectionAsync(ElasticConnectionSettings connection, string secret) =>
+        _owner.State.SaveElasticConnectionAsync(connection, secret).AsTask();
+
+    internal Task<IReadOnlyList<ElasticDataViewSummary>> GetDataViewsAsync(
+        ElasticConnectionSettings connection,
+        string? secret = null
+    ) => _owner.State.GetDataViewsAsync(connection, secret);
+
+    internal Task<ElasticDataView> GetDataViewAsync(
+        ElasticConnectionSettings connection,
+        string dataViewId,
+        string? secret = null
+    ) => _owner.State.GetDataViewAsync(connection, dataViewId, secret);
+
+    private void AddElasticConnection()
+    {
+        var editor = new ElasticConnectionEditorViewModel(this, Guid.NewGuid().ToString("N"));
+        ElasticConnections.Add(editor);
+        SelectedElasticConnection = editor;
+    }
+
+    private async Task RemoveElasticConnectionAsync(ElasticConnectionEditorViewModel editor)
+    {
+        await _owner.State.RemoveElasticConnectionAsync(editor.Id);
+        ElasticConnections.Remove(editor);
+        SelectedElasticConnection = ElasticConnections.FirstOrDefault();
+    }
+
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
 }
 
@@ -362,6 +470,7 @@ internal sealed class LabelSettingViewModel : ReactiveObject
     private readonly SettingsViewModel _owner;
     private string _text = string.Empty;
     private Color _color = Color.Parse("#F59E0B");
+    private bool _showInOpenFile = true;
     private bool _syncing;
 
     internal LabelSettingViewModel(SettingsViewModel owner, int index)
@@ -381,7 +490,7 @@ internal sealed class LabelSettingViewModel : ReactiveObject
                 return;
             this.RaiseAndSetIfChanged(ref _text, value);
             if (!_syncing)
-                _ = _owner.CommitLabelAsync(Index, value, Color);
+                _ = _owner.CommitLabelAsync(Index, value, Color, ShowInOpenFile);
         }
     }
 
@@ -394,7 +503,18 @@ internal sealed class LabelSettingViewModel : ReactiveObject
                 return;
             this.RaiseAndSetIfChanged(ref _color, value);
             if (!_syncing)
-                _ = _owner.CommitLabelAsync(Index, Text, value);
+                _ = _owner.CommitLabelAsync(Index, Text, value, ShowInOpenFile);
+        }
+    }
+
+    public bool ShowInOpenFile
+    {
+        get => _showInOpenFile;
+        set
+        {
+            if (!this.RaiseAndSetIfChanged(ref _showInOpenFile, value) || _syncing)
+                return;
+            _ = _owner.CommitLabelAsync(Index, Text, Color, value);
         }
     }
 
@@ -405,6 +525,7 @@ internal sealed class LabelSettingViewModel : ReactiveObject
         {
             Text = label.Text;
             Color = Avalonia.Media.Color.Parse(label.Color);
+            ShowInOpenFile = label.ShowInOpenFile;
         }
         finally
         {

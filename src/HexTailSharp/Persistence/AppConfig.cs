@@ -7,9 +7,23 @@ namespace HexTailSharp.Persistence;
 public sealed class AppConfig
 {
     public List<PersistedFileTab> OpenFiles { get; init; } = [];
+    public List<PersistedElasticTab> OpenElasticTabs { get; init; } = [];
     public string? SelectedFilePath { get; init; }
+    public string? SelectedElasticSourceId { get; init; }
     public AppWindowState Window { get; init; } = new();
     public AppSettings Settings { get; init; } = new();
+}
+
+public sealed class PersistedElasticTab
+{
+    public required string SourceId { get; init; }
+    public List<PersistedSearch> Searches { get; init; } = [];
+    public bool FollowAll { get; init; } = true;
+    public List<bool> FollowSearches { get; init; } = [];
+    public bool ShowContext { get; init; }
+    public int? SelectedLine { get; init; }
+    public int ContextAbove { get; init; } = 3;
+    public int ContextBelow { get; init; } = 10;
 }
 
 public sealed class PersistedFileTab
@@ -53,20 +67,34 @@ public sealed record AppSettings
     public UiDensity Density { get; init; } = UiDensity.Comfortable;
     public LogFontSize LogFontSize { get; init; } = LogFontSize.Medium;
     public SettingsMenuAlignment SettingsMenuAlignment { get; init; } = SettingsMenuAlignment.Right;
+    public AppTimeZoneMode TimeZoneMode { get; init; } = AppTimeZoneMode.Local;
+    public List<ElasticConnectionSettings> ElasticConnections { get; init; } = [];
 
     public bool Excludes(string text) =>
-        GlobalExcludeLabels.Any(label => text.Contains(label, StringComparison.OrdinalIgnoreCase));
+        GlobalExcludeLabels.Any(label => CreateGlobalQuery(label)?.IsMatch(text) is true);
 
     public IEnumerable<LabelHighlight> GetLabelHighlights(string text)
     {
         foreach (var label in GlobalLabels)
         {
-            for (
-                var start = 0;
-                (start = text.IndexOf(label.Text, start, StringComparison.OrdinalIgnoreCase)) >= 0;
-                start += label.Text.Length
-            )
-                yield return new LabelHighlight(start, label.Text.Length, label.Color);
+            var query = CreateGlobalQuery(label.Text);
+            if (query is null)
+                continue;
+
+            foreach (var range in query.GetHighlights(text))
+                yield return new LabelHighlight(range.Start, range.Length, label.Color);
+        }
+    }
+
+    private static CompiledQuery? CreateGlobalQuery(string query)
+    {
+        try
+        {
+            return new CompiledQuery(query, CompiledQuery.DetectMode(query), caseSensitive: false);
+        }
+        catch (ArgumentException)
+        {
+            return null;
         }
     }
 }
@@ -97,6 +125,7 @@ public sealed class GlobalLabel
 {
     public string Text { get; init; } = string.Empty;
     public string Color { get; init; } = "#f59e0b";
+    public bool ShowInOpenFile { get; init; } = true;
 }
 
 public readonly record struct LabelHighlight(int Start, int Length, string Color);

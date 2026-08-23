@@ -4,27 +4,25 @@
   xmlns:vm="using:HexTailSharp.ViewModels"
   xmlns:views="using:HexTailSharp.Views"
   xmlns:i="https://github.com/projektanker/icons.avalonia"
+  xmlns:dialogHost="clr-namespace:DialogHostAvalonia;assembly=DialogHost.Avalonia"
   x:Class="HexTailSharp.MainWindow"
   x:DataType="vm:MainWindowViewModel"
   Title="Hex Tail"
   Width="1920"
   Height="1080"
   MinWidth="720"
-  KeyDown="MainWindowKeyDown"
   MinHeight="720"
   Background="{DynamicResource SurfaceBrush}"
   DragDrop.AllowDrop="True"
 >
-  <SplitView
-    x:Name="SettingsSplitView"
-    PanePlacement="Left"
-    OpenPaneLength="600"
-    IsPaneOpen="{Binding SettingsOpen, Mode=TwoWay}"
-    DisplayMode="CompactOverlay"
+  <dialogHost:DialogHost
+    x:Name="SettingsDialogHost"
+    IsOpen="{Binding SettingsOpen, Mode=TwoWay}"
+    CloseOnClickAway="True"
   >
-    <SplitView.Pane>
+    <dialogHost:DialogHost.DialogContent>
       <views:SettingsPanel />
-    </SplitView.Pane>
+    </dialogHost:DialogHost.DialogContent>
 
     <Grid
       RowDefinitions="Auto,Auto,Auto,*"
@@ -58,6 +56,36 @@
                   Background="{DynamicResource SurfaceBrush}"
                 />
               </CommandBarButton.Icon>
+            </CommandBarButton>
+            <CommandBarButton
+              x:Name="ElasticSourcesButton"
+              IsVisible="{Binding HasElasticSources}"
+              Label="Elastic sources"
+              ToolTip.Tip="Select Elastic sources"
+              AutomationProperties.Name="Elastic sources"
+            >
+              <CommandBarButton.Icon>
+                <i:Icon Value="{Binding ElasticSourceIcon}" FontSize="22" />
+              </CommandBarButton.Icon>
+              <CommandBarButton.Flyout>
+                <Flyout>
+                  <ItemsControl ItemsSource="{Binding ElasticSources}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:ElasticSourceOptionViewModel">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <i:Icon Value="{Binding StatusGlyph}" />
+                          <CheckBox
+                            Content="{Binding DisplayName}"
+                            ToolTip.Tip="{Binding ToolTip}"
+                            AutomationProperties.Name="{Binding ToolTip}"
+                            IsChecked="{Binding IsOpen, Mode=TwoWay}"
+                          />
+                        </StackPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Flyout>
+              </CommandBarButton.Flyout>
             </CommandBarButton>
             <CommandBarSeparator />
             <CommandBarButton
@@ -99,6 +127,33 @@
         <DockPanel Grid.Column="1" HorizontalAlignment="Right" Margin="0,0,5,0">
           <views:SearchBar DataContext="{Binding }" DockPanel.Dock="Left" />
 
+          <StackPanel
+            x:Name="ElasticTimeRangePanel"
+            Orientation="Horizontal"
+            Spacing="4"
+            Margin="6,0,0,0"
+            VerticalAlignment="Center"
+            IsVisible="{Binding IsElasticSelected}"
+          >
+            <TextBlock Text="From" VerticalAlignment="Center" />
+            <TextBox
+              Width="105"
+              Text="{Binding ElasticFrom, Mode=TwoWay}"
+              ToolTip.Tip="now-5m, now, or an ISO timestamp"
+            />
+            <TextBlock Text="To" VerticalAlignment="Center" />
+            <TextBox
+              Width="105"
+              Text="{Binding ElasticTo, Mode=TwoWay}"
+              ToolTip.Tip="now or an ISO timestamp"
+            />
+            <Button
+              Content="Apply"
+              Command="{Binding ApplyElasticTimeRangeCommand}"
+              Classes="primary"
+            />
+          </StackPanel>
+
           <ToggleSwitch
             OnContent="Following"
             OffContent="Not Following"
@@ -125,5 +180,5 @@
       <views:WorkspaceError Grid.Column="0" Grid.Row="2" />
       <views:LogWorkspace Grid.Column="0" Grid.Row="3" />
     </Grid>
-  </SplitView>
+  </dialogHost:DialogHost>
 </Window>

@@ -27,7 +27,7 @@
               BorderBrush="{Binding SelectedTabBrush}"
               Background="{DynamicResource SurfaceBrush}"
               Classes.selected="{Binding IsSelected}"
-              ToolTip.Tip="{Binding Path}"
+              ToolTip.Tip="{Binding Model.Source.ToolTip}"
             >
               <DockPanel>
                 <Button
@@ -47,8 +47,8 @@
                   Classes="icon tab-close"
                   Width="{Binding Workspace.Settings.TabCloseSize}"
                   Height="{Binding Workspace.Settings.TabCloseSize}"
-                  ToolTip.Tip="{Binding Path, StringFormat='Close {0}'}"
-                  AutomationProperties.Name="{Binding Path, StringFormat='Close {0}'}"
+                  ToolTip.Tip="{Binding Model.Source.ToolTip, StringFormat='Close {0}'}"
+                  AutomationProperties.Name="{Binding Model.Source.ToolTip, StringFormat='Close {0}'}"
                   Command="{Binding $parent[UserControl].DataContext.CloseFileCommand}"
                   CommandParameter="{Binding}"
                 >

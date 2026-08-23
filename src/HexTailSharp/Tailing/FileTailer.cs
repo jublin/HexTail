@@ -6,9 +6,10 @@ using Polly.Retry;
 
 namespace HexTailSharp.Tailing;
 
-internal sealed class FileTailer : IFileTailer
+internal sealed class FileTailer : ILogTailer
 {
-    private readonly ChannelWriter<TailerEvent> _events;
+    private readonly Domain.ILogParser _parser;
+    private readonly ChannelWriter<SourceEvent> _events;
     private readonly TailerOptions _options;
     private readonly CancellationTokenSource _stop = new();
     private readonly ResiliencePipeline _retryPipeline;
@@ -25,14 +26,16 @@ internal sealed class FileTailer : IFileTailer
     private string? _lastError;
 
     public FileTailer(
-        string fileId,
+        string sourceId,
         string path,
-        ChannelWriter<TailerEvent> events,
+        Domain.ILogParser parser,
+        ChannelWriter<SourceEvent> events,
         TailerOptions options
     )
     {
-        FileId = fileId;
+        SourceId = sourceId;
         Path = System.IO.Path.GetFullPath(path);
+        _parser = parser;
         _events = events;
         _options = options;
         _retryPipeline = new ResiliencePipelineBuilder()
@@ -52,8 +55,9 @@ internal sealed class FileTailer : IFileTailer
             .Build();
     }
 
-    public string FileId { get; }
+    public string SourceId { get; }
     public string Path { get; }
+    public string DisplayName => Path;
     public Task Completion => _completion ?? Task.CompletedTask;
 
     public void Start()
@@ -139,27 +143,33 @@ internal sealed class FileTailer : IFileTailer
             ResetReadState();
             _missing = false;
             _rotationHint = false;
-            Write(new FileRotated(FileId));
+            Write(new SourceReset(SourceId));
         }
 
         if (info.Length < _offset)
         {
             ResetReadState();
-            Write(new FileTruncated(FileId));
+            Write(new SourceReset(SourceId));
         }
 
+        var initialRead = !_hasObservedFile;
         _hasObservedFile = true;
-        await ReadAvailableBytesAsync(cancellationToken).ConfigureAwait(false);
+        await ReadAvailableBytesAsync(cancellationToken, initialRead).ConfigureAwait(false);
         if (_lastError is not null)
         {
             _lastError = null;
-            Write(new TailerRecovered(FileId));
+            Write(new SourceRecovered(SourceId));
         }
     }
 
-    private async ValueTask ReadAvailableBytesAsync(CancellationToken cancellationToken)
+    private async ValueTask ReadAvailableBytesAsync(
+        CancellationToken cancellationToken,
+        bool initialRead = false
+    )
     {
-        var lines = new List<string>();
+        var lines = initialRead ? null : new List<string>();
+        var maxInitialLines = Math.Max(1, _options.MaxInitialLines);
+        var initialLines = initialRead ? new Queue<string>(maxInitialLines) : null;
         await using var stream = new FileStream(
             Path,
             new FileStreamOptions
@@ -175,7 +185,7 @@ internal sealed class FileTailer : IFileTailer
         if (stream.Length < _offset)
         {
             ResetReadState();
-            Write(new FileTruncated(FileId));
+            Write(new SourceReset(SourceId));
         }
 
         stream.Position = _offset;
@@ -190,14 +200,28 @@ internal sealed class FileTailer : IFileTailer
         )
         {
             _offset += read;
-            AppendCompleteLines(buffer.AsSpan(0, read), lines);
+            AppendCompleteLines(
+                buffer.AsSpan(0, read),
+                line =>
+                {
+                    if (initialLines is not null)
+                    {
+                        if (initialLines.Count == maxInitialLines)
+                            initialLines.Dequeue();
+                        initialLines.Enqueue(line);
+                    }
+                    else
+                        lines!.Add(line);
+                }
+            );
         }
 
-        if (lines.Count > 0)
-            Write(new NewLines(FileId, lines));
+        var completeLines = initialLines?.ToArray() ?? lines!.ToArray();
+        if (completeLines.Length > 0)
+            Write(new SourceLines(SourceId, completeLines.Select(_parser.Parse).ToArray()));
     }
 
-    private void AppendCompleteLines(ReadOnlySpan<byte> bytes, List<string> lines)
+    private void AppendCompleteLines(ReadOnlySpan<byte> bytes, Action<string> addLine)
     {
         for (var i = 0; i < bytes.Length; i++)
         {
@@ -209,7 +233,7 @@ internal sealed class FileTailer : IFileTailer
             if (length > 0 && _pendingBytes[length - 1] == (byte)'\r')
                 length--;
 
-            lines.Add(Encoding.UTF8.GetString(CollectionsMarshal.AsSpan(_pendingBytes)[..length]));
+            addLine(Encoding.UTF8.GetString(CollectionsMarshal.AsSpan(_pendingBytes)[..length]));
             _pendingBytes.Clear();
         }
     }
@@ -220,14 +244,14 @@ internal sealed class FileTailer : IFileTailer
         _pendingBytes.Clear();
     }
 
-    private void Write(TailerEvent tailerEvent) => _events.TryWrite(tailerEvent);
+    private void Write(SourceEvent tailerEvent) => _events.TryWrite(tailerEvent);
 
     private void ReportError(string message)
     {
         if (string.Equals(_lastError, message, StringComparison.Ordinal))
             return;
         _lastError = message;
-        Write(new TailerError(FileId, message));
+        Write(new SourceError(SourceId, message));
     }
 
     private async Task WaitForWakeOrPollAsync(CancellationToken cancellationToken)

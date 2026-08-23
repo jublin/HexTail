@@ -7,6 +7,10 @@ files. It opens plaintext and `.logfmt` files, keeps multiple files and
 searches in separate tabs, and renders a bounded, virtualized log view without
 a browser, WebView, JavaScript runtime, or local HTTP server.
 
+Elastic sources use separate Kibana and Elasticsearch URLs, generic
+server/namespace mappings, ordered output fields, a five-minute initial
+lookback, and native OS credential storage for authenticated connections.
+
 ![HexTail desktop UI](assets/hextail-ui.png)
 
 ## Features

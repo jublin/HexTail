@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using DialogHostAvalonia;
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
 using HexTailSharp.Persistence;
@@ -24,6 +25,89 @@ namespace HexTailSharp.Tests.Ui;
 public sealed class MainWindowInteractionTests
 {
     [AvaloniaFact]
+    public void ElasticToolbarButtonIsHiddenWhenNoSourcesAreConfigured()
+    {
+        var window = TestWindow.Create(out var viewModel);
+        window.Show();
+
+        var button = window.FindControl<CommandBarButton>("ElasticSourcesButton")!;
+
+        Assert.False(viewModel.HasElasticSources);
+        Assert.False(button.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SettingsModalClosesWhenTheBackdropIsClicked()
+    {
+        var window = TestWindow.Create(out var viewModel);
+        viewModel.SettingsOpen = true;
+        window.Show();
+
+        var host = window.FindControl<DialogHost>("SettingsDialogHost");
+        Assert.NotNull(host);
+        Assert.True(host.IsOpen);
+        window.MouseDown(new Point(8, 8), MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(new Point(8, 8), MouseButton.Left, RawInputModifiers.None);
+
+        Assert.False(viewModel.SettingsOpen);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ElasticTimeRangePanelIsVisibleForAnOpenElasticTab()
+    {
+        var connection = new ElasticConnectionSettings
+        {
+            Id = "server-1",
+            Name = "Elastic",
+            KibanaUrl = "https://kibana/",
+            ElasticsearchUrl = "https://elastic/",
+            Views =
+            [
+                new ElasticViewSettings
+                {
+                    Id = "view-1",
+                    Name = "Logs",
+                    DataViewTitle = "logs-*",
+                    TimeFieldName = "@timestamp",
+                    ServerField = "ident",
+                    NamespaceField = "service.name",
+                    OutputFields = ["message"],
+                    Sources =
+                    [
+                        new ElasticSourceSettings
+                        {
+                            Id = "source-1",
+                            ServerValue = "app1",
+                            NamespaceValue = "prod",
+                        },
+                    ],
+                },
+            ],
+        };
+        await using var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            new AppSettings { ElasticConnections = [connection] },
+            elastic: new FakeElasticApiClient()
+        );
+        var viewModel = new MainWindowViewModel(
+            state,
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        await state.OpenElasticSourceAsync("source-1", save: false);
+        var window = new MainWindow(viewModel, registerNativePicker: false);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(viewModel.IsElasticSelected);
+        Assert.True(window.FindControl<StackPanel>("ElasticTimeRangePanel")!.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void MainWindowComposesDedicatedWorkspaceControls()
     {
         var window = TestWindow.Create(out _);
@@ -34,7 +118,6 @@ public sealed class MainWindowInteractionTests
             .Select(control => control.GetType().Name)
             .ToHashSet();
 
-        Assert.Contains("SettingsPanel", controlNames);
         Assert.Contains("FileStrip", controlNames);
         Assert.Contains("WorkspaceError", controlNames);
         Assert.Contains("LogWorkspace", controlNames);
@@ -45,13 +128,13 @@ public sealed class MainWindowInteractionTests
     public void SettingsInspectorAndEveryComboBoxOpen()
     {
         var window = TestWindow.Create(out var viewModel);
-        var pane = window.FindControl<SplitView>("SettingsSplitView")!;
         viewModel.SettingsOpen = true;
         window.Show();
 
-        Assert.True(pane.IsPaneOpen);
+        var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
+        Assert.True(viewModel.SettingsOpen);
         Dispatcher.UIThread.RunJobs();
-        var colorPickers = pane.GetVisualDescendants().OfType<ColorPicker>().ToArray();
+        var colorPickers = panel.GetVisualDescendants().OfType<ColorPicker>().ToArray();
         Assert.NotEmpty(colorPickers);
         Assert.All(colorPickers, picker => Assert.NotNull(picker.Template));
         foreach (var name in new[] { "DensityBox", "FontSizeBox" })
@@ -69,6 +152,18 @@ public sealed class MainWindowInteractionTests
         Assert.Equal(4, viewModel.Settings.TabPadding.Left);
         Assert.Equal(22, viewModel.Settings.TabCloseSize);
         Assert.Equal(12, viewModel.Settings.SecondaryFontSize);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void ElasticSettingsUseTheServerCardLayout()
+    {
+        var window = TestWindow.Create(out var viewModel);
+        viewModel.SettingsOpen = true;
+        viewModel.Settings.SectionIndex = 2;
+        window.Show();
+
+        Assert.NotNull(FindVisual<Button>(window, "AddElasticServerButton"));
         window.Close();
     }
 
@@ -106,7 +201,7 @@ public sealed class MainWindowInteractionTests
         var window = TestWindow.Create(persistence, out var viewModel);
         await viewModel.InitializeAsync();
         viewModel.SettingsOpen = true;
-        viewModel.Settings.SectionIndex = 3;
+        viewModel.Settings.SectionIndex = 1;
         window.Show();
 
         var theme = viewModel.Settings.ThemeOptions.Single(option => option.Id == "spotify");
@@ -144,7 +239,6 @@ public sealed class MainWindowInteractionTests
         Click(labelControls.OfType<Button>().Single(button => button.Content is Icon));
         await WaitFor(() => viewModel.Settings.Labels.Count == 0);
 
-        viewModel.Settings.SectionIndex = 1;
         viewModel.Settings.NewExclusionText = "healthcheck";
         Click(FindVisual<Button>(window, "AddExclusionButton"));
         await WaitFor(() => viewModel.Settings.Exclusions.Count == 1);
@@ -402,7 +496,7 @@ public sealed class MainWindowInteractionTests
     public async Task OpenShortcutAcceptsControlOrMeta()
     {
         var viewModel = new MainWindowViewModel(
-            new AppState(new TailerService(), new TestPersistence()),
+            new AppState(new LogSourceService(), new TestPersistence()),
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
@@ -485,22 +579,6 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
-    public void NarrowWidthUsesOverlayAndWideWidthUsesInline()
-    {
-        var window = TestWindow.Create(out _);
-        var pane = window.FindControl<SplitView>("SettingsSplitView")!;
-        window.Show();
-
-        window.Width = 900;
-        Dispatcher.UIThread.RunJobs();
-        Assert.Equal(SplitViewDisplayMode.Overlay, pane.DisplayMode);
-        window.Width = 1200;
-        Dispatcher.UIThread.RunJobs();
-        Assert.Equal(SplitViewDisplayMode.Inline, pane.DisplayMode);
-        window.Close();
-    }
-
-    [AvaloniaFact]
     public async Task DelayedRestoreAppliesWindowStateOnUiThread()
     {
         var persistence = new DelayedPersistence
@@ -512,7 +590,7 @@ public sealed class MainWindowInteractionTests
             },
         };
         var viewModel = new MainWindowViewModel(
-            new AppState(new TailerService(), persistence),
+            new AppState(new LogSourceService(), persistence),
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );

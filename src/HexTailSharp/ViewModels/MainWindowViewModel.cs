@@ -44,6 +44,9 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private string? _searchError;
     private bool _started;
     private bool _closed;
+    private bool _restoring;
+    private string _elasticFrom = "now-5m";
+    private string _elasticTo = "now";
 
     public MainWindowViewModel(
         AppState state,
@@ -73,6 +76,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             _scheduler
         );
         SelectFileCommand = ReactiveCommand.Create<FileTabViewModel>(SelectFile, _scheduler);
+        ApplyElasticTimeRangeCommand = ReactiveCommand.Create(ApplyElasticTimeRange, _scheduler);
         CloseFileCommand = ReactiveCommand.CreateFromTask<FileTabViewModel>(
             CloseFileAsync,
             _scheduler
@@ -106,7 +110,11 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                     return Disposable.Create(() => _state.Changed -= Changed);
                 })
                 .ObserveOn(_scheduler)
-                .Subscribe(_ => SyncFromState())
+                .Subscribe(_ =>
+                {
+                    if (!_restoring)
+                        SyncFromState();
+                })
         );
 
         _subscriptions.Add(
@@ -125,6 +133,10 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
     public AppState State => _state;
     public ObservableCollection<FileTabViewModel> Files { get; } = [];
+    public ObservableCollection<ElasticSourceOptionViewModel> ElasticSources { get; } = [];
+    public bool HasElasticSources => ElasticSources.Count > 0;
+    public bool HasElasticWarning => _state.HasElasticWarning;
+    public string ElasticSourceIcon => HasElasticWarning ? "mdi-cloud-alert" : "mdi-cloud-check";
     public SettingsViewModel Settings { get; }
     public Interaction<Unit, IReadOnlyList<string>> PickFiles { get; }
     public ReactiveCommand<Unit, Unit> OpenCommand { get; }
@@ -132,6 +144,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSettingsCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> SelectFileCommand { get; }
+    public ReactiveCommand<Unit, Unit> ApplyElasticTimeRangeCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> CloseFileCommand { get; }
     public ReactiveCommand<LogViewViewModel, Unit> RemoveSearchCommand { get; }
     public ReactiveCommand<Unit, Unit> AddSearchCommand { get; }
@@ -147,12 +160,29 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
             var previous = _selectedFile;
             this.RaiseAndSetIfChanged(ref _selectedFile, value);
+            this.RaisePropertyChanged(nameof(IsElasticSelected));
             previous?.RaiseSelectionChanged();
+            if (value is not null)
+            {
+                ElasticFrom = value.Model.ElasticFrom;
+                ElasticTo = value.Model.ElasticTo;
+            }
             value?.RaiseSelectionChanged();
         }
     }
 
     public bool HasFile => SelectedFile is not null;
+    public bool IsElasticSelected => SelectedFile?.Model.Source.Kind == LogSourceKind.Elastic;
+    public string ElasticFrom
+    {
+        get => _elasticFrom;
+        set => this.RaiseAndSetIfChanged(ref _elasticFrom, value);
+    }
+    public string ElasticTo
+    {
+        get => _elasticTo;
+        set => this.RaiseAndSetIfChanged(ref _elasticTo, value);
+    }
     public bool ShowEmpty => !HasFile;
     public int FileCount => Files.Count;
     public int LineCount => SelectedFile?.Model.Buffer.Count ?? 0;
@@ -161,7 +191,11 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     {
         get =>
             _fileError
-            ?? (SelectedFile?.Model.Error is { } error ? $"{SelectedFile.Path}: {error}" : null);
+            ?? (
+                SelectedFile?.Model.Error is { } error
+                    ? $"{(SelectedFile.Model.Source.Kind == LogSourceKind.File ? SelectedFile.Path : SelectedFile.Model.Source.ToolTip)}: {error}"
+                    : null
+            );
         private set
         {
             this.RaiseAndSetIfChanged(ref _fileError, value);
@@ -227,6 +261,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             return;
 
         _started = true;
+        _restoring = true;
         try
         {
             await _state.RestoreAsync();
@@ -252,6 +287,10 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         {
             SetFileError(ex.Message);
             SyncFromState();
+        }
+        finally
+        {
+            _restoring = false;
         }
     }
 
@@ -464,6 +503,34 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             ? null
             : Files.FirstOrDefault(item => ReferenceEquals(item.Model, _state.SelectedFile));
         Settings.Sync(_state.Settings);
+        var configured = _state
+            .Settings.ElasticConnections.SelectMany(connection =>
+                connection.Views.SelectMany(view =>
+                    view.Sources.Select(source =>
+                        (
+                            source.Id,
+                            source.DisplayName,
+                            ToolTip: $"{connection.Name} / {view.Name}: {source.DisplayName}"
+                        )
+                    )
+                )
+            )
+            .ToArray();
+        for (var index = ElasticSources.Count - 1; index >= 0; index--)
+            if (!configured.Any(item => item.Id == ElasticSources[index].SourceId))
+                ElasticSources.RemoveAt(index);
+        foreach (var item in configured)
+            if (!ElasticSources.Any(option => option.SourceId == item.Id))
+                ElasticSources.Add(
+                    new ElasticSourceOptionViewModel(this, item.Id, item.DisplayName, item.ToolTip)
+                );
+        foreach (var option in ElasticSources)
+        {
+            var status =
+                _state.ElasticSourceStatuses.GetValueOrDefault(option.SourceId)?.Status.ToString()
+                ?? "Checking";
+            option.Sync(_state.IsElasticSourceOpen(option.SourceId), status);
+        }
         this.RaisePropertyChanged(nameof(FileCount));
         this.RaisePropertyChanged(nameof(HasFile));
         this.RaisePropertyChanged(nameof(ShowEmpty));
@@ -471,6 +538,24 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         this.RaisePropertyChanged(nameof(FileError));
         this.RaisePropertyChanged(nameof(HasFileError));
         this.RaisePropertyChanged(nameof(HasSearchError));
+        this.RaisePropertyChanged(nameof(HasElasticSources));
+        this.RaisePropertyChanged(nameof(HasElasticWarning));
+        this.RaisePropertyChanged(nameof(ElasticSourceIcon));
+    }
+
+    private void ApplyElasticTimeRange()
+    {
+        if (!IsElasticSelected || SelectedFile is null)
+            return;
+        try
+        {
+            _state.SetElasticTimeRange(SelectedFile.Model, ElasticFrom, ElasticTo);
+            SetFileError(null);
+        }
+        catch (ArgumentException exception)
+        {
+            SetFileError(exception.Message);
+        }
     }
 
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";

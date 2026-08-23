@@ -14,7 +14,7 @@ internal static class TestWindow
     public static MainWindow Create(IAppPersistence persistence, out MainWindowViewModel viewModel)
     {
         viewModel = new MainWindowViewModel(
-            new AppState(new TailerService(), persistence),
+            new AppState(new LogSourceService(), persistence),
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );

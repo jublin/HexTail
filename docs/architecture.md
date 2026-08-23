@@ -5,6 +5,12 @@ HexTail is a single-process .NET 10 desktop application built with Avalonia
 and persistence locally. There is no browser, WebView, JavaScript runtime, or
 HTTP server in the runtime path.
 
+Elastic sources use a dual-endpoint, source-neutral path: Kibana provides
+supported data-view metadata and Elasticsearch provides read-only PIT/search
+requests. Local files and remote sources emit parsed `Line` batches into the
+same buffer, search, context, and virtualized renderer. Secrets use the native
+credential vault and are excluded from session JSON.
+
 ## Runtime flow
 
 ```mermaid
@@ -13,8 +19,8 @@ flowchart LR
     B[Native picker] --> S
     C[Drag and drop] --> S
     D[session.json] --> S
-    S --> T[TailerService]
-    T --> E[Tailer events]
+    S --> T[LogSourceService]
+    T --> E[Source events]
     E --> F[FileBuffer]
     F --> Q[Searches and highlights]
     F --> V[Virtualized Avalonia views]

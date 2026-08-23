@@ -1,7 +1,6 @@
 <Project>
   <PropertyGroup>
-    <Version>0.1.0</Version>
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionPrefix>0.1.1</VersionPrefix>
     <VersionSuffix>alpha</VersionSuffix>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
