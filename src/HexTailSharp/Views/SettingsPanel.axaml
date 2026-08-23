@@ -147,12 +147,19 @@
                   Classes="primary"
                 />
               </Grid>
-              <ItemsControl ItemsSource="{Binding Settings.ElasticConnections}">
-                <ItemsControl.ItemTemplate>
+              <ListBox ItemsSource="{Binding Settings.ElasticConnections}" Background="Transparent" BorderThickness="0">
+                <ListBox.Styles>
+                  <Style Selector="ListBoxItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Padding" Value="0" />
+                  </Style>
+                </ListBox.Styles>
+                <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="vm:ElasticConnectionEditorViewModel">
                     <Expander
                       Classes="elastic-card"
                       IsExpanded="True"
+                      HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Stretch"
                     >
                       <Expander.Header>
@@ -268,8 +275,8 @@
                       </StackPanel>
                     </Expander>
                   </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+                </ListBox.ItemTemplate>
+              </ListBox>
             </StackPanel>
           </ScrollViewer>
         </TabItem>
