@@ -13,6 +13,7 @@
     <PackageReference Include="Avalonia.Controls.ColorPicker" />
     <PackageReference Include="Avalonia.Desktop" />
     <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="DialogHost.Avalonia" />
     <PackageReference Include="Optris.Icons.Avalonia.MaterialDesign" />
     <PackageReference Include="Polly" />
     <PackageReference Include="GnomeStack.Os.Secrets" />

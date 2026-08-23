@@ -110,7 +110,7 @@ public sealed class ElasticSettingsViewModelTests
             startPolling: false
         );
 
-        owner.Settings.SectionIndex = 4;
+        owner.Settings.SectionIndex = 2;
         owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
         editor.AddViewCommand.Execute().Subscribe();

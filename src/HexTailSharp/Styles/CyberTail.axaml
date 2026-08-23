@@ -35,6 +35,19 @@
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="12" />
   </Style>
+  <Style Selector="Border.settings-modal">
+    <Setter Property="Background" Value="{DynamicResource RaisedBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="14" />
+  </Style>
+  <Style Selector="Border.settings-section">
+    <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="18" />
+  </Style>
   <Style Selector="Border.elastic-card">
     <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />

@@ -55,8 +55,6 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, OnDrop);
         Opened += OnOpened;
         Closed += OnClosed;
-        SizeChanged += (_, args) => UpdateResponsiveLayout(args.NewSize.Width);
-        UpdateResponsiveLayout(Width);
     }
 
     internal MainWindowViewModel ViewModel { get; }
@@ -187,20 +185,5 @@ public partial class MainWindow : Window
         }
 
         e.Handled = true;
-    }
-
-    private void UpdateResponsiveLayout(double width)
-    {
-        SettingsSplitView.OpenPaneLength = Math.Min(760, Math.Max(320, width - 48));
-        SettingsSplitView.DisplayMode =
-            width < 960 ? SplitViewDisplayMode.Overlay : SplitViewDisplayMode.Inline;
-    }
-
-    private void MainWindowKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Escape && ViewModel.SettingsOpen)
-        {
-            ViewModel.SettingsOpen = false;
-        }
     }
 }

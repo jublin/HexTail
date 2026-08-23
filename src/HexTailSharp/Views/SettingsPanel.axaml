@@ -6,7 +6,14 @@
   x:Class="HexTailSharp.Views.SettingsPanel"
   x:DataType="vm:MainWindowViewModel"
 >
-  <Border Classes="settings-sheet" Margin="12">
+  <Border
+    Classes="settings-modal"
+    Width="1200"
+    MinWidth="640"
+    MaxWidth="{Binding Bounds.Width, RelativeSource={RelativeSource AncestorType=Window}}"
+    MaxHeight="{Binding Bounds.Height, RelativeSource={RelativeSource AncestorType=Window}}"
+    Margin="24"
+  >
     <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="16">
       <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
         <TextBlock Text="Settings" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -25,158 +32,101 @@
       <TabControl
         Grid.Row="1"
         SelectedIndex="{Binding Settings.SectionIndex, Mode=TwoWay}"
-        TabStripPlacement="Left"
+        TabStripPlacement="Top"
       >
-        <TabItem Header="Global Labels">
-          <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="10" Margin="0,12,0,0">
-              <TextBlock
-                Text="Highlight case-insensitive text across every log view."
-                Foreground="{DynamicResource MutedBrush}"
-                TextWrapping="Wrap"
-              />
-              <ItemsControl ItemsSource="{Binding Settings.Labels}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:LabelSettingViewModel">
-                    <Grid ColumnDefinitions=".8*,.1*,.1*" Margin="0,2">
-                      <TextBox
-                        Text="{Binding Text, Mode=TwoWay}"
-                        PlaceholderText="Text to highlight"
-                        BorderBrush="{DynamicResource BorderBrush}"
-                        BorderThickness="1"
-                      />
-                      <ColorPicker
-                        Grid.Column="1"
-                        BorderBrush="{DynamicResource BorderBrush}"
-                        BorderThickness="1"
-                        Color="{Binding Color, Mode=TwoWay}"
-                        Width="48"
-                        IsAlphaEnabled="False"
-                      />
-                      <Button
-                        Grid.Column="2"
-                        Classes="icon"
-                        ToolTip.Tip="Remove label"
-                        Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveLabelCommand}"
-                        CommandParameter="{Binding}"
-                      >
-                        <ic:Icon Value="mdi-close" FontSize="18" />
-                      </Button>
-                    </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <Grid ColumnDefinitions=".8*,.1*,.1*">
-                <TextBox
-                  Text="{Binding Settings.NewLabelText, Mode=TwoWay}"
-                  PlaceholderText="Text to highlight"
-                />
-                <ColorPicker
-                  Grid.Column="1"
-                  Color="{Binding Settings.NewLabelColor, Mode=TwoWay}"
-                  Width="48"
-                  IsAlphaEnabled="False"
-                />
-                <Button
-                  x:Name="AddLabelButton"
-                  Name="AddLabelButton"
-                  Grid.Column="2"
-                  Classes="icon"
-                  ToolTip.Tip="Add label"
-                  Command="{Binding Settings.AddLabelCommand}"
-                >
-                  <ic:Icon Value="mdi-plus" FontSize="18" />
-                </Button>
-              </Grid>
+        <TabItem>
+          <TabItem.Header>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ic:Icon Value="mdi-tag-outline" />
+              <TextBlock Text="Labels &amp; Exclusions" />
             </StackPanel>
+          </TabItem.Header>
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="16" Margin="0,16,0,0">
+              <Border Classes="settings-section">
+                <StackPanel Spacing="10">
+                  <TextBlock Text="Global Labels" FontSize="18" FontWeight="SemiBold" />
+                  <TextBlock Text="Highlight case-insensitive text across every log view." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
+                  <ItemsControl ItemsSource="{Binding Settings.Labels}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:LabelSettingViewModel">
+                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="0,2">
+                          <TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to highlight" />
+                          <ColorPicker Grid.Column="1" Color="{Binding Color, Mode=TwoWay}" Width="48" IsAlphaEnabled="False" />
+                          <Button Grid.Column="2" Classes="icon" ToolTip.Tip="Remove label" Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveLabelCommand}" CommandParameter="{Binding}">
+                            <ic:Icon Value="mdi-delete-outline" FontSize="18" />
+                          </Button>
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                    <TextBox Text="{Binding Settings.NewLabelText, Mode=TwoWay}" PlaceholderText="Text to highlight" />
+                    <ColorPicker Grid.Column="1" Color="{Binding Settings.NewLabelColor, Mode=TwoWay}" Width="48" IsAlphaEnabled="False" />
+                    <Button x:Name="AddLabelButton" Grid.Column="2" Classes="icon" ToolTip.Tip="Add label" Command="{Binding Settings.AddLabelCommand}">
+                      <ic:Icon Value="mdi-plus" FontSize="18" />
+                    </Button>
+                  </Grid>
+                </StackPanel>
+              </Border>
+              <Border Grid.Column="1" Classes="settings-section">
+                <StackPanel Spacing="10">
+                  <TextBlock Text="Exclusions" FontSize="18" FontWeight="SemiBold" />
+                  <TextBlock Text="Matching lines remain buffered but stay hidden from log and context views." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
+                  <ItemsControl ItemsSource="{Binding Settings.Exclusions}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:ExclusionSettingViewModel">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,2">
+                          <TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to hide" />
+                          <Button Grid.Column="1" Classes="icon" ToolTip.Tip="Remove exclusion" Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveExclusionCommand}" CommandParameter="{Binding}">
+                            <ic:Icon Value="mdi-delete-outline" />
+                          </Button>
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <TextBox Text="{Binding Settings.NewExclusionText, Mode=TwoWay}" PlaceholderText="Text to hide" />
+                    <Button x:Name="AddExclusionButton" Grid.Column="1" Classes="icon" ToolTip.Tip="Add exclusion" Command="{Binding Settings.AddExclusionCommand}">
+                      <ic:Icon Value="mdi-plus" />
+                    </Button>
+                  </Grid>
+                </StackPanel>
+              </Border>
+            </Grid>
           </ScrollViewer>
         </TabItem>
-        <TabItem Header="Exclusions">
-          <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="10" Margin="0,12,0,0">
-              <TextBlock
-                Text="Matching lines remain buffered but stay hidden from log and context views."
-                Foreground="{DynamicResource MutedBrush}"
-                TextWrapping="Wrap"
-              />
-              <ItemsControl ItemsSource="{Binding Settings.Exclusions}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:ExclusionSettingViewModel">
-                    <Grid ColumnDefinitions="*,Auto" Margin="0,2">
-                      <TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to hide" />
-                      <Button
-                        Grid.Column="1"
-                        Classes="icon"
-                        ToolTip.Tip="Remove exclusion"
-                        Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveExclusionCommand}"
-                        CommandParameter="{Binding}"
-                      >
-                        <ic:Icon Value="mdi-close" />
-                      </Button>
-                    </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <Grid ColumnDefinitions="*,Auto">
-                <TextBox
-                  Text="{Binding Settings.NewExclusionText, Mode=TwoWay}"
-                  PlaceholderText="Text to hide"
-                />
-                <Button
-                  x:Name="AddExclusionButton"
-                  Name="AddExclusionButton"
-                  Grid.Column="1"
-                  Classes="icon"
-                  ToolTip.Tip="Add exclusion"
-                  Command="{Binding Settings.AddExclusionCommand}"
-                >
-                  <ic:Icon Value="mdi-plus" />
-                </Button>
-              </Grid>
+        <TabItem>
+          <TabItem.Header>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ic:Icon Value="mdi-palette-outline" />
+              <TextBlock Text="Appearance" />
             </StackPanel>
-          </ScrollViewer>
+          </TabItem.Header>
+          <Border Classes="settings-section" Margin="0,16,0,0">
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="28">
+              <StackPanel Spacing="10">
+                <TextBlock Text="Density" />
+                <ComboBox x:Name="DensityBox" HorizontalContentAlignment="Left" ItemsSource="{Binding Settings.DensityOptions}" SelectedItem="{Binding Settings.Density, Mode=TwoWay}" />
+                <TextBlock Text="Log font size" />
+                <ComboBox x:Name="FontSizeBox" HorizontalContentAlignment="Left" ItemsSource="{Binding Settings.FontSizeOptions}" SelectedItem="{Binding Settings.FontSize, Mode=TwoWay}" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Spacing="10">
+                <TextBlock Text="Theme" />
+                <ComboBox x:Name="ThemeBox" ItemsSource="{Binding Settings.ThemeOptions}" SelectedItem="{Binding Settings.SelectedTheme, Mode=TwoWay}" DisplayMemberBinding="{Binding DisplayName}" />
+                <TextBlock Text="Time zone" />
+                <ComboBox ItemsSource="{Binding Settings.TimeZoneModes}" SelectedItem="{Binding Settings.TimeZoneMode, Mode=TwoWay}" HorizontalContentAlignment="Left" />
+              </StackPanel>
+            </Grid>
+          </Border>
         </TabItem>
-        <TabItem Header="Display">
-          <StackPanel Spacing="12" Margin="0,12,0,0">
-            <TextBlock Text="Density" />
-            <ComboBox
-              x:Name="DensityBox"
-              HorizontalContentAlignment="Left"
-              HorizontalAlignment="Stretch"
-              Name="DensityBox"
-              ItemsSource="{Binding Settings.DensityOptions}"
-              SelectedItem="{Binding Settings.Density, Mode=TwoWay}"
-            />
-            <TextBlock Text="Log font size" />
-            <ComboBox
-              HorizontalContentAlignment="Left"
-              HorizontalAlignment="Stretch"
-              x:Name="FontSizeBox"
-              Name="FontSizeBox"
-              ItemsSource="{Binding Settings.FontSizeOptions}"
-              SelectedItem="{Binding Settings.FontSize, Mode=TwoWay}"
-            />
-          </StackPanel>
-        </TabItem>
-        <TabItem Header="Appearance">
-          <StackPanel Spacing="12" Margin="0,12,0,0">
-            <TextBlock Text="Theme" />
-            <ComboBox
-              x:Name="ThemeBox"
-              Name="ThemeBox"
-              ItemsSource="{Binding Settings.ThemeOptions}"
-              SelectedItem="{Binding Settings.SelectedTheme, Mode=TwoWay}"
-              DisplayMemberBinding="{Binding DisplayName}"
-            />
-            <TextBlock Text="Time zone" />
-            <ComboBox
-              ItemsSource="{Binding Settings.TimeZoneModes}"
-              SelectedItem="{Binding Settings.TimeZoneMode, Mode=TwoWay}"
-              HorizontalContentAlignment="Left"
-            />
-          </StackPanel>
-        </TabItem>
-        <TabItem Header="Elastic">
+        <TabItem>
+          <TabItem.Header>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ic:Icon Value="mdi-database-outline" />
+              <TextBlock Text="Elastic" />
+            </StackPanel>
+          </TabItem.Header>
           <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="8" Margin="0,10,0,0">
               <TextBlock Text="Elastic servers" FontWeight="SemiBold" />

@@ -4,27 +4,25 @@
   xmlns:vm="using:HexTailSharp.ViewModels"
   xmlns:views="using:HexTailSharp.Views"
   xmlns:i="https://github.com/projektanker/icons.avalonia"
+  xmlns:dialogHost="clr-namespace:DialogHostAvalonia;assembly=DialogHost.Avalonia"
   x:Class="HexTailSharp.MainWindow"
   x:DataType="vm:MainWindowViewModel"
   Title="Hex Tail"
   Width="1920"
   Height="1080"
   MinWidth="720"
-  KeyDown="MainWindowKeyDown"
   MinHeight="720"
   Background="{DynamicResource SurfaceBrush}"
   DragDrop.AllowDrop="True"
 >
-  <SplitView
-    x:Name="SettingsSplitView"
-    PanePlacement="Left"
-    OpenPaneLength="760"
-    IsPaneOpen="{Binding SettingsOpen, Mode=TwoWay}"
-    DisplayMode="CompactOverlay"
+  <dialogHost:DialogHost
+    x:Name="SettingsDialogHost"
+    IsOpen="{Binding SettingsOpen, Mode=TwoWay}"
+    CloseOnClickAway="True"
   >
-    <SplitView.Pane>
+    <dialogHost:DialogHost.DialogContent>
       <views:SettingsPanel />
-    </SplitView.Pane>
+    </dialogHost:DialogHost.DialogContent>
 
     <Grid
       RowDefinitions="Auto,Auto,Auto,*"
@@ -182,5 +180,5 @@
       <views:WorkspaceError Grid.Column="0" Grid.Row="2" />
       <views:LogWorkspace Grid.Column="0" Grid.Row="3" />
     </Grid>
-  </SplitView>
+  </dialogHost:DialogHost>
 </Window>

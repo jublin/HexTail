@@ -86,16 +86,14 @@ internal sealed class SettingsViewModel : ReactiveObject
         get => _sectionIndex;
         set
         {
-            var index = Math.Clamp(value, 0, 4);
+            var index = Math.Clamp(value, 0, 2);
             if (_sectionIndex == index)
                 return;
             this.RaiseAndSetIfChanged(ref _sectionIndex, index);
             _section = index switch
             {
-                1 => "exclusions",
-                2 => "display",
-                3 => "appearance",
-                4 => "elastic",
+                1 => "appearance",
+                2 => "elastic",
                 _ => "labels",
             };
         }

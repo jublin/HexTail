@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using DialogHostAvalonia;
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
 using HexTailSharp.Persistence;
@@ -29,12 +30,24 @@ public sealed class MainWindowInteractionTests
         var window = TestWindow.Create(out var viewModel);
         window.Show();
 
-        var pane = window.FindControl<SplitView>("SettingsSplitView")!;
         var button = window.FindControl<CommandBarButton>("ElasticSourcesButton")!;
 
-        Assert.Equal(760, pane.OpenPaneLength);
         Assert.False(viewModel.HasElasticSources);
         Assert.False(button.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SettingsAreHostedInTheWindowModal()
+    {
+        var window = TestWindow.Create(out var viewModel);
+        viewModel.SettingsOpen = true;
+        window.Show();
+
+        var host = window.FindControl<DialogHost>("SettingsDialogHost");
+        Assert.NotNull(host);
+        Assert.True(host.IsOpen);
+        Assert.True(host.CloseOnClickAway);
         window.Close();
     }
 
@@ -102,7 +115,6 @@ public sealed class MainWindowInteractionTests
             .Select(control => control.GetType().Name)
             .ToHashSet();
 
-        Assert.Contains("SettingsPanel", controlNames);
         Assert.Contains("FileStrip", controlNames);
         Assert.Contains("WorkspaceError", controlNames);
         Assert.Contains("LogWorkspace", controlNames);
@@ -113,13 +125,13 @@ public sealed class MainWindowInteractionTests
     public void SettingsInspectorAndEveryComboBoxOpen()
     {
         var window = TestWindow.Create(out var viewModel);
-        var pane = window.FindControl<SplitView>("SettingsSplitView")!;
         viewModel.SettingsOpen = true;
         window.Show();
 
-        Assert.True(pane.IsPaneOpen);
+        var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
+        Assert.True(viewModel.SettingsOpen);
         Dispatcher.UIThread.RunJobs();
-        var colorPickers = pane.GetVisualDescendants().OfType<ColorPicker>().ToArray();
+        var colorPickers = panel.GetVisualDescendants().OfType<ColorPicker>().ToArray();
         Assert.NotEmpty(colorPickers);
         Assert.All(colorPickers, picker => Assert.NotNull(picker.Template));
         foreach (var name in new[] { "DensityBox", "FontSizeBox" })
@@ -174,7 +186,7 @@ public sealed class MainWindowInteractionTests
         var window = TestWindow.Create(persistence, out var viewModel);
         await viewModel.InitializeAsync();
         viewModel.SettingsOpen = true;
-        viewModel.Settings.SectionIndex = 3;
+        viewModel.Settings.SectionIndex = 1;
         window.Show();
 
         var theme = viewModel.Settings.ThemeOptions.Single(option => option.Id == "spotify");
@@ -212,7 +224,6 @@ public sealed class MainWindowInteractionTests
         Click(labelControls.OfType<Button>().Single(button => button.Content is Icon));
         await WaitFor(() => viewModel.Settings.Labels.Count == 0);
 
-        viewModel.Settings.SectionIndex = 1;
         viewModel.Settings.NewExclusionText = "healthcheck";
         Click(FindVisual<Button>(window, "AddExclusionButton"));
         await WaitFor(() => viewModel.Settings.Exclusions.Count == 1);
@@ -549,22 +560,6 @@ public sealed class MainWindowInteractionTests
         Assert.True(FindVisual<TextBlock>(window, "SettingsSaveError").IsVisible);
         Assert.False(viewModel.HasFileError);
         persistence.SaveError = null;
-        window.Close();
-    }
-
-    [AvaloniaFact]
-    public void NarrowWidthUsesOverlayAndWideWidthUsesInline()
-    {
-        var window = TestWindow.Create(out _);
-        var pane = window.FindControl<SplitView>("SettingsSplitView")!;
-        window.Show();
-
-        window.Width = 900;
-        Dispatcher.UIThread.RunJobs();
-        Assert.Equal(SplitViewDisplayMode.Overlay, pane.DisplayMode);
-        window.Width = 1200;
-        Dispatcher.UIThread.RunJobs();
-        Assert.Equal(SplitViewDisplayMode.Inline, pane.DisplayMode);
         window.Close();
     }
 
