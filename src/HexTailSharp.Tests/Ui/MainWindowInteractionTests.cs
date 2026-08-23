@@ -156,6 +156,18 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
+    public void ElasticSettingsUseTheServerCardLayout()
+    {
+        var window = TestWindow.Create(out var viewModel);
+        viewModel.SettingsOpen = true;
+        viewModel.Settings.SectionIndex = 2;
+        window.Show();
+
+        Assert.NotNull(FindVisual<Button>(window, "AddElasticServerButton"));
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void SettingsOpenCloseAndEscape()
     {
         var window = TestWindow.Create(out var viewModel);
