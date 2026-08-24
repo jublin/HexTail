@@ -52,7 +52,7 @@
                 <i:Icon
                   Foreground="{DynamicResource AccentBrush}"
                   FontSize="22"
-                  Value="mdi-menu"
+                  Value="mdi-cogs"
                   Background="{DynamicResource SurfaceBrush}"
                 />
               </CommandBarButton.Icon>
@@ -122,7 +122,6 @@
             </CommandBarButton>
           </CommandBar.PrimaryCommands>
         </CommandBar>
-        <!-- <views:WorkspaceError Grid.Column="0" IsVisible="False" /> -->
 
         <DockPanel Grid.Column="1" HorizontalAlignment="Right" Margin="0,0,5,0">
           <views:SearchBar DataContext="{Binding }" DockPanel.Dock="Left" />
@@ -130,7 +129,7 @@
           <StackPanel
             x:Name="ElasticTimeRangePanel"
             Orientation="Horizontal"
-            Spacing="4"
+            Spacing="2"
             Margin="6,0,0,0"
             VerticalAlignment="Center"
             IsVisible="{Binding IsElasticSelected}"

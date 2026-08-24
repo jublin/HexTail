@@ -18,7 +18,6 @@ using HexTailSharp.Tests.Support;
 using HexTailSharp.ViewModels;
 using HexTailSharp.Views;
 using Optris.Icons.Avalonia;
-using Tabalonia.Controls;
 using ObservableExtensions = System.ObservableExtensions;
 
 namespace HexTailSharp.Tests.Ui;
@@ -139,23 +138,15 @@ public sealed class MainWindowInteractionTests
             await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 1);
             Dispatcher.UIThread.RunJobs();
 
-            var tabs = window.GetVisualDescendants().OfType<TabsControl>().ToArray();
+            var tabs = window
+                .GetVisualDescendants()
+                .OfType<TabControl>()
+                .Where(tab => tab.DataContext is MainWindowViewModel or FileTabViewModel)
+                .ToArray();
             Assert.Equal(2, tabs.Length);
-            Assert.All(
-                tabs,
-                tab =>
-                {
-                    Assert.False(tab.ShowDefaultAddButton);
-                    Assert.False(tab.ShowDefaultCloseButton);
-                }
-            );
-            Assert.Equal(
-                1,
-                tabs.Single(tab => tab.DataContext is FileTabViewModel).FixedHeaderCount
-            );
-            Assert.DoesNotContain(
-                window.GetVisualDescendants().OfType<TextBlock>(),
-                text => text.Text == viewModel.SelectedFile!.ToString()
+            Assert.All(tabs, tab => Assert.Equal(typeof(TabControl), tab.GetType()));
+            Assert.NotNull(
+                tabs.Single(tab => tab.DataContext is MainWindowViewModel).ContentTemplate
             );
             window.Close();
         }

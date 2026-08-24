@@ -19,7 +19,6 @@
     <PackageReference Include="GnomeStack.Os.Secrets" />
     <PackageReference Include="ReactiveUI.Avalonia.Reactive" />
     <PackageReference Include="System.Reactive" />
-    <PackageReference Include="Tabalonia" />
     <PackageReference Include="Xaml.Behaviors.Interactivity" />
     <PackageReference Include="Xaml.Behaviors.Interactions" />
     <PackageReference Include="Xaml.Behaviors.Interactions.Events" />

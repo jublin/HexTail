@@ -12,7 +12,6 @@
     <PackageVersion Include="Optris.Icons.Avalonia.MaterialDesign" Version="12.0.7" />
     <PackageVersion Include="ReactiveUI.Avalonia.Reactive" Version="12.1.1" />
     <PackageVersion Include="System.Reactive" Version="7.0.0" />
-    <PackageVersion Include="Tabalonia" Version="0.12.0" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="Polly" Version="8.7.0" />
