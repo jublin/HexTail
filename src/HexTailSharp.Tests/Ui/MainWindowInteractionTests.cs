@@ -125,6 +125,38 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
+    public async Task FileAndSearchTabsUseTabalonia()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            await viewModel.OpenPathsCommand.Execute([path]);
+            window.Show();
+            viewModel.Query = "error";
+            Click(FindVisual<Button>(window, "AddSearchButton"));
+            await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 1);
+            Dispatcher.UIThread.RunJobs();
+
+            var tabs = window
+                .GetVisualDescendants()
+                .OfType<TabControl>()
+                .Where(tab => tab.DataContext is MainWindowViewModel or FileTabViewModel)
+                .ToArray();
+            Assert.Equal(2, tabs.Length);
+            Assert.All(tabs, tab => Assert.Equal(typeof(TabControl), tab.GetType()));
+            Assert.NotNull(
+                tabs.Single(tab => tab.DataContext is MainWindowViewModel).ContentTemplate
+            );
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
     public void SettingsInspectorAndEveryComboBoxOpen()
     {
         var window = TestWindow.Create(out var viewModel);

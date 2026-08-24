@@ -150,36 +150,44 @@ internal sealed class SettingsViewModel : ReactiveObject
     public double TabCloseSize =>
         Density switch
         {
-            UiDensity.Compact => 22,
-            UiDensity.Cozy => 26,
-            _ => 30,
+            UiDensity.Compact => 20,
+            UiDensity.Cozy => 24,
+            _ => 28,
         };
 
     public double TabHeight =>
         Density switch
         {
-            UiDensity.Compact => 24,
-            UiDensity.Cozy => 30,
-            _ => 36,
+            UiDensity.Compact => 22,
+            UiDensity.Cozy => 28,
+            _ => 30,
         };
 
     public double FileStripHeight =>
         Density switch
         {
-            UiDensity.Compact => 32,
-            UiDensity.Cozy => 36,
-            _ => 40,
+            UiDensity.Compact => 30,
+            UiDensity.Cozy => 34,
+            _ => 38,
+        };
+
+    public double FileStripFontSize =>
+        Density switch
+        {
+            UiDensity.Compact => 14,
+            UiDensity.Cozy => 16,
+            _ => 18,
         };
 
     public double SearchTabHeight =>
         Density switch
         {
-            UiDensity.Compact => 28,
-            UiDensity.Cozy => 32,
-            _ => 36,
+            UiDensity.Compact => 26,
+            UiDensity.Cozy => 30,
+            _ => 34,
         };
 
-    public Thickness SecondaryPadding => new(TabPadding.Left * 0.5, TabPadding.Top * 0.5);
+    public Thickness SecondaryPadding => new(TabPadding.Left * 0.6, TabPadding.Top * 0.6);
 
     public Thickness SearchInputPadding =>
         new(
