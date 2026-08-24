@@ -4,6 +4,7 @@
   xmlns:vm="using:HexTailSharp.ViewModels"
   xmlns:views="using:HexTailSharp.Views"
   xmlns:ic="https://github.com/projektanker/icons.avalonia"
+  xmlns:tabs="clr-namespace:Tabalonia.Controls;assembly=Tabalonia"
   x:Class="HexTailSharp.Views.LogWorkspace"
   x:DataType="vm:MainWindowViewModel"
 >
@@ -22,11 +23,14 @@
     >
       <ContentControl.ContentTemplate>
         <DataTemplate x:DataType="vm:FileTabViewModel">
-          <TabControl
+          <tabs:TabsControl
             ItemsSource="{Binding Views}"
+            FixedHeaderCount="1"
             BorderThickness="2,2,2,0"
             SelectedIndex="{Binding SelectedViewIndex, Mode=TwoWay}"
             Classes="log-tabs"
+            ShowDefaultAddButton="False"
+            ShowDefaultCloseButton="False"
           >
             <TabControl.ItemTemplate>
               <DataTemplate x:DataType="vm:LogViewViewModel">
@@ -87,8 +91,7 @@
                 <views:LogView />
               </DataTemplate>
             </TabControl.ContentTemplate>
-          </TabControl>
-          <!-- </Grid> -->
+          </tabs:TabsControl>
         </DataTemplate>
       </ContentControl.ContentTemplate>
     </ContentControl>

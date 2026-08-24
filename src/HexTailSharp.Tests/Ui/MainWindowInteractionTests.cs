@@ -18,6 +18,7 @@ using HexTailSharp.Tests.Support;
 using HexTailSharp.ViewModels;
 using HexTailSharp.Views;
 using Optris.Icons.Avalonia;
+using Tabalonia.Controls;
 using ObservableExtensions = System.ObservableExtensions;
 
 namespace HexTailSharp.Tests.Ui;
@@ -122,6 +123,46 @@ public sealed class MainWindowInteractionTests
         Assert.Contains("WorkspaceError", controlNames);
         Assert.Contains("LogWorkspace", controlNames);
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task FileAndSearchTabsUseTabalonia()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            await viewModel.OpenPathsCommand.Execute([path]);
+            window.Show();
+            viewModel.Query = "error";
+            Click(FindVisual<Button>(window, "AddSearchButton"));
+            await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 1);
+            Dispatcher.UIThread.RunJobs();
+
+            var tabs = window.GetVisualDescendants().OfType<TabsControl>().ToArray();
+            Assert.Equal(2, tabs.Length);
+            Assert.All(
+                tabs,
+                tab =>
+                {
+                    Assert.False(tab.ShowDefaultAddButton);
+                    Assert.False(tab.ShowDefaultCloseButton);
+                }
+            );
+            Assert.Equal(
+                1,
+                tabs.Single(tab => tab.DataContext is FileTabViewModel).FixedHeaderCount
+            );
+            Assert.DoesNotContain(
+                window.GetVisualDescendants().OfType<TextBlock>(),
+                text => text.Text == viewModel.SelectedFile!.ToString()
+            );
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [AvaloniaFact]

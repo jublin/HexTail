@@ -3,62 +3,59 @@
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:vm="using:HexTailSharp.ViewModels"
   xmlns:ic="https://github.com/projektanker/icons.avalonia"
-  xmlns:i="using:Avalonia.Xaml.Interactivity"
-  xmlns:drag="using:Avalonia.Xaml.Interactions.Draggable"
+  xmlns:tabs="clr-namespace:Tabalonia.Controls;assembly=Tabalonia"
   x:Class="HexTailSharp.Views.FileStrip"
   x:DataType="vm:MainWindowViewModel"
 >
-  <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-    <StackPanel Orientation="Horizontal" Background="{DynamicResource RaisedAltBrush}">
-      <ItemsControl ItemsSource="{Binding Files}">
-        <i:Interaction.Behaviors>
-          <drag:ListReorderDragBehavior />
-        </i:Interaction.Behaviors>
-        <ItemsControl.ItemsPanel>
-          <ItemsPanelTemplate>
-            <StackPanel Orientation="Horizontal" />
-          </ItemsPanelTemplate>
-        </ItemsControl.ItemsPanel>
-        <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="vm:FileTabViewModel">
-            <Border
-              Classes="file-tab"
-              MinHeight="{Binding Workspace.Settings.TabHeight}"
-              BorderBrush="{Binding SelectedTabBrush}"
-              Background="{DynamicResource SurfaceBrush}"
-              Classes.selected="{Binding IsSelected}"
-              ToolTip.Tip="{Binding Model.Source.ToolTip}"
+  <tabs:TabsControl
+    ItemsSource="{Binding Files}"
+    Background="{DynamicResource RaisedAltBrush}"
+    ShowDefaultAddButton="False"
+    ShowDefaultCloseButton="False"
+  >
+    <TabControl.ItemTemplate>
+      <DataTemplate x:DataType="vm:FileTabViewModel">
+        <Border
+          Classes="file-tab"
+          MinHeight="{Binding Workspace.Settings.TabHeight}"
+          BorderBrush="{Binding SelectedTabBrush}"
+          Background="{DynamicResource SurfaceBrush}"
+          Classes.selected="{Binding IsSelected}"
+          ToolTip.Tip="{Binding Model.Source.ToolTip}"
+        >
+          <DockPanel>
+            <Button
+              DockPanel.Dock="Left"
+              MinHeight="{Binding Workspace.Settings.FileStripHeight}"
+              Command="{Binding $parent[UserControl].DataContext.SelectFileCommand}"
+              CommandParameter="{Binding}"
+              HorizontalContentAlignment="Left"
+              VerticalContentAlignment="Center"
+              Padding="{Binding Workspace.Settings.TabPadding}"
+              Height="{Binding Workspace.Settings.TabHeight}"
             >
-              <DockPanel>
-                <Button
-                  DockPanel.Dock="Left"
-                  MinHeight="{Binding Workspace.Settings.FileStripHeight}"
-                  Command="{Binding $parent[UserControl].DataContext.SelectFileCommand}"
-                  CommandParameter="{Binding}"
-                  HorizontalContentAlignment="Left"
-                  VerticalContentAlignment="Center"
-                  Padding="{Binding Workspace.Settings.TabPadding}"
-                  Height="{Binding Workspace.Settings.TabHeight}"
-                >
-                  <TextBlock Text="{Binding DisplayName}" />
-                </Button>
-                <Button
-                  DockPanel.Dock="Right"
-                  Classes="icon tab-close"
-                  Width="{Binding Workspace.Settings.TabCloseSize}"
-                  Height="{Binding Workspace.Settings.TabCloseSize}"
-                  ToolTip.Tip="{Binding Model.Source.ToolTip, StringFormat='Close {0}'}"
-                  AutomationProperties.Name="{Binding Model.Source.ToolTip, StringFormat='Close {0}'}"
-                  Command="{Binding $parent[UserControl].DataContext.CloseFileCommand}"
-                  CommandParameter="{Binding}"
-                >
-                  <ic:Icon Value="mdi-close" />
-                </Button>
-              </DockPanel>
-            </Border>
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
-    </StackPanel>
-  </ScrollViewer>
+              <TextBlock Text="{Binding DisplayName}" />
+            </Button>
+            <Button
+              DockPanel.Dock="Right"
+              Classes="icon tab-close"
+              Width="{Binding Workspace.Settings.TabCloseSize}"
+              Height="{Binding Workspace.Settings.TabCloseSize}"
+              ToolTip.Tip="{Binding Model.Source.ToolTip, StringFormat='Close {0}'}"
+              AutomationProperties.Name="{Binding Model.Source.ToolTip, StringFormat='Close {0}'}"
+              Command="{Binding $parent[UserControl].DataContext.CloseFileCommand}"
+              CommandParameter="{Binding}"
+            >
+              <ic:Icon Value="mdi-close" />
+            </Button>
+          </DockPanel>
+        </Border>
+      </DataTemplate>
+    </TabControl.ItemTemplate>
+    <TabControl.ContentTemplate>
+      <DataTemplate>
+        <Border Height="0" />
+      </DataTemplate>
+    </TabControl.ContentTemplate>
+  </tabs:TabsControl>
 </UserControl>
