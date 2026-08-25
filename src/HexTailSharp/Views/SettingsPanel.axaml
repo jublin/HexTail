@@ -317,57 +317,58 @@
                       </Expander.Header>
                       <StackPanel Spacing="12" Margin="0,12,0,0">
                         <Grid
-                          ColumnDefinitions="2*,.7*,1*,1*"
-                          RowDefinitions="Auto,Auto,Auto,Auto"
+                          ColumnDefinitions="*,*"
+                          RowDefinitions="Auto,Auto,Auto"
                           ColumnSpacing="10"
-                          RowSpacing="4"
+                          RowSpacing="8"
                         >
-                          <TextBlock Text="Kibana URL" Classes="elastic-form-label" />
-                          <TextBlock
-                            Grid.Column="1"
-                            Text="Login method"
-                            Classes="elastic-form-label"
-                          />
-                          <TextBlock Grid.Column="2" Text="Username" Classes="elastic-form-label" />
-                          <TextBlock Grid.Column="3" Text="Password" Classes="elastic-form-label" />
-                          <TextBox
-                            Grid.Row="1"
-                            Text="{Binding KibanaUrl, Mode=TwoWay}"
-                            PlaceholderText="https://kibana.example.com"
-                          />
-                          <ComboBox
-                            Grid.Row="1"
-                            Grid.Column="1"
-                            ItemsSource="{Binding AuthModes}"
-                            SelectedItem="{Binding AuthMode, Mode=TwoWay}"
-                            HorizontalContentAlignment="Left"
-                          />
-                          <TextBox
-                            Grid.Row="1"
-                            Grid.Column="2"
-                            Text="{Binding Username, Mode=TwoWay}"
-                            IsVisible="{Binding IsBasic}"
-                            PlaceholderText="Username"
-                          />
-                          <TextBox
-                            Grid.Row="1"
-                            Grid.Column="3"
-                            Text="{Binding Secret, Mode=TwoWay}"
-                            IsVisible="{Binding IsAuthenticated}"
-                            PasswordChar="•"
-                            PlaceholderText="Password or API key"
-                          />
-                          <TextBlock
+                          <StackPanel Spacing="4">
+                            <TextBlock Text="Server name" Classes="elastic-form-label" />
+                            <TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="Elastic server" />
+                          </StackPanel>
+                          <StackPanel Grid.Column="1" Spacing="4">
+                            <TextBlock Text="Login method" Classes="elastic-form-label" />
+                            <ComboBox
+                              ItemsSource="{Binding AuthModes}"
+                              SelectedItem="{Binding AuthMode, Mode=TwoWay}"
+                              HorizontalContentAlignment="Left"
+                            />
+                          </StackPanel>
+                          <StackPanel Grid.Row="1" Spacing="4">
+                            <TextBlock Text="Kibana URL" Classes="elastic-form-label" />
+                            <TextBox
+                              Text="{Binding KibanaUrl, Mode=TwoWay}"
+                              PlaceholderText="https://kibana.example.com"
+                            />
+                          </StackPanel>
+                          <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
+                            <TextBlock Text="Elasticsearch URL" Classes="elastic-form-label" />
+                            <TextBox
+                              Text="{Binding ElasticsearchUrl, Mode=TwoWay}"
+                              PlaceholderText="https://elastic.example.com"
+                            />
+                          </StackPanel>
+                          <StackPanel
                             Grid.Row="2"
-                            Text="Elasticsearch URL"
-                            Classes="elastic-form-label"
-                          />
-                          <TextBox
-                            Grid.Row="3"
-                            Grid.ColumnSpan="4"
-                            Text="{Binding ElasticsearchUrl, Mode=TwoWay}"
-                            PlaceholderText="https://elastic.example.com"
-                          />
+                            Spacing="4"
+                            IsVisible="{Binding IsBasic}"
+                          >
+                            <TextBlock Text="Username" Classes="elastic-form-label" />
+                            <TextBox Text="{Binding Username, Mode=TwoWay}" PlaceholderText="Username" />
+                          </StackPanel>
+                          <StackPanel
+                            Grid.Row="2"
+                            Grid.Column="1"
+                            Spacing="4"
+                            IsVisible="{Binding IsAuthenticated}"
+                          >
+                            <TextBlock Text="Password or API key" Classes="elastic-form-label" />
+                            <TextBox
+                              Text="{Binding Secret, Mode=TwoWay}"
+                              PasswordChar="•"
+                              PlaceholderText="Password or API key"
+                            />
+                          </StackPanel>
                         </Grid>
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                           <TextBlock
