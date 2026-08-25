@@ -137,14 +137,14 @@ public sealed class ElasticApiClient : IElasticApiClient
         {
             new
             {
-                term = new Dictionary<string, string>
+                match_phrase = new Dictionary<string, string>
                 {
                     [request.ServerField] = request.ServerValue,
                 },
             },
             new
             {
-                term = new Dictionary<string, string>
+                match_phrase = new Dictionary<string, string>
                 {
                     [request.NamespaceField] = request.NamespaceValue,
                 },
@@ -177,6 +177,13 @@ public sealed class ElasticApiClient : IElasticApiClient
         };
         if (request.SearchAfter is { Count: > 0 })
             body["search_after"] = request.SearchAfter;
+        Log(
+            $"search dataView={request.DataViewTitle} timeField={request.TimeFieldName} "
+                + $"from={request.FromInclusive:O} to={request.ToInclusive:O} "
+                + $"serverField={request.ServerField} serverValue={request.ServerValue} "
+                + $"namespaceField={request.NamespaceField} namespaceValue={request.NamespaceValue} "
+                + $"outputFields=[{string.Join(',', request.OutputFields)}]"
+        );
         using var document = await SendAsync(
             connection.ElasticsearchUrl,
             connection,

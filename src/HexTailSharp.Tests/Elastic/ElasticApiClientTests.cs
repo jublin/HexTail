@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using HexTailSharp.Elastic;
 using HexTailSharp.Persistence;
 using HexTailSharp.Tests.Support;
@@ -63,6 +64,53 @@ public sealed class ElasticApiClientTests
         await client.CheckElasticsearchAsync(connection, null);
 
         Assert.Equal("https://elastic.example/", handler.Requests[0].RequestUri!.ToString());
+    }
+
+    [Fact]
+    public async Task Client_UsesMatchPhraseForConfiguredIdentityFields()
+    {
+        string? requestBody = null;
+        var handler = new RecordingHttpMessageHandler(request =>
+        {
+            requestBody = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"hits\":{\"hits\":[]}}",
+                    Encoding.UTF8,
+                    "application/json"
+                ),
+            };
+        });
+        var client = new ElasticApiClient(new HttpClient(handler));
+        var connection = new ElasticConnectionSettings
+        {
+            Id = "c1",
+            Name = "ops",
+            KibanaUrl = "https://kibana.example/",
+            ElasticsearchUrl = "https://elastic.example/",
+        };
+        var request = new ElasticSearchRequest(
+            "logs-*",
+            "@timestamp",
+            DateTimeOffset.Parse("2026-08-25T12:00:00Z"),
+            DateTimeOffset.Parse("2026-08-25T12:05:00Z"),
+            "service.name",
+            "api",
+            "service.namespace",
+            "prod",
+            ["message"]
+        );
+
+        await client.SearchAsync(connection, null, "pit-1", request);
+
+        using var body = JsonDocument.Parse(requestBody!);
+        var filters = body
+            .RootElement.GetProperty("query")
+            .GetProperty("bool")
+            .GetProperty("filter");
+        Assert.Equal("match_phrase", filters[0].EnumerateObject().Single().Name);
+        Assert.Equal("match_phrase", filters[1].EnumerateObject().Single().Name);
     }
 
     [Fact]
