@@ -106,6 +106,40 @@ public sealed class ElasticSettingsViewModelTests
     }
 
     [Fact]
+    public async Task FieldSearch_UsesLatestQuery()
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var state = new AppState(new LogSourceService(), new TestPersistence());
+        await using var owner = new MainWindowViewModel(
+            state,
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        var editor = Assert.Single(owner.Settings.ElasticConnections);
+        editor.AddViewCommand.Execute().Subscribe();
+        var view = Assert.Single(editor.Views);
+        view.Sync(
+            new ElasticViewSettings
+            {
+                Id = view.Id,
+                Name = "Logs",
+                OutputFields = ["service.name", "message", "status.code"],
+            }
+        );
+
+        view.OutputFieldQuery = "status";
+
+        var fields = view.Fields.Select(field => (field, field.Name, field.IsOutput)).ToArray();
+        Assert.Equal(
+            "status.code",
+            Assert
+                .Single(ElasticViewEditorViewModel.FilterFields(fields, view.OutputFieldQuery))
+                .Name
+        );
+    }
+
+    [Fact]
     public async Task StateSync_DoesNotClearUnsavedElasticEditorValues()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();

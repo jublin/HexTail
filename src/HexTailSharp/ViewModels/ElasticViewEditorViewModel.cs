@@ -15,7 +15,9 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     private string? _error;
     private string _name = string.Empty;
     private string _outputFieldQuery = string.Empty;
-    private CancellationTokenSource? _fieldFilterCancellation;
+    private readonly DispatcherTimer _fieldFilterTimer;
+    private readonly List<ElasticFieldOptionViewModel> _fieldSnapshot = [];
+    private int _fieldFilterVersion;
 
     public ElasticViewEditorViewModel(ElasticConnectionEditorViewModel owner, string id)
     {
@@ -23,6 +25,8 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         Id = id;
         AddSourceCommand = ReactiveCommand.Create(AddSource);
         RemoveSourceCommand = ReactiveCommand.Create<ElasticSourceSettingViewModel>(RemoveSource);
+        _fieldFilterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+        _fieldFilterTimer.Tick += (_, _) => ApplyQueuedFieldFilter();
     }
 
     public string Id { get; }
@@ -99,6 +103,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         ServerField = settings.ServerField;
         NamespaceField = settings.NamespaceField;
         Fields.Clear();
+        _fieldSnapshot.Clear();
         foreach (var field in settings.OutputFields.Distinct(StringComparer.Ordinal))
             AddField(new ElasticFieldOptionViewModel(field) { IsOutput = true });
         this.RaisePropertyChanged(nameof(FieldNames));
@@ -152,6 +157,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             DataViewTitle = view.Title;
             TimeFieldName = view.TimeFieldName;
             Fields.Clear();
+            _fieldSnapshot.Clear();
             foreach (var field in view.Fields)
                 AddField(new ElasticFieldOptionViewModel(field.Name));
             this.RaisePropertyChanged(nameof(FieldNames));
@@ -170,35 +176,64 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
 
     private void AddField(ElasticFieldOptionViewModel field)
     {
+        _fieldSnapshot.Add(field);
         field.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(ElasticFieldOptionViewModel.IsOutput))
+            {
+                _fieldFilterVersion++;
+                _fieldFilterTimer.Stop();
                 RefreshVisibleFields();
+            }
         };
         Fields.Add(field);
     }
 
     private void QueueFieldFilter()
     {
-        _fieldFilterCancellation?.Cancel();
-        var cancellation = new CancellationTokenSource();
-        _fieldFilterCancellation = cancellation;
-        _ = ApplyFieldFilterAsync(cancellation);
+        _fieldFilterVersion++;
+        _fieldFilterTimer.Stop();
+        _fieldFilterTimer.Start();
     }
 
-    private async Task ApplyFieldFilterAsync(CancellationTokenSource cancellation)
+    private void ApplyQueuedFieldFilter()
     {
-        try
-        {
-            await Task.Delay(150, cancellation.Token).ConfigureAwait(false);
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (!cancellation.IsCancellationRequested)
-                    RefreshVisibleFields();
-            });
-        }
-        catch (OperationCanceledException) { }
+        _fieldFilterTimer.Stop();
+        var version = _fieldFilterVersion;
+        var query = OutputFieldQuery.Trim();
+        var fields = _fieldSnapshot.Select(field => (field, field.Name, field.IsOutput)).ToArray();
+        _ = ApplyFieldFilterAsync(version, query, fields);
     }
+
+    private async Task ApplyFieldFilterAsync(
+        int version,
+        string query,
+        IReadOnlyList<(ElasticFieldOptionViewModel Field, string Name, bool IsOutput)> fields
+    )
+    {
+        var visible = await Task.Run(() => FilterFields(fields, query)).ConfigureAwait(false);
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (version != _fieldFilterVersion)
+                return;
+            VisibleFields.Clear();
+            foreach (var field in visible)
+                VisibleFields.Add(field);
+        });
+    }
+
+    internal static IReadOnlyList<ElasticFieldOptionViewModel> FilterFields(
+        IReadOnlyList<(ElasticFieldOptionViewModel Field, string Name, bool IsOutput)> fields,
+        string query
+    ) =>
+        fields
+            .Where(item =>
+                string.IsNullOrWhiteSpace(query)
+                    ? item.IsOutput
+                    : item.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+            )
+            .Select(item => item.Field)
+            .ToArray();
 
     private void RefreshVisibleFields()
     {
