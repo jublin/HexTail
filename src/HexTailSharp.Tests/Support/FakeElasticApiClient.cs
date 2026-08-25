@@ -11,6 +11,7 @@ internal sealed class FakeElasticApiClient : IElasticApiClient
     public List<string> ClosedPitIds { get; } = [];
     public string PitId { get; set; } = "pit-1";
     public Exception? DataViewError { get; set; }
+    public Exception? ElasticsearchError { get; set; }
     public Exception? HealthError { get; set; }
     public IReadOnlyList<ElasticDataViewSummary> DataViews { get; set; } = [];
     public List<string?> DataViewSecrets { get; } = [];
@@ -23,6 +24,17 @@ internal sealed class FakeElasticApiClient : IElasticApiClient
     {
         DataViewSecrets.Add(s);
         return Task.FromResult(DataViews);
+    }
+
+    public Task CheckElasticsearchAsync(
+        ElasticConnectionSettings c,
+        string? s,
+        CancellationToken t = default
+    )
+    {
+        if (ElasticsearchError is not null)
+            throw ElasticsearchError;
+        return Task.CompletedTask;
     }
 
     public Task<ElasticDataView> GetDataViewAsync(

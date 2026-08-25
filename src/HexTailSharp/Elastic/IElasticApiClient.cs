@@ -11,6 +11,12 @@ public interface IElasticApiClient
         CancellationToken cancellationToken = default
     );
 
+    Task CheckElasticsearchAsync(
+        ElasticConnectionSettings connection,
+        string? secret,
+        CancellationToken cancellationToken = default
+    );
+
     Task<ElasticDataView> GetDataViewAsync(
         ElasticConnectionSettings connection,
         string? secret,

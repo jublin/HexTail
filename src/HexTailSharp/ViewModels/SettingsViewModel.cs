@@ -450,6 +450,11 @@ internal sealed class SettingsViewModel : ReactiveObject
         string? secret = null
     ) => _owner.State.GetDataViewsAsync(connection, secret);
 
+    internal Task CheckElasticsearchAsync(
+        ElasticConnectionSettings connection,
+        string? secret = null
+    ) => _owner.State.CheckElasticsearchAsync(connection, secret);
+
     internal Task<ElasticDataView> GetDataViewAsync(
         ElasticConnectionSettings connection,
         string dataViewId,

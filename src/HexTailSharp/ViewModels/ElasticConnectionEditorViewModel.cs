@@ -137,7 +137,10 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         Status = "Checking…";
         try
         {
-            var views = await GetDataViewsAsync();
+            var viewsTask = GetDataViewsAsync();
+            var elasticsearchTask = _owner.CheckElasticsearchAsync(ToSettings(), Secret);
+            await Task.WhenAll(viewsTask, elasticsearchTask);
+            var views = await viewsTask;
             DataViews.Clear();
             foreach (var view in views)
                 DataViews.Add(view);

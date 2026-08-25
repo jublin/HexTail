@@ -43,6 +43,23 @@ public sealed class ElasticApiClient : IElasticApiClient
             .ToArray();
     }
 
+    public async Task CheckElasticsearchAsync(
+        ElasticConnectionSettings connection,
+        string? secret,
+        CancellationToken cancellationToken = default
+    )
+    {
+        using var document = await SendAsync(
+            connection.ElasticsearchUrl,
+            connection,
+            secret,
+            HttpMethod.Get,
+            string.Empty,
+            null,
+            cancellationToken
+        );
+    }
+
     public async Task<ElasticDataView> GetDataViewAsync(
         ElasticConnectionSettings connection,
         string? secret,

@@ -151,6 +151,17 @@ public sealed class AppState : IAsyncDisposable
             cancellationToken
         );
 
+    public Task CheckElasticsearchAsync(
+        ElasticConnectionSettings connection,
+        string? secret = null,
+        CancellationToken cancellationToken = default
+    ) =>
+        _elastic.CheckElasticsearchAsync(
+            connection,
+            string.IsNullOrWhiteSpace(secret) ? SecretFor(connection) : secret,
+            cancellationToken
+        );
+
     public Task<ElasticDataView> GetDataViewAsync(
         ElasticConnectionSettings connection,
         string dataViewId,

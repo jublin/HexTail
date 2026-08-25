@@ -43,6 +43,29 @@ public sealed class ElasticApiClientTests
     }
 
     [Fact]
+    public async Task Client_ChecksElasticsearchRootEndpoint()
+    {
+        var handler = new RecordingHttpMessageHandler(_ => new HttpResponseMessage(
+            HttpStatusCode.OK
+        )
+        {
+            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+        });
+        var client = new ElasticApiClient(new HttpClient(handler));
+        var connection = new ElasticConnectionSettings
+        {
+            Id = "c1",
+            Name = "ops",
+            KibanaUrl = "https://kibana.example/",
+            ElasticsearchUrl = "https://elastic.example/",
+        };
+
+        await client.CheckElasticsearchAsync(connection, null);
+
+        Assert.Equal("https://elastic.example/", handler.Requests[0].RequestUri!.ToString());
+    }
+
+    [Fact]
     public async Task Client_PreservesNonDefaultPortAndEncodesApiKeyPair()
     {
         var handler = new RecordingHttpMessageHandler(_ => new HttpResponseMessage(

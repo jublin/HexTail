@@ -55,6 +55,30 @@ public sealed class ElasticSettingsViewModelTests
     }
 
     [Fact]
+    public async Task TestConnection_FailsWhenElasticsearchUrlIsInvalid()
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var client = new FakeElasticApiClient
+        {
+            DataViews = [new("view-1", "logs-*")],
+            ElasticsearchError = new UriFormatException("Invalid Elasticsearch URL."),
+        };
+        var state = new AppState(new LogSourceService(), new TestPersistence(), elastic: client);
+        await using var owner = new MainWindowViewModel(
+            state,
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        var editor = Assert.Single(owner.Settings.ElasticConnections);
+        editor.ElasticsearchUrl = "not-a-url";
+
+        await editor.TestConnectionCommand.Execute().FirstAsync();
+
+        Assert.Equal("Connection failed", editor.Status);
+    }
+
+    [Fact]
     public async Task ServerTestConnection_UsesSavedApiKeyForNewView()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
