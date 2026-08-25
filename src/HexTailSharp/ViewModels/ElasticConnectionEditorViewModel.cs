@@ -141,9 +141,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             var elasticsearchTask = _owner.CheckElasticsearchAsync(ToSettings(), Secret);
             await Task.WhenAll(viewsTask, elasticsearchTask);
             var views = await viewsTask;
-            DataViews.Clear();
-            foreach (var view in views)
-                DataViews.Add(view);
+            UpdateDataViews(views);
             Status =
                 $"Connected ({views.Count} data view{(views.Count == 1 ? string.Empty : "s")})";
         }
@@ -156,6 +154,17 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         {
             IsTesting = false;
         }
+    }
+
+    private void UpdateDataViews(IReadOnlyList<ElasticDataViewSummary> views)
+    {
+        for (var index = DataViews.Count - 1; index >= 0; index--)
+            if (!views.Any(view => view.Id == DataViews[index].Id))
+                DataViews.RemoveAt(index);
+
+        foreach (var view in views)
+            if (!DataViews.Any(existing => existing.Id == view.Id))
+                DataViews.Add(view);
     }
 
     private async Task SaveAsync()

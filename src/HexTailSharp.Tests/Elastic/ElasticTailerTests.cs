@@ -43,6 +43,29 @@ public sealed class ElasticTailerTests
         Assert.Equal("ready", lines.Lines[0].Raw);
     }
 
+    [Fact]
+    public async Task PollOnce_UsesViewDataViewTitle()
+    {
+        var client = new FakeElasticApiClient();
+        client.Pages.Enqueue(new ElasticSearchPage("pit-1", []));
+        var channel = Channel.CreateUnbounded<SourceEvent>();
+        var connection = Connection() with { DataViewTitle = null };
+        await using var tailer = new ElasticTailer(
+            connection,
+            connection.Views[0],
+            connection.Views[0].Sources[0],
+            "secret",
+            client,
+            channel.Writer,
+            () => new DateTimeOffset(2026, 8, 20, 10, 5, 0, TimeSpan.Zero),
+            (_, _) => Task.CompletedTask
+        );
+
+        await tailer.PollOnceAsync(CancellationToken.None);
+
+        Assert.Equal("logs-*", client.Searches[0].DataViewTitle);
+    }
+
     private static ElasticHit Hit(string id, string timestamp, IReadOnlyList<JsonElement> sort) =>
         new(id, DateTimeOffset.Parse(timestamp), new Line("ready"), sort);
 

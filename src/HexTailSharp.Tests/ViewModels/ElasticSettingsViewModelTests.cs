@@ -79,6 +79,59 @@ public sealed class ElasticSettingsViewModelTests
     }
 
     [Fact]
+    public async Task TestConnection_PreservesConfiguredViewSettings()
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var connection = new ElasticConnectionSettings
+        {
+            Id = "c1",
+            Name = "ops",
+            KibanaUrl = "https://kibana/",
+            ElasticsearchUrl = "https://elastic/",
+            Views =
+            [
+                new ElasticViewSettings
+                {
+                    Id = "v1",
+                    Name = "Logs",
+                    DataViewId = "view-1",
+                    DataViewTitle = "logs-*",
+                    TimeFieldName = "@timestamp",
+                    ServerField = "server.name",
+                    NamespaceField = "service.name",
+                    OutputFields = ["message"],
+                },
+            ],
+        };
+        var client = new FakeElasticApiClient
+        {
+            DataViews = [new("view-1", "logs-*"), new("view-2", "other-*")],
+        };
+        var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            new AppSettings { ElasticConnections = [connection] },
+            new InMemoryCredentialVault(),
+            client
+        );
+        await using var owner = new MainWindowViewModel(
+            state,
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        owner.Settings.Sync(state.Settings);
+        var editor = Assert.Single(owner.Settings.ElasticConnections);
+        var view = Assert.Single(editor.Views);
+
+        await editor.TestConnectionCommand.Execute().FirstAsync();
+
+        Assert.Equal("view-1", view.SelectedDataViewId);
+        Assert.Equal("server.name", view.ServerField);
+        Assert.Equal("service.name", view.NamespaceField);
+        Assert.Equal(["message"], view.ToSettings().OutputFields);
+    }
+
+    [Fact]
     public async Task ServerTestConnection_UsesSavedApiKeyForNewView()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();

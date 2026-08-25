@@ -62,7 +62,7 @@ internal sealed class ElasticTailer : ILogTailer
         var toInclusive = ParseTime(_toExpression, _utcNow());
         var fromInclusive = _cursorTimestamp ?? ParseTime(_fromExpression, toInclusive);
         Log(
-            $"source={SourceId} poll dataView={_connection.DataViewTitle} "
+            $"source={SourceId} poll dataView={_view.DataViewTitle} "
                 + $"from={fromInclusive:O} to={toInclusive:O}"
         );
         var pitId = await _client.OpenPitAsync(
