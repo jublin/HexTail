@@ -351,7 +351,6 @@ public sealed class AppState : IAsyncDisposable
             string.IsNullOrWhiteSpace(view.DataViewTitle)
             || string.IsNullOrWhiteSpace(view.TimeFieldName)
             || string.IsNullOrWhiteSpace(view.ServerField)
-            || string.IsNullOrWhiteSpace(view.NamespaceField)
         )
             throw new ArgumentException(
                 "The Elastic source configuration is incomplete.",
@@ -361,13 +360,14 @@ public sealed class AppState : IAsyncDisposable
             ? _credentials.Get(connection.Id)
                 ?? throw new InvalidOperationException("The Elastic credential is unavailable.")
             : string.Empty;
+        var viewName = string.IsNullOrWhiteSpace(view.Name) ? view.DataViewTitle! : view.Name;
         var tailer = _tailers.StartElastic(connection, view, match.source, secret, _elastic, Now);
         var tab = new FileTabState(
             new LogSourceDescriptor(
                 sourceId,
                 LogSourceKind.Elastic,
-                match.source.DisplayName,
-                $"{match.connection.Name}: {match.source.DisplayName}",
+                $"{match.connection.Name}-{viewName}",
+                $"{match.connection.Name} / {viewName}",
                 ElasticSourceId: sourceId
             ),
             new FileBuffer(_settings.MaxLines),
@@ -971,26 +971,19 @@ public sealed class AppState : IAsyncDisposable
                 || string.IsNullOrWhiteSpace(view.DataViewTitle)
                 || string.IsNullOrWhiteSpace(view.TimeFieldName)
                 || string.IsNullOrWhiteSpace(view.ServerField)
-                || string.IsNullOrWhiteSpace(view.NamespaceField)
                 || view.OutputFields.Count == 0
             )
                 throw new ArgumentException(
                     "The Elastic view and field mappings are incomplete.",
                     nameof(connection)
                 );
-            var pairs = view
-                .Sources.Select(source => (source.ServerValue.Trim(), source.NamespaceValue.Trim()))
-                .ToArray();
-            if (
-                pairs.Any(pair =>
-                    string.IsNullOrWhiteSpace(pair.Item1) || string.IsNullOrWhiteSpace(pair.Item2)
-                )
-            )
+            var values = view.Sources.Select(source => source.ServerValue.Trim()).ToArray();
+            if (values.Any(string.IsNullOrWhiteSpace))
                 throw new ArgumentException(
                     "Elastic source values cannot be blank.",
                     nameof(connection)
                 );
-            if (pairs.Distinct().Count() != pairs.Length)
+            if (values.Distinct(StringComparer.Ordinal).Count() != values.Length)
                 throw new ArgumentException(
                     "Elastic source values must be unique.",
                     nameof(connection)

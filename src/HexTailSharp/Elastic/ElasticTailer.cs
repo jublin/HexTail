@@ -88,8 +88,6 @@ internal sealed class ElasticTailer : ILogTailer
                         toInclusive,
                         _view.ServerField!,
                         _source.ServerValue,
-                        _view.NamespaceField!,
-                        _source.NamespaceValue,
                         _view.OutputFields,
                         searchAfter
                     ),

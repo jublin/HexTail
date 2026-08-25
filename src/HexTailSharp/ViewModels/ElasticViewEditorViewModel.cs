@@ -23,8 +23,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     {
         _owner = owner;
         Id = id;
-        AddSourceCommand = ReactiveCommand.Create(AddSource);
-        RemoveSourceCommand = ReactiveCommand.Create<ElasticSourceSettingViewModel>(RemoveSource);
+        AddSource();
         _fieldFilterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
         _fieldFilterTimer.Tick += (_, _) => ApplyQueuedFieldFilter();
     }
@@ -85,8 +84,6 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             this.RaisePropertyChanged();
         }
     }
-    public ReactiveCommand<Unit, Unit> AddSourceCommand { get; }
-    public ReactiveCommand<ElasticSourceSettingViewModel, Unit> RemoveSourceCommand { get; }
     public string? Error
     {
         get => _error;
@@ -109,14 +106,13 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(FieldNames));
         RefreshVisibleFields();
         Sources.Clear();
-        foreach (var source in settings.Sources)
-            Sources.Add(
-                new ElasticSourceSettingViewModel(source.Id)
-                {
-                    ServerValue = source.ServerValue,
-                    NamespaceValue = source.NamespaceValue,
-                }
-            );
+        var source = settings.Sources.FirstOrDefault();
+        Sources.Add(
+            new ElasticSourceSettingViewModel(source?.Id ?? Guid.NewGuid().ToString("N"))
+            {
+                ServerValue = source?.ServerValue ?? string.Empty,
+            }
+        );
         this.RaisePropertyChanged(nameof(FilterValue));
     }
 
@@ -135,16 +131,8 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
                 .Select(field => field.Name)
                 .ToList(),
             Sources = Sources
-                .Select(source =>
-                {
-                    var settings = source.ToSettings();
-                    return string.IsNullOrWhiteSpace(settings.NamespaceValue)
-                        ? settings with
-                        {
-                            NamespaceValue = settings.ServerValue,
-                        }
-                        : settings;
-                })
+                .Take(1)
+                .Select(source => source.ToSettings() with { NamespaceValue = string.Empty })
                 .ToList(),
         };
 
@@ -171,8 +159,6 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
 
     private void AddSource() =>
         Sources.Add(new ElasticSourceSettingViewModel(Guid.NewGuid().ToString("N")));
-
-    private void RemoveSource(ElasticSourceSettingViewModel source) => Sources.Remove(source);
 
     private void AddField(ElasticFieldOptionViewModel field)
     {

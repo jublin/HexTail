@@ -97,8 +97,6 @@ public sealed class ElasticApiClientTests
             DateTimeOffset.Parse("2026-08-25T12:05:00Z"),
             "service.name",
             "api",
-            "service.namespace",
-            "prod",
             ["message"]
         );
 
@@ -109,8 +107,9 @@ public sealed class ElasticApiClientTests
             .RootElement.GetProperty("query")
             .GetProperty("bool")
             .GetProperty("filter");
+        Assert.Equal(2, filters.GetArrayLength());
         Assert.Equal("match_phrase", filters[0].EnumerateObject().Single().Name);
-        Assert.Equal("match_phrase", filters[1].EnumerateObject().Single().Name);
+        Assert.Equal("range", filters[1].EnumerateObject().Single().Name);
     }
 
     [Fact]

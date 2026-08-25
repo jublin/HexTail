@@ -139,14 +139,7 @@ public sealed class ElasticApiClient : IElasticApiClient
             {
                 match_phrase = new Dictionary<string, string>
                 {
-                    [request.ServerField] = request.ServerValue,
-                },
-            },
-            new
-            {
-                match_phrase = new Dictionary<string, string>
-                {
-                    [request.NamespaceField] = request.NamespaceValue,
+                    [request.FilterField] = request.FilterValue,
                 },
             },
             new
@@ -180,8 +173,7 @@ public sealed class ElasticApiClient : IElasticApiClient
         Log(
             $"search dataView={request.DataViewTitle} timeField={request.TimeFieldName} "
                 + $"from={request.FromInclusive:O} to={request.ToInclusive:O} "
-                + $"serverField={request.ServerField} serverValue={request.ServerValue} "
-                + $"namespaceField={request.NamespaceField} namespaceValue={request.NamespaceValue} "
+                + $"filterField={request.FilterField} filterValue={request.FilterValue} "
                 + $"outputFields=[{string.Join(',', request.OutputFields)}]"
         );
         using var document = await SendAsync(
@@ -261,16 +253,9 @@ public sealed class ElasticApiClient : IElasticApiClient
                     {
                         new
                         {
-                            term = new Dictionary<string, string>
+                            match_phrase = new Dictionary<string, string>
                             {
-                                [request.ServerField] = request.ServerValue,
-                            },
-                        },
-                        new
-                        {
-                            term = new Dictionary<string, string>
-                            {
-                                [request.NamespaceField] = request.NamespaceValue,
+                                [request.FilterField] = request.FilterValue,
                             },
                         },
                     },

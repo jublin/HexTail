@@ -20,10 +20,8 @@ public sealed record ElasticSearchRequest(
     string TimeFieldName,
     DateTimeOffset FromInclusive,
     DateTimeOffset ToInclusive,
-    string ServerField,
-    string ServerValue,
-    string NamespaceField,
-    string NamespaceValue,
+    string FilterField,
+    string FilterValue,
     IReadOnlyList<string> OutputFields,
     IReadOnlyList<JsonElement>? SearchAfter = null
 );

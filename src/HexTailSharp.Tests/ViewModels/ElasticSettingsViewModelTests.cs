@@ -276,7 +276,6 @@ public sealed class ElasticSettingsViewModelTests
         owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
         editor.AddViewCommand.Execute().Subscribe();
-        Assert.Single(editor.Views).AddSourceCommand.Execute().Subscribe();
 
         Assert.Equal("elastic", owner.Settings.Section);
         Assert.Matches("^[0-9a-f]{32}$", Assert.Single(Assert.Single(editor.Views).Sources).Id);

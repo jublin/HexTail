@@ -68,7 +68,6 @@ public sealed class ElasticHealthMonitor : IAsyncDisposable
                         || string.IsNullOrWhiteSpace(view.DataViewTitle)
                         || string.IsNullOrWhiteSpace(view.TimeFieldName)
                         || string.IsNullOrWhiteSpace(view.ServerField)
-                        || string.IsNullOrWhiteSpace(view.NamespaceField)
                         || view.OutputFields.Count == 0
                     )
                         throw new ArgumentException("The Elastic view is incomplete.");
@@ -121,8 +120,6 @@ public sealed class ElasticHealthMonitor : IAsyncDisposable
                                     _now(),
                                     view.ServerField!,
                                     source.ServerValue,
-                                    view.NamespaceField!,
-                                    source.NamespaceValue,
                                     []
                                 ),
                                 cancellationToken

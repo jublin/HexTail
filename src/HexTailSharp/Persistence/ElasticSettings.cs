@@ -48,6 +48,6 @@ public sealed record ElasticSourceSettings
 {
     public required string Id { get; init; }
     public required string ServerValue { get; init; }
-    public required string NamespaceValue { get; init; }
-    public string DisplayName => $"{ServerValue}-{NamespaceValue}";
+    public string NamespaceValue { get; init; } = string.Empty;
+    public string DisplayName => ServerValue;
 }

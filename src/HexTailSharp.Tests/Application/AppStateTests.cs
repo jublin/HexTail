@@ -103,7 +103,7 @@ public sealed class AppStateTests
 
         Assert.Same(first, second);
         Assert.Equal(LogSourceKind.Elastic, first.Source.Kind);
-        Assert.Equal("api-prod", first.DisplayName);
+        Assert.Equal("ops-logs-*", first.DisplayName);
         Assert.Empty(Assert.IsType<AppConfig>(persistence.Config).OpenFiles);
         Assert.Equal(
             "source-1",

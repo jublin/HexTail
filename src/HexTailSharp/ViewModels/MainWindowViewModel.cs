@@ -509,8 +509,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                     view.Sources.Select(source =>
                         (
                             source.Id,
-                            source.DisplayName,
-                            ToolTip: $"{connection.Name} / {view.Name}: {source.DisplayName}"
+                            DisplayName: $"{connection.Name}-{view.Name}",
+                            ToolTip: $"{connection.Name} / {view.Name}"
                         )
                     )
                 )
