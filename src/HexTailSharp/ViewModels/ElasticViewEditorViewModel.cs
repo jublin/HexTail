@@ -11,10 +11,8 @@ namespace HexTailSharp.ViewModels;
 internal sealed class ElasticViewEditorViewModel : ReactiveObject
 {
     private readonly ElasticConnectionEditorViewModel _owner;
-    private bool _isTesting;
     private string? _selectedDataViewId;
     private string? _error;
-    private string? _status;
     private string _name = string.Empty;
     private string _outputFieldQuery = string.Empty;
     private CancellationTokenSource? _fieldFilterCancellation;
@@ -23,7 +21,6 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     {
         _owner = owner;
         Id = id;
-        TestConnectionCommand = ReactiveCommand.CreateFromTask(TestConnectionAsync);
         AddSourceCommand = ReactiveCommand.Create(AddSource);
         RemoveSourceCommand = ReactiveCommand.Create<ElasticSourceSettingViewModel>(RemoveSource);
     }
@@ -53,7 +50,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     public string? TimeFieldName { get; set; }
     public string? ServerField { get; set; }
     public string? NamespaceField { get; set; }
-    public ObservableCollection<ElasticDataViewSummary> DataViews { get; } = [];
+    public ObservableCollection<ElasticDataViewSummary> DataViews => _owner.DataViews;
     public ObservableCollection<ElasticFieldOptionViewModel> Fields { get; } = [];
     public ObservableCollection<ElasticSourceSettingViewModel> Sources { get; } = [];
     public IEnumerable<string> FieldNames => Fields.Select(option => option.Name);
@@ -84,23 +81,12 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             this.RaisePropertyChanged();
         }
     }
-    public ReactiveCommand<Unit, Unit> TestConnectionCommand { get; }
     public ReactiveCommand<Unit, Unit> AddSourceCommand { get; }
     public ReactiveCommand<ElasticSourceSettingViewModel, Unit> RemoveSourceCommand { get; }
     public string? Error
     {
         get => _error;
         private set => this.RaiseAndSetIfChanged(ref _error, value);
-    }
-    public string? Status
-    {
-        get => _status;
-        private set => this.RaiseAndSetIfChanged(ref _status, value);
-    }
-    public bool IsTesting
-    {
-        get => _isTesting;
-        private set => this.RaiseAndSetIfChanged(ref _isTesting, value);
     }
 
     internal void Sync(ElasticViewSettings settings)
@@ -112,12 +98,6 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         TimeFieldName = settings.TimeFieldName;
         ServerField = settings.ServerField;
         NamespaceField = settings.NamespaceField;
-        DataViews.Clear();
-        if (
-            !string.IsNullOrWhiteSpace(settings.DataViewId)
-            && !string.IsNullOrWhiteSpace(settings.DataViewTitle)
-        )
-            DataViews.Add(new ElasticDataViewSummary(settings.DataViewId, settings.DataViewTitle));
         Fields.Clear();
         foreach (var field in settings.OutputFields.Distinct(StringComparer.Ordinal))
             AddField(new ElasticFieldOptionViewModel(field) { IsOutput = true });
@@ -162,31 +142,6 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
                 })
                 .ToList(),
         };
-
-    private async Task TestConnectionAsync()
-    {
-        IsTesting = true;
-        Error = null;
-        Status = "Checking…";
-        try
-        {
-            var views = await _owner.GetDataViewsAsync();
-            DataViews.Clear();
-            foreach (var view in views)
-                DataViews.Add(view);
-            Status =
-                $"Connected ({views.Count} data view{(views.Count == 1 ? string.Empty : "s")})";
-        }
-        catch (Exception exception)
-        {
-            Error = exception.Message;
-            Status = "Connection failed";
-        }
-        finally
-        {
-            IsTesting = false;
-        }
-    }
 
     private async Task LoadDataViewAsync(string id)
     {

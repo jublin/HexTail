@@ -12,7 +12,9 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     private readonly SettingsViewModel _owner;
     private ElasticAuthMode _authMode;
     private string? _error;
+    private bool _isTesting;
     private string _name = string.Empty;
+    private string? _status;
 
     public ElasticConnectionEditorViewModel(SettingsViewModel owner, string id)
     {
@@ -20,6 +22,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         Id = id;
         AddViewCommand = ReactiveCommand.Create(AddView);
         RemoveViewCommand = ReactiveCommand.Create<ElasticViewEditorViewModel>(RemoveView);
+        TestConnectionCommand = ReactiveCommand.CreateFromTask(TestConnectionAsync);
         SaveCommand = ReactiveCommand.CreateFromTask(SaveAsync);
     }
 
@@ -50,12 +53,24 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     public string Secret { get; set; } = string.Empty;
     public ReactiveCommand<Unit, Unit> AddViewCommand { get; }
     public ReactiveCommand<ElasticViewEditorViewModel, Unit> RemoveViewCommand { get; }
+    public ReactiveCommand<Unit, Unit> TestConnectionCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ObservableCollection<ElasticViewEditorViewModel> Views { get; } = [];
+    public ObservableCollection<ElasticDataViewSummary> DataViews { get; } = [];
     public string? Error
     {
         get => _error;
         private set => this.RaiseAndSetIfChanged(ref _error, value);
+    }
+    public string? Status
+    {
+        get => _status;
+        private set => this.RaiseAndSetIfChanged(ref _status, value);
+    }
+    public bool IsTesting
+    {
+        get => _isTesting;
+        private set => this.RaiseAndSetIfChanged(ref _isTesting, value);
     }
 
     internal void Sync(ElasticConnectionSettings settings)
@@ -65,6 +80,17 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         ElasticsearchUrl = settings.ElasticsearchUrl;
         AuthMode = settings.AuthMode;
         Username = settings.Username ?? string.Empty;
+        DataViews.Clear();
+        foreach (
+            var view in settings
+                .Views.Where(view =>
+                    !string.IsNullOrWhiteSpace(view.DataViewId)
+                    && !string.IsNullOrWhiteSpace(view.DataViewTitle)
+                )
+                .Select(view => new ElasticDataViewSummary(view.DataViewId!, view.DataViewTitle!))
+                .DistinctBy(view => view.Id, StringComparer.Ordinal)
+        )
+            DataViews.Add(view);
         while (Views.Count > settings.Views.Count)
             Views.RemoveAt(Views.Count - 1);
         for (var index = 0; index < settings.Views.Count; index++)
@@ -103,6 +129,31 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     }
 
     private void RemoveView(ElasticViewEditorViewModel view) => Views.Remove(view);
+
+    private async Task TestConnectionAsync()
+    {
+        IsTesting = true;
+        Error = null;
+        Status = "Checking…";
+        try
+        {
+            var views = await GetDataViewsAsync();
+            DataViews.Clear();
+            foreach (var view in views)
+                DataViews.Add(view);
+            Status =
+                $"Connected ({views.Count} data view{(views.Count == 1 ? string.Empty : "s")})";
+        }
+        catch (Exception exception)
+        {
+            Error = exception.Message;
+            Status = "Connection failed";
+        }
+        finally
+        {
+            IsTesting = false;
+        }
+    }
 
     private async Task SaveAsync()
     {

@@ -13,12 +13,17 @@ internal sealed class FakeElasticApiClient : IElasticApiClient
     public Exception? DataViewError { get; set; }
     public Exception? HealthError { get; set; }
     public IReadOnlyList<ElasticDataViewSummary> DataViews { get; set; } = [];
+    public List<string?> DataViewSecrets { get; } = [];
 
     public Task<IReadOnlyList<ElasticDataViewSummary>> GetDataViewsAsync(
         ElasticConnectionSettings c,
         string? s,
         CancellationToken t = default
-    ) => Task.FromResult(DataViews);
+    )
+    {
+        DataViewSecrets.Add(s);
+        return Task.FromResult(DataViews);
+    }
 
     public Task<ElasticDataView> GetDataViewAsync(
         ElasticConnectionSettings c,

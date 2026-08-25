@@ -48,10 +48,61 @@ public sealed class ElasticSettingsViewModelTests
         editor.AddViewCommand.Execute().Subscribe();
         var view = Assert.Single(editor.Views);
 
-        await view.TestConnectionCommand.Execute().FirstAsync();
+        await editor.TestConnectionCommand.Execute().FirstAsync();
 
-        Assert.Equal("Connected (1 data view)", view.Status);
+        Assert.Equal("Connected (1 data view)", editor.Status);
         Assert.Equal("logs-*", Assert.Single(view.DataViews).Title);
+    }
+
+    [Fact]
+    public async Task ServerTestConnection_UsesSavedApiKeyForNewView()
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var connection = new ElasticConnectionSettings
+        {
+            Id = "c1",
+            Name = "ops",
+            KibanaUrl = "https://kibana/",
+            ElasticsearchUrl = "https://elastic/",
+            AuthMode = ElasticAuthMode.ApiKey,
+            Views =
+            [
+                new ElasticViewSettings
+                {
+                    Id = "v1",
+                    Name = "Logs",
+                    DataViewId = "view-1",
+                    DataViewTitle = "logs-*",
+                    TimeFieldName = "@timestamp",
+                    ServerField = "server",
+                    NamespaceField = "namespace",
+                    OutputFields = ["message"],
+                },
+            ],
+        };
+        var client = new FakeElasticApiClient { DataViews = [new("view-1", "logs-*")] };
+        var vault = new InMemoryCredentialVault();
+        vault.Set(connection.Id, "saved-api-key");
+        var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            new AppSettings { ElasticConnections = [connection] },
+            vault,
+            client
+        );
+        await using var owner = new MainWindowViewModel(
+            state,
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        owner.Settings.Sync(state.Settings);
+        var editor = Assert.Single(owner.Settings.ElasticConnections);
+        editor.AddViewCommand.Execute().Subscribe();
+
+        await editor.TestConnectionCommand.Execute().FirstAsync();
+
+        Assert.Equal("saved-api-key", Assert.Single(client.DataViewSecrets));
+        Assert.Equal("logs-*", Assert.Single(editor.Views[^1].DataViews).Title);
     }
 
     [Fact]
