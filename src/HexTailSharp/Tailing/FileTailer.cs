@@ -177,7 +177,7 @@ internal sealed class FileTailer : ILogTailer
                 Access = FileAccess.Read,
                 Mode = FileMode.Open,
                 Share = FileShare.ReadWrite | FileShare.Delete,
-                Options = FileOptions.SequentialScan,
+                Options = initialRead ? FileOptions.RandomAccess : FileOptions.SequentialScan,
                 BufferSize = 81920,
             }
         );
@@ -188,6 +188,9 @@ internal sealed class FileTailer : ILogTailer
             Write(new SourceReset(SourceId));
         }
 
+        _offset = initialRead
+            ? await FindInitialReadOffsetAsync(stream, maxInitialLines, cancellationToken)
+            : _offset;
         stream.Position = _offset;
         var buffer = new byte[81920];
         int read;
@@ -219,6 +222,39 @@ internal sealed class FileTailer : ILogTailer
         var completeLines = initialLines?.ToArray() ?? lines!.ToArray();
         if (completeLines.Length > 0)
             Write(new SourceLines(SourceId, completeLines.Select(_parser.Parse).ToArray()));
+    }
+
+    private static async ValueTask<long> FindInitialReadOffsetAsync(
+        FileStream stream,
+        int maxInitialLines,
+        CancellationToken cancellationToken
+    )
+    {
+        var position = stream.Length;
+        var newlinesToSkip = (long)maxInitialLines + 1;
+        var buffer = new byte[81920];
+
+        while (position > 0)
+        {
+            var chunkStart = Math.Max(0, position - buffer.Length);
+            var chunkLength = checked((int)(position - chunkStart));
+            stream.Position = chunkStart;
+            await stream
+                .ReadExactlyAsync(buffer.AsMemory(0, chunkLength), cancellationToken)
+                .ConfigureAwait(false);
+
+            for (var index = chunkLength - 1; index >= 0; index--)
+            {
+                if (buffer[index] != (byte)'\n')
+                    continue;
+                if (--newlinesToSkip == 0)
+                    return chunkStart + index + 1;
+            }
+
+            position = chunkStart;
+        }
+
+        return 0;
     }
 
     private void AppendCompleteLines(ReadOnlySpan<byte> bytes, Action<string> addLine)

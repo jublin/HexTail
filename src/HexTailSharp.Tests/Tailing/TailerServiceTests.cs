@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text;
 using System.Threading.Channels;
 using HexTailSharp.Domain;
 using HexTailSharp.Tailing;
@@ -23,6 +25,37 @@ public sealed class TailerServiceTests
         var initial = await ReadEventAsync<SourceLines>(service.Events);
 
         Assert.Equal(["two", "three"], initial.Lines.Select(line => line.Raw));
+    }
+
+    [Fact]
+    public async Task StartTailer_TailsLargeFileWithoutScanningThePrefix()
+    {
+        var path = CreateSparseFile(500_000_000, "tail-1\ntail-2\n");
+        try
+        {
+            await using var service = new LogSourceService(
+                new TailerOptions
+                {
+                    MaxInitialLines = 2,
+                    PollInterval = TimeSpan.FromMilliseconds(10),
+                    UseFileSystemWatcher = false,
+                }
+            );
+            var stopwatch = Stopwatch.StartNew();
+            await using var tailer = service.StartFile("file-1", path, new PlainTextParser());
+
+            var initial = await ReadEventAsync<SourceLines>(service.Events);
+
+            Assert.True(
+                stopwatch.Elapsed < TimeSpan.FromSeconds(1),
+                $"Initial tail took {stopwatch.Elapsed}."
+            );
+            Assert.Equal(["tail-1", "tail-2"], initial.Lines.Select(line => line.Raw));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Fact]
@@ -177,6 +210,29 @@ public sealed class TailerServiceTests
     {
         var path = Path.Combine(Path.GetTempPath(), $"hextail-{Guid.NewGuid():N}.log");
         File.WriteAllText(path, contents);
+        return path;
+    }
+
+    private static string CreateSparseFile(long length, string tail)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"hextail-{Guid.NewGuid():N}.log");
+        var tailBytes = Encoding.UTF8.GetBytes($"\n{tail}");
+        using var stream = new FileStream(
+            path,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.Read
+        );
+        stream.SetLength(length);
+        for (var position = 1L << 20; position < length - tailBytes.Length; position += 1L << 20)
+        {
+            stream.Position = position;
+            stream.WriteByte((byte)'\n');
+        }
+
+        stream.Position = length - tailBytes.Length;
+        stream.Write(tailBytes);
+        stream.Flush(flushToDisk: true);
         return path;
     }
 }
