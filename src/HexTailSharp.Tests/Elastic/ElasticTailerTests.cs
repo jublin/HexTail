@@ -82,6 +82,83 @@ public sealed class ElasticTailerTests
     }
 
     [Fact]
+    public async Task PollOnce_EmitsOnlyNewHitsFromInclusiveCursor()
+    {
+        using var sortDocument = JsonDocument.Parse("[1]");
+        var baseTime = new DateTimeOffset(2026, 8, 20, 10, 0, 0, TimeSpan.Zero);
+        var client = new FakeElasticApiClient();
+        client.Pages.Enqueue(
+            new ElasticSearchPage(
+                "pit-1",
+                [
+                    new ElasticHit(
+                        "cursor",
+                        baseTime.AddMinutes(1),
+                        new Line("cursor"),
+                        [sortDocument.RootElement[0].Clone()]
+                    ),
+                    new ElasticHit(
+                        "old",
+                        baseTime,
+                        new Line("old"),
+                        [sortDocument.RootElement[0].Clone()]
+                    ),
+                ]
+            )
+        );
+        client.Pages.Enqueue(
+            new ElasticSearchPage(
+                "pit-1",
+                [
+                    new ElasticHit(
+                        "old",
+                        baseTime,
+                        new Line("old"),
+                        [sortDocument.RootElement[0].Clone()]
+                    ),
+                    new ElasticHit(
+                        "cursor",
+                        baseTime.AddMinutes(1),
+                        new Line("cursor"),
+                        [sortDocument.RootElement[0].Clone()]
+                    ),
+                    new ElasticHit(
+                        "new",
+                        baseTime.AddMinutes(2),
+                        new Line("new"),
+                        [sortDocument.RootElement[0].Clone()]
+                    ),
+                ]
+            )
+        );
+
+        var channel = Channel.CreateUnbounded<SourceEvent>();
+        var connection = Connection();
+        await using var tailer = new ElasticTailer(
+            connection,
+            connection.Views[0],
+            connection.Views[0].Sources[0],
+            "secret",
+            client,
+            channel.Writer,
+            () => baseTime.AddMinutes(5)
+        );
+
+        await tailer.PollOnceAsync(CancellationToken.None);
+        Assert.Equal(
+            ["old", "cursor"],
+            Assert
+                .IsType<SourceLines>(await channel.Reader.ReadAsync())
+                .Lines.Select(line => line.Raw)
+        );
+
+        await tailer.PollOnceAsync(CancellationToken.None);
+
+        var incremental = Assert.IsType<SourceLines>(await channel.Reader.ReadAsync());
+        Assert.Equal(["new"], incremental.Lines.Select(line => line.Raw));
+    }
+
+    [Fact]
     public async Task PollOnce_UsesViewDataViewTitle()
     {
         var client = new FakeElasticApiClient();

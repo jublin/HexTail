@@ -75,7 +75,9 @@ internal sealed class ElasticTailer : ILogTailer
             _view.DataViewTitle!,
             cancellationToken
         );
-        var accepted = new List<Domain.Line>(initialRead ? _maxInitialLines : PageSize);
+        var accepted = new List<ElasticHit>(initialRead ? _maxInitialLines : PageSize);
+        var nextCursorTimestamp = _cursorTimestamp;
+        var nextIdsAtCursor = new HashSet<string>(_idsAtCursor, StringComparer.Ordinal);
         try
         {
             IReadOnlyList<System.Text.Json.JsonElement>? searchAfter = null;
@@ -102,16 +104,24 @@ internal sealed class ElasticTailer : ILogTailer
                 Log($"source={SourceId} search page hits={page.Hits.Count}");
                 foreach (var hit in page.Hits)
                 {
-                    if (_cursorTimestamp == hit.Timestamp && _idsAtCursor.Contains(hit.Id))
-                        continue;
-                    if (_cursorTimestamp is null || hit.Timestamp > _cursorTimestamp)
+                    if (!initialRead && nextCursorTimestamp is { } cursorTimestamp)
                     {
-                        _cursorTimestamp = hit.Timestamp;
-                        _idsAtCursor.Clear();
+                        var timestampComparison = hit.Timestamp.CompareTo(cursorTimestamp);
+                        if (
+                            timestampComparison < 0
+                            || (timestampComparison == 0 && nextIdsAtCursor.Contains(hit.Id))
+                        )
+                            continue;
                     }
-                    if (_cursorTimestamp == hit.Timestamp)
-                        _idsAtCursor.Add(hit.Id);
-                    accepted.Add(hit.Line);
+
+                    if (nextCursorTimestamp is null || hit.Timestamp > nextCursorTimestamp)
+                    {
+                        nextCursorTimestamp = hit.Timestamp;
+                        nextIdsAtCursor.Clear();
+                    }
+                    if (nextCursorTimestamp == hit.Timestamp)
+                        nextIdsAtCursor.Add(hit.Id);
+                    accepted.Add(hit);
                     if (initialRead && accepted.Count == _maxInitialLines)
                         break;
                 }
@@ -124,10 +134,22 @@ internal sealed class ElasticTailer : ILogTailer
             }
             if (accepted.Count > 0)
             {
-                if (initialRead)
-                    accepted.Reverse();
+                accepted.Sort(
+                    static (left, right) =>
+                    {
+                        var timestampComparison = left.Timestamp.CompareTo(right.Timestamp);
+                        return timestampComparison != 0
+                            ? timestampComparison
+                            : StringComparer.Ordinal.Compare(left.Id, right.Id);
+                    }
+                );
+                _cursorTimestamp = nextCursorTimestamp;
+                _idsAtCursor.Clear();
+                _idsAtCursor.UnionWith(nextIdsAtCursor);
                 Log($"source={SourceId} emitting lines={accepted.Count}");
-                _events.TryWrite(new SourceLines(SourceId, accepted));
+                _events.TryWrite(
+                    new SourceLines(SourceId, accepted.Select(hit => hit.Line).ToArray())
+                );
             }
         }
         finally
