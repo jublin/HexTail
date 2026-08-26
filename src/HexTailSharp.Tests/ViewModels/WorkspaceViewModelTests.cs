@@ -1,6 +1,6 @@
-using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Reactive.Concurrency;
+using Avalonia.Collections;
 using HexTailSharp.Application;
 using HexTailSharp.Domain;
 using HexTailSharp.Tailing;
@@ -44,7 +44,7 @@ public sealed class WorkspaceViewModelTests
     [Fact]
     public void SyncCollection_AppendRetainsCollectionIdentity()
     {
-        var rows = new ObservableCollection<Line>();
+        var rows = new AvaloniaList<Line>();
         var original = rows;
 
         LogViewViewModel.SyncCollection(rows, [new Line("one"), new Line("two")]);
@@ -57,7 +57,7 @@ public sealed class WorkspaceViewModelTests
     public void SyncCollection_UnchangedTailDoesNotRaiseReset()
     {
         var line = new Line("one");
-        var rows = new ObservableCollection<Line> { line };
+        var rows = new AvaloniaList<Line> { line };
         var changes = 0;
         rows.CollectionChanged += (_, _) => changes++;
 
@@ -71,7 +71,7 @@ public sealed class WorkspaceViewModelTests
     {
         var first = new Line("first");
         var second = new Line("second");
-        var rows = new ObservableCollection<Line> { first };
+        var rows = new AvaloniaList<Line> { first };
 
         LogViewViewModel.SyncCollection(rows, [first, second]);
 
@@ -85,7 +85,7 @@ public sealed class WorkspaceViewModelTests
     {
         var old = new Line("old");
         var replacement = new Line("replacement");
-        var rows = new ObservableCollection<Line> { old };
+        var rows = new AvaloniaList<Line> { old };
 
         LogViewViewModel.SyncCollection(rows, [replacement], resetItems: true);
 
@@ -98,7 +98,7 @@ public sealed class WorkspaceViewModelTests
     {
         var buffer = new FileBuffer(maxLines: 3);
         buffer.Append([new Line("one"), new Line("two"), new Line("three")]);
-        var rows = new ObservableCollection<Line>(buffer.Lines);
+        var rows = new AvaloniaList<Line>(buffer.Lines);
         var changes = new List<NotifyCollectionChangedAction>();
         rows.CollectionChanged += (_, args) => changes.Add(args.Action);
 
@@ -107,14 +107,103 @@ public sealed class WorkspaceViewModelTests
 
         Assert.Equal(buffer.Lines, rows);
         Assert.Equal(
-            [
-                NotifyCollectionChangedAction.Remove,
-                NotifyCollectionChangedAction.Remove,
-                NotifyCollectionChangedAction.Add,
-                NotifyCollectionChangedAction.Add,
-            ],
+            [NotifyCollectionChangedAction.Remove, NotifyCollectionChangedAction.Add],
             changes
         );
         Assert.DoesNotContain(NotifyCollectionChangedAction.Reset, changes);
+    }
+
+    [Fact]
+    public async Task LogRowsAppendAsOneCollectionChange()
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var path = Path.GetTempFileName();
+        try
+        {
+            await using var viewModel = new MainWindowViewModel(
+                new AppState(new LogSourceService(), new TestPersistence()),
+                scheduler: ImmediateScheduler.Instance,
+                startPolling: false
+            );
+            var tab = await viewModel.State.OpenFileAsync(path, save: false);
+            var file = new FileTabViewModel(viewModel, tab);
+            var changes = 0;
+            file.Views[0].Lines.CollectionChanged += (_, _) => changes++;
+
+            file.Model.Buffer.Append(
+                Enumerable.Range(0, 10_000).Select(index => new Line($"line {index}"))
+            );
+            file.SyncViews();
+
+            Assert.Equal(10_000, file.Views[0].Lines.Count);
+            Assert.Equal(1, changes);
+
+            var firstRow = file.Views[0].Lines[0];
+            var refreshes = 0;
+            firstRow.PropertyChanged += (_, _) => refreshes++;
+            file.SyncViews();
+
+            Assert.Equal(0, refreshes);
+
+            changes = 0;
+            file.Model.Buffer.Append(
+                Enumerable.Range(10_000, 1_000).Select(index => new Line($"line {index}"))
+            );
+            file.SyncViews();
+
+            Assert.Equal(11_000, file.Views[0].Lines.Count);
+            Assert.Equal(1, changes);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task AddingSearchPreservesTheAllViewRows()
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var path = Path.GetTempFileName();
+        try
+        {
+            await using var viewModel = new MainWindowViewModel(
+                new AppState(new LogSourceService(), new TestPersistence()),
+                scheduler: ImmediateScheduler.Instance,
+                startPolling: false
+            );
+            var tab = await viewModel.State.OpenFileAsync(path, save: false);
+            var file = new FileTabViewModel(viewModel, tab);
+            file.Model.Buffer.Append(
+                Enumerable.Range(0, 10_000).Select(index => new Line($"line {index}"))
+            );
+            file.SyncViews();
+            var allView = file.Views[0];
+            var firstRow = allView.Lines[0];
+            var refreshes = 0;
+            firstRow.PropertyChanged += (_, _) => refreshes++;
+
+            viewModel.State.AddSearch(
+                file.Model,
+                "line",
+                MatchMode.Literal,
+                caseSensitive: false,
+                "#00ff00"
+            );
+            file.SyncViews();
+
+            Assert.Same(allView, file.Views[0]);
+            Assert.Same(firstRow, file.Views[0].Lines[0]);
+            Assert.Equal(0, refreshes);
+            Assert.Empty(file.Views[1].Lines);
+
+            file.SelectedViewIndex = 1;
+            file.SyncViews();
+            Assert.Equal(10_000, file.Views[1].Lines.Count);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 }

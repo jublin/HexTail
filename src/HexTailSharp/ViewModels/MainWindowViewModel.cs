@@ -45,6 +45,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private bool _started;
     private bool _closed;
     private bool _restoring;
+    private int _syncQueued;
     private string _elasticFrom = "now-5m";
     private string _elasticTo = "now";
 
@@ -109,12 +110,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                     _state.Changed += Changed;
                     return Disposable.Create(() => _state.Changed -= Changed);
                 })
-                .ObserveOn(_scheduler)
-                .Subscribe(_ =>
-                {
-                    if (!_restoring)
-                        SyncFromState();
-                })
+                .Subscribe(_ => QueueSyncFromState())
         );
 
         _subscriptions.Add(
@@ -378,7 +374,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     {
         foreach (var path in paths.Where(path => !string.IsNullOrWhiteSpace(path)))
             await TryOpenPathAsync(path);
-        SyncFromState();
     }
 
     private async Task TryOpenPathAsync(string path)
@@ -400,7 +395,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         try
         {
             await _state.CloseFileAsync(file.Model);
-            SyncFromState();
         }
         catch (Exception ex)
         {
@@ -414,7 +408,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             return;
 
         await _state.RemoveSearchAsync(view.File, view.Search);
-        SyncFromState();
     }
 
     private async Task SaveAsync()
@@ -446,7 +439,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             );
             Query = string.Empty;
             SearchError = null;
-            SyncFromState();
             await _state.SaveAsync();
         }
         catch (ArgumentException ex)
@@ -459,13 +451,25 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     {
         _state.SelectFile(file.Model);
         SelectedViewIndex = 0;
-        SyncFromState();
     }
 
     private void DrainTailer()
     {
         if (_closed || !_state.DrainTailerEvents())
             return;
+    }
+
+    private void QueueSyncFromState()
+    {
+        if (_closed || _restoring || Interlocked.Exchange(ref _syncQueued, 1) != 0)
+            return;
+
+        _scheduler.Schedule(() =>
+        {
+            Interlocked.Exchange(ref _syncQueued, 0);
+            if (!_closed && !_restoring)
+                SyncFromState();
+        });
     }
 
     private void SyncFromState()
@@ -491,12 +495,14 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         foreach (var file in files)
         {
             var viewModel = Files.FirstOrDefault(item => ReferenceEquals(item.Model, file));
+            var loadRows = ReferenceEquals(file, _state.SelectedFile);
             if (viewModel is null)
             {
-                viewModel = new FileTabViewModel(this, file);
+                viewModel = new FileTabViewModel(this, file, loadRows);
                 Files.Add(viewModel);
             }
-            viewModel.SyncViews();
+            else
+                viewModel.SyncViews(loadRows);
         }
 
         SelectedFile = _state.SelectedFile is null

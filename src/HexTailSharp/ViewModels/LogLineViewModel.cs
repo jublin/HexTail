@@ -28,7 +28,7 @@ internal sealed class LogLineViewModel : ReactiveObject
         _file = file;
         Line = line;
         IsContext = isContext;
-        Refresh();
+        Refresh(notify: false);
     }
 
     public Line Line { get; }
@@ -43,7 +43,9 @@ internal sealed class LogLineViewModel : ReactiveObject
     public IBrush Foreground { get; private set; } = Brushes.White;
     public IBrush Background { get; private set; } = Brushes.Transparent;
 
-    internal void Refresh()
+    internal void Refresh() => Refresh(notify: true);
+
+    private void Refresh(bool notify)
     {
         var settings = _owner.Settings;
         FontSize = settings.LogFontSize switch
@@ -74,14 +76,17 @@ internal sealed class LogLineViewModel : ReactiveObject
         if (_isVisible)
             Render();
 
-        this.RaisePropertyChanged(nameof(ParsedFieldsText));
-        this.RaisePropertyChanged(nameof(HasParsedFields));
-        this.RaisePropertyChanged(nameof(IsExpanded));
-        this.RaisePropertyChanged(nameof(FieldsVisible));
-        this.RaisePropertyChanged(nameof(FontSize));
-        this.RaisePropertyChanged(nameof(RowPadding));
-        this.RaisePropertyChanged(nameof(Foreground));
-        this.RaisePropertyChanged(nameof(Background));
+        if (notify)
+        {
+            this.RaisePropertyChanged(nameof(ParsedFieldsText));
+            this.RaisePropertyChanged(nameof(HasParsedFields));
+            this.RaisePropertyChanged(nameof(IsExpanded));
+            this.RaisePropertyChanged(nameof(FieldsVisible));
+            this.RaisePropertyChanged(nameof(FontSize));
+            this.RaisePropertyChanged(nameof(RowPadding));
+            this.RaisePropertyChanged(nameof(Foreground));
+            this.RaisePropertyChanged(nameof(Background));
+        }
     }
 
     internal void SetVisible(bool visible)
@@ -89,6 +94,27 @@ internal sealed class LogLineViewModel : ReactiveObject
         _isVisible = visible;
         if (visible)
             Render();
+    }
+
+    internal void InvalidateRender()
+    {
+        _renderDirty = true;
+        if (_isVisible)
+            Render();
+    }
+
+    internal void SyncExpansion()
+    {
+        var expanded =
+            _file.Model.ExpandedLine is int index
+            && index >= 0
+            && index < _file.Model.Buffer.Count
+            && ReferenceEquals(_file.Model.Buffer[index], Line);
+        if (IsExpanded == expanded)
+            return;
+        IsExpanded = expanded;
+        this.RaisePropertyChanged(nameof(IsExpanded));
+        this.RaisePropertyChanged(nameof(FieldsVisible));
     }
 
     internal void Select() => _owner.SelectLineCommand.Execute(Line).Subscribe();

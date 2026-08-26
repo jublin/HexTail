@@ -50,6 +50,7 @@ public partial class LogView : UserControl
             _viewModel.Lines.CollectionChanged += OnLinesChanged;
             _viewModel.ContextLines.CollectionChanged += OnContextLinesChanged;
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            _viewModel.Sync();
         }
 
         Dispatcher.UIThread.Post(

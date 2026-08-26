@@ -12,13 +12,13 @@ internal sealed class FileTabViewModel : ReactiveObject
 {
     private readonly MainWindowViewModel _owner;
     private int _selectedViewIndex;
-    private int _searchCount;
+    private int _viewsVersion;
 
-    internal FileTabViewModel(MainWindowViewModel owner, FileTabState model)
+    internal FileTabViewModel(MainWindowViewModel owner, FileTabState model, bool loadRows = true)
     {
         _owner = owner;
         Model = model;
-        SyncViews();
+        SyncViews(loadRows);
     }
 
     public MainWindowViewModel Workspace => _owner;
@@ -66,30 +66,67 @@ internal sealed class FileTabViewModel : ReactiveObject
     public LogViewViewModel SelectedView => Views[SelectedViewIndex];
 
     public string SearchCount => $"{Model.Searches.Count:N0} search(es)";
+    internal int ViewsVersion => _viewsVersion;
 
-    internal void SyncViews()
+    internal void SyncViews(bool loadRows = true)
     {
-        var topologyChanged =
-            _searchCount != Model.Searches.Count || Views.Count != Model.Searches.Count + 1;
+        var topologyChanged = !HasCurrentViews();
 
         if (topologyChanged)
         {
-            Views.Clear();
-            Views.Add(new LogViewViewModel(_owner, this, null));
-            foreach (var search in Model.Searches)
-                Views.Add(new LogViewViewModel(_owner, this, search));
-            _searchCount = Model.Searches.Count;
+            if (Views.Count == 0)
+                Views.Add(new LogViewViewModel(_owner, this, null));
+
+            for (var index = Views.Count - 1; index >= 1; index--)
+            {
+                var search = Views[index].Search;
+                if (search is null || !Model.Searches.Contains(search))
+                    Views.RemoveAt(index);
+            }
+
+            for (var index = 0; index < Model.Searches.Count; index++)
+            {
+                var search = Model.Searches[index];
+                var targetIndex = index + 1;
+                var currentIndex = -1;
+                for (var candidate = 1; candidate < Views.Count; candidate++)
+                {
+                    if (!ReferenceEquals(Views[candidate].Search, search))
+                        continue;
+                    currentIndex = candidate;
+                    break;
+                }
+
+                if (currentIndex < 0)
+                    Views.Insert(targetIndex, new LogViewViewModel(_owner, this, search));
+                else if (currentIndex != targetIndex)
+                    Views.Move(currentIndex, targetIndex);
+            }
+
             SelectedViewIndex = Math.Clamp(SelectedViewIndex, 0, Math.Max(0, Views.Count - 1));
+            _viewsVersion++;
         }
 
-        foreach (var view in Views)
-            view.Sync(topologyChanged);
+        if (loadRows && Views.Count > 0)
+            Views[SelectedViewIndex].Sync();
 
         this.RaisePropertyChanged(nameof(FollowAll));
         this.RaisePropertyChanged(nameof(ShowContext));
         this.RaisePropertyChanged(nameof(DisplayName));
         this.RaisePropertyChanged(nameof(Error));
         this.RaisePropertyChanged(nameof(SearchCount));
+    }
+
+    private bool HasCurrentViews()
+    {
+        if (Views.Count != Model.Searches.Count + 1 || Views.Count == 0)
+            return false;
+        if (Views[0].Search is not null)
+            return false;
+        for (var index = 0; index < Model.Searches.Count; index++)
+            if (!ReferenceEquals(Views[index + 1].Search, Model.Searches[index]))
+                return false;
+        return true;
     }
 
     internal void SelectLine(Line line) => _owner.SelectLine(this, line);

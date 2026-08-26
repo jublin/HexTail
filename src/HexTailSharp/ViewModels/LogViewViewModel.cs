@@ -1,9 +1,9 @@
-using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using Avalonia;
+using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Media;
 using HexTailSharp.Application;
@@ -18,6 +18,9 @@ internal sealed class LogViewViewModel : ReactiveObject
 {
     private readonly MainWindowViewModel _owner;
     private readonly FileTabViewModel _file;
+    private AppSettings? _lastSettings;
+    private int? _lastExpandedLine;
+    private int _lastViewsVersion;
 
     internal LogViewViewModel(MainWindowViewModel owner, FileTabViewModel file, Search? search)
     {
@@ -38,8 +41,8 @@ internal sealed class LogViewViewModel : ReactiveObject
 
     public override string ToString() => Header;
 
-    public ObservableCollection<LogLineViewModel> Lines { get; } = [];
-    public ObservableCollection<LogLineViewModel> ContextLines { get; } = [];
+    public AvaloniaList<LogLineViewModel> Lines { get; } = [];
+    public AvaloniaList<LogLineViewModel> ContextLines { get; } = [];
     public ReactiveCommand<Line, Unit> SelectLineCommand { get; }
     public ReactiveCommand<Line, Unit> ToggleExpandedCommand { get; }
     public bool ShowContext
@@ -81,11 +84,28 @@ internal sealed class LogViewViewModel : ReactiveObject
 
     public void Sync(bool resetItems = false)
     {
+        var settings = Settings;
+        var refreshRows = !ReferenceEquals(_lastSettings, settings);
+        var expandedChanged = _lastExpandedLine != _file.Model.ExpandedLine;
+        var viewsChanged = _lastViewsVersion != _file.ViewsVersion;
+        _lastSettings = settings;
+        _lastExpandedLine = _file.Model.ExpandedLine;
+        _lastViewsVersion = _file.ViewsVersion;
+        if (expandedChanged)
+        {
+            SyncExpansion(Lines);
+            SyncExpansion(ContextLines);
+        }
+        if (viewsChanged)
+        {
+            InvalidateRows(Lines);
+            InvalidateRows(ContextLines);
+        }
         var lines = LinesFor();
-        SyncRows(Lines, lines, isContext: false, resetItems);
+        SyncRows(Lines, lines, isContext: false, resetItems, refreshRows);
 
         var context = _file.Model.ShowContext ? ContextLinesFor() : [];
-        SyncRows(ContextLines, context, isContext: true, resetItems);
+        SyncRows(ContextLines, context, isContext: true, resetItems, refreshRows);
 
         this.RaisePropertyChanged(nameof(Header));
         this.RaisePropertyChanged(nameof(IsSearchView));
@@ -100,13 +120,37 @@ internal sealed class LogViewViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(IsFollowing));
     }
 
+    private static void InvalidateRows(AvaloniaList<LogLineViewModel> rows)
+    {
+        foreach (var row in rows)
+            row.InvalidateRender();
+    }
+
+    private static void SyncExpansion(AvaloniaList<LogLineViewModel> rows)
+    {
+        foreach (var row in rows)
+            row.SyncExpansion();
+    }
+
     private void SyncRows(
-        ObservableCollection<LogLineViewModel> current,
+        AvaloniaList<LogLineViewModel> current,
         IReadOnlyList<Line> desired,
         bool isContext,
-        bool resetItems
+        bool resetItems,
+        bool refreshRows
     )
     {
+        if (
+            !resetItems
+            && !refreshRows
+            && current.Count == desired.Count
+            && (
+                current.Count == 0
+                || ReferenceEquals(current[current.Count - 1].Line, desired[desired.Count - 1])
+            )
+        )
+            return;
+
         if (!resetItems && current.Count > 0 && desired.Count > current.Count)
         {
             var lastLine = current[^1].Line;
@@ -116,8 +160,43 @@ internal sealed class LogViewViewModel : ReactiveObject
 
             if (lastIndex >= 0 && lastIndex < desired.Count - 1)
             {
-                for (var index = lastIndex + 1; index < desired.Count; index++)
-                    current.Add(new LogLineViewModel(this, _file, desired[index], isContext));
+                current.AddRange(
+                    desired
+                        .Skip(lastIndex + 1)
+                        .Select(line => new LogLineViewModel(this, _file, line, isContext))
+                );
+                return;
+            }
+        }
+
+        if (!resetItems && current.Count > 0 && desired.Count > 0)
+        {
+            var retainedStart = 0;
+            while (
+                retainedStart < current.Count
+                && !ReferenceEquals(current[retainedStart].Line, desired[0])
+            )
+                retainedStart++;
+
+            var retainedCount = current.Count - retainedStart;
+            var isHeadRollover =
+                retainedStart > 0 && retainedCount > 0 && retainedCount <= desired.Count;
+            for (var index = 0; isHeadRollover && index < retainedCount; index++)
+                isHeadRollover = ReferenceEquals(
+                    current[retainedStart + index].Line,
+                    desired[index]
+                );
+            if (isHeadRollover)
+            {
+                current.RemoveRange(0, retainedStart);
+                if (refreshRows)
+                    foreach (var row in current)
+                        row.Refresh();
+                current.AddRange(
+                    desired
+                        .Skip(retainedCount)
+                        .Select(line => new LogLineViewModel(this, _file, line, isContext))
+                );
                 return;
             }
         }
@@ -138,7 +217,7 @@ internal sealed class LogViewViewModel : ReactiveObject
                         : null;
                 if (row is null)
                     row = new LogLineViewModel(this, _file, line, isContext);
-                else
+                else if (refreshRows)
                     row.Refresh();
                 return row;
             })
@@ -147,7 +226,7 @@ internal sealed class LogViewViewModel : ReactiveObject
     }
 
     public static void SyncCollection<T>(
-        ObservableCollection<T> current,
+        AvaloniaList<T> current,
         IReadOnlyList<T> desired,
         bool resetItems = false
     )
@@ -155,24 +234,28 @@ internal sealed class LogViewViewModel : ReactiveObject
         if (resetItems)
         {
             current.Clear();
-            foreach (var line in desired)
-                current.Add(line);
+            current.AddRange(desired);
             return;
         }
 
         if (
             current.Count == desired.Count
-            && (current.Count == 0 || ReferenceEquals(current[^1], desired[^1]))
+            && (
+                current.Count == 0
+                || ReferenceEquals(current[current.Count - 1], desired[desired.Count - 1])
+            )
         )
             return;
 
         if (
             current.Count < desired.Count
-            && (current.Count == 0 || ReferenceEquals(current[^1], desired[current.Count - 1]))
+            && (
+                current.Count == 0
+                || ReferenceEquals(current[current.Count - 1], desired[current.Count - 1])
+            )
         )
         {
-            for (var index = current.Count; index < desired.Count; index++)
-                current.Add(desired[index]);
+            current.AddRange(desired.Skip(current.Count));
             return;
         }
 
@@ -192,12 +275,8 @@ internal sealed class LogViewViewModel : ReactiveObject
                 isHeadRollover = ReferenceEquals(current[retainedStart + index], desired[index]);
             if (isHeadRollover)
             {
-                // ponytail: ObservableCollection has no RemoveRange; use a range-aware
-                // collection only if unusually large rollover batches become measurable.
-                for (var index = 0; index < retainedStart; index++)
-                    current.RemoveAt(0);
-                for (var index = retainedCount; index < desired.Count; index++)
-                    current.Add(desired[index]);
+                current.RemoveRange(0, retainedStart);
+                current.AddRange(desired.Skip(retainedCount));
                 return;
             }
         }
@@ -221,8 +300,7 @@ internal sealed class LogViewViewModel : ReactiveObject
                 current.RemoveAt(current.Count - 1);
         }
 
-        for (var index = common; index < desired.Count; index++)
-            current.Add(desired[index]);
+        current.AddRange(desired.Skip(common));
     }
 
     private bool IsSearchFollow()
