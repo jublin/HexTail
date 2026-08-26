@@ -76,8 +76,13 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
 
     internal void Sync(bool isOpen, string status)
     {
-        _isOpen = isOpen;
-        this.RaisePropertyChanged(nameof(IsOpen));
+        if (_isOpen != isOpen)
+        {
+            _isOpen = isOpen;
+            this.RaisePropertyChanged(nameof(IsOpen));
+        }
+        if (Status == status)
+            return;
         Status = status;
         this.RaisePropertyChanged(nameof(StatusGlyph));
     }

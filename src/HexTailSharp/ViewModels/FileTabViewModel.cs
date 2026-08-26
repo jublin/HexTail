@@ -13,6 +13,7 @@ internal sealed class FileTabViewModel : ReactiveObject
     private readonly MainWindowViewModel _owner;
     private int _selectedViewIndex;
     private int _viewsVersion;
+    private FileSnapshot? _lastSnapshot;
 
     internal FileTabViewModel(MainWindowViewModel owner, FileTabState model, bool loadRows = true)
     {
@@ -39,6 +40,8 @@ internal sealed class FileTabViewModel : ReactiveObject
             if (Model.FollowAll == value)
                 return;
             Model.FollowAll = value;
+            if (_lastSnapshot is { } snapshot)
+                _lastSnapshot = snapshot with { FollowAll = value };
             _ = _owner.SetFollowAllAsync(this, value);
             this.RaisePropertyChanged(nameof(FollowAll));
         }
@@ -52,6 +55,8 @@ internal sealed class FileTabViewModel : ReactiveObject
             if (Model.ShowContext == value)
                 return;
             Model.ShowContext = value;
+            if (_lastSnapshot is { } snapshot)
+                _lastSnapshot = snapshot with { ShowContext = value };
             _ = _owner.SetShowContextAsync(this, value);
             this.RaisePropertyChanged(nameof(ShowContext));
         }
@@ -110,11 +115,28 @@ internal sealed class FileTabViewModel : ReactiveObject
         if (loadRows && Views.Count > 0)
             Views[SelectedViewIndex].Sync();
 
-        this.RaisePropertyChanged(nameof(FollowAll));
-        this.RaisePropertyChanged(nameof(ShowContext));
-        this.RaisePropertyChanged(nameof(DisplayName));
-        this.RaisePropertyChanged(nameof(Error));
-        this.RaisePropertyChanged(nameof(SearchCount));
+        if (!loadRows)
+            return;
+
+        var snapshot = new FileSnapshot(
+            FollowAll,
+            ShowContext,
+            DisplayName,
+            Error,
+            Model.Searches.Count
+        );
+        var previous = _lastSnapshot;
+        _lastSnapshot = snapshot;
+        if (previous is null || previous.Value.FollowAll != snapshot.FollowAll)
+            this.RaisePropertyChanged(nameof(FollowAll));
+        if (previous is null || previous.Value.ShowContext != snapshot.ShowContext)
+            this.RaisePropertyChanged(nameof(ShowContext));
+        if (previous is null || previous.Value.DisplayName != snapshot.DisplayName)
+            this.RaisePropertyChanged(nameof(DisplayName));
+        if (previous is null || previous.Value.Error != snapshot.Error)
+            this.RaisePropertyChanged(nameof(Error));
+        if (previous is null || previous.Value.SearchCount != snapshot.SearchCount)
+            this.RaisePropertyChanged(nameof(SearchCount));
     }
 
     private bool HasCurrentViews()
@@ -146,4 +168,12 @@ internal sealed class FileTabViewModel : ReactiveObject
             Model.FollowSearches[index] = value;
         return _owner.SetSearchFollowAsync(this, search, value);
     }
+
+    private readonly record struct FileSnapshot(
+        bool FollowAll,
+        bool ShowContext,
+        string DisplayName,
+        string? Error,
+        int SearchCount
+    );
 }

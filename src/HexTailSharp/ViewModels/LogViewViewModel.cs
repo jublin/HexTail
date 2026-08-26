@@ -21,6 +21,7 @@ internal sealed class LogViewViewModel : ReactiveObject
     private AppSettings? _lastSettings;
     private int? _lastExpandedLine;
     private int _lastViewsVersion;
+    private ViewSnapshot? _lastSnapshot;
 
     internal LogViewViewModel(MainWindowViewModel owner, FileTabViewModel file, Search? search)
     {
@@ -74,6 +75,8 @@ internal sealed class LogViewViewModel : ReactiveObject
         {
             if (IsFollowing == value)
                 return;
+            if (_lastSnapshot is { } snapshot)
+                _lastSnapshot = snapshot with { IsFollowing = value };
             if (Search is null)
                 _ = _owner.SetFollowAllAsync(_file, value);
             else
@@ -107,17 +110,37 @@ internal sealed class LogViewViewModel : ReactiveObject
         var context = _file.Model.ShowContext ? ContextLinesFor() : [];
         SyncRows(ContextLines, context, isContext: true, resetItems, refreshRows);
 
-        this.RaisePropertyChanged(nameof(Header));
-        this.RaisePropertyChanged(nameof(IsSearchView));
-        this.RaisePropertyChanged(nameof(HighlightBrush));
-        this.RaisePropertyChanged(nameof(MatchSummary));
-        this.RaisePropertyChanged(nameof(ShowContext));
-        this.RaisePropertyChanged(nameof(ContextVisible));
-        this.RaisePropertyChanged(nameof(ContextRowHeight));
-        this.RaisePropertyChanged(nameof(ContextSplitterHeight));
-        this.RaisePropertyChanged(nameof(ContextEmpty));
-        this.RaisePropertyChanged(nameof(ContextEmptyVisible));
-        this.RaisePropertyChanged(nameof(IsFollowing));
+        var snapshot = new ViewSnapshot(
+            MatchSummary,
+            ShowContext,
+            ContextVisible,
+            ContextRowHeight,
+            ContextSplitterHeight,
+            ContextEmpty,
+            ContextEmptyVisible,
+            IsFollowing
+        );
+        var previous = _lastSnapshot;
+        _lastSnapshot = snapshot;
+        if (previous is null || previous.Value.MatchSummary != snapshot.MatchSummary)
+            this.RaisePropertyChanged(nameof(MatchSummary));
+        if (previous is null || previous.Value.ShowContext != snapshot.ShowContext)
+            this.RaisePropertyChanged(nameof(ShowContext));
+        if (previous is null || previous.Value.ContextVisible != snapshot.ContextVisible)
+            this.RaisePropertyChanged(nameof(ContextVisible));
+        if (previous is null || previous.Value.ContextRowHeight != snapshot.ContextRowHeight)
+            this.RaisePropertyChanged(nameof(ContextRowHeight));
+        if (
+            previous is null
+            || previous.Value.ContextSplitterHeight != snapshot.ContextSplitterHeight
+        )
+            this.RaisePropertyChanged(nameof(ContextSplitterHeight));
+        if (previous is null || previous.Value.ContextEmpty != snapshot.ContextEmpty)
+            this.RaisePropertyChanged(nameof(ContextEmpty));
+        if (previous is null || previous.Value.ContextEmptyVisible != snapshot.ContextEmptyVisible)
+            this.RaisePropertyChanged(nameof(ContextEmptyVisible));
+        if (previous is null || previous.Value.IsFollowing != snapshot.IsFollowing)
+            this.RaisePropertyChanged(nameof(IsFollowing));
     }
 
     private static void InvalidateRows(AvaloniaList<LogLineViewModel> rows)
@@ -332,4 +355,15 @@ internal sealed class LogViewViewModel : ReactiveObject
     }
 
     private static string Truncate(string value) => value.Length > 24 ? $"{value[..21]}..." : value;
+
+    private readonly record struct ViewSnapshot(
+        string MatchSummary,
+        bool ShowContext,
+        bool ContextVisible,
+        GridLength ContextRowHeight,
+        GridLength ContextSplitterHeight,
+        bool ContextEmpty,
+        bool ContextEmptyVisible,
+        bool IsFollowing
+    );
 }

@@ -206,4 +206,39 @@ public sealed class WorkspaceViewModelTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public async Task InactiveFileSync_DoesNotNotifyOrMaterializeRows()
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var firstPath = Path.GetTempFileName();
+        var secondPath = Path.GetTempFileName();
+        try
+        {
+            await using var owner = new MainWindowViewModel(
+                new AppState(new LogSourceService(), new TestPersistence()),
+                scheduler: ImmediateScheduler.Instance,
+                startPolling: false
+            );
+            var firstTab = await owner.State.OpenFileAsync(firstPath, save: false);
+            await owner.State.OpenFileAsync(secondPath, save: false);
+            var first = new FileTabViewModel(owner, firstTab);
+            var propertyChanges = 0;
+            var viewPropertyChanges = 0;
+            first.PropertyChanged += (_, _) => propertyChanges++;
+            first.Views[0].PropertyChanged += (_, _) => viewPropertyChanges++;
+
+            firstTab.Buffer.Append(new Line("new line"));
+            first.SyncViews(loadRows: false);
+
+            Assert.Equal(0, propertyChanges);
+            Assert.Equal(0, viewPropertyChanges);
+            Assert.Empty(first.Views[0].Lines);
+        }
+        finally
+        {
+            File.Delete(firstPath);
+            File.Delete(secondPath);
+        }
+    }
 }

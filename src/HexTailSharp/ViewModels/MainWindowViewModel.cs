@@ -483,6 +483,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             return;
         }
 
+        var previous = Snapshot();
         var files = _state.Files;
 
         for (var index = Files.Count - 1; index >= 0; index--)
@@ -537,17 +538,42 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 ?? "Checking";
             option.Sync(_state.IsElasticSourceOpen(option.SourceId), status);
         }
-        this.RaisePropertyChanged(nameof(FileCount));
-        this.RaisePropertyChanged(nameof(HasFile));
-        this.RaisePropertyChanged(nameof(ShowEmpty));
-        this.RaisePropertyChanged(nameof(LineCount));
-        this.RaisePropertyChanged(nameof(FileError));
-        this.RaisePropertyChanged(nameof(HasFileError));
-        this.RaisePropertyChanged(nameof(HasSearchError));
-        this.RaisePropertyChanged(nameof(HasElasticSources));
-        this.RaisePropertyChanged(nameof(HasElasticWarning));
-        this.RaisePropertyChanged(nameof(ElasticSourceIcon));
+        var current = Snapshot();
+        if (previous.FileCount != current.FileCount)
+            this.RaisePropertyChanged(nameof(FileCount));
+        if (previous.HasFile != current.HasFile)
+            this.RaisePropertyChanged(nameof(HasFile));
+        if (previous.ShowEmpty != current.ShowEmpty)
+            this.RaisePropertyChanged(nameof(ShowEmpty));
+        if (previous.LineCount != current.LineCount)
+            this.RaisePropertyChanged(nameof(LineCount));
+        if (previous.FileError != current.FileError)
+            this.RaisePropertyChanged(nameof(FileError));
+        if (previous.HasFileError != current.HasFileError)
+            this.RaisePropertyChanged(nameof(HasFileError));
+        if (previous.HasSearchError != current.HasSearchError)
+            this.RaisePropertyChanged(nameof(HasSearchError));
+        if (previous.HasElasticSources != current.HasElasticSources)
+            this.RaisePropertyChanged(nameof(HasElasticSources));
+        if (previous.HasElasticWarning != current.HasElasticWarning)
+            this.RaisePropertyChanged(nameof(HasElasticWarning));
+        if (previous.ElasticSourceIcon != current.ElasticSourceIcon)
+            this.RaisePropertyChanged(nameof(ElasticSourceIcon));
     }
+
+    private MainSnapshot Snapshot() =>
+        new(
+            FileCount,
+            HasFile,
+            ShowEmpty,
+            LineCount,
+            FileError,
+            HasFileError,
+            HasSearchError,
+            HasElasticSources,
+            HasElasticWarning,
+            ElasticSourceIcon
+        );
 
     private void ApplyElasticTimeRange()
     {
@@ -590,4 +616,17 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
         return "#FFFFFF";
     }
+
+    private readonly record struct MainSnapshot(
+        int FileCount,
+        bool HasFile,
+        bool ShowEmpty,
+        int LineCount,
+        string? FileError,
+        bool HasFileError,
+        bool HasSearchError,
+        bool HasElasticSources,
+        bool HasElasticWarning,
+        string ElasticSourceIcon
+    );
 }
