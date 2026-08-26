@@ -14,6 +14,7 @@ internal sealed class FakeElasticApiClient : IElasticApiClient
     public Exception? ElasticsearchError { get; set; }
     public Exception? HealthError { get; set; }
     public IReadOnlyList<ElasticDataViewSummary> DataViews { get; set; } = [];
+    public IReadOnlyList<ElasticDataViewField> DataViewFields { get; set; } = [];
     public List<string?> DataViewSecrets { get; } = [];
 
     public Task<IReadOnlyList<ElasticDataViewSummary>> GetDataViewsAsync(
@@ -52,7 +53,7 @@ internal sealed class FakeElasticApiClient : IElasticApiClient
                 id,
                 view?.DataViewTitle ?? c.DataViewTitle!,
                 view?.TimeFieldName ?? c.TimeFieldName,
-                []
+                DataViewFields
             )
         );
     }

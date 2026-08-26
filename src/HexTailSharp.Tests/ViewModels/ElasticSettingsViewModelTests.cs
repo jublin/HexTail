@@ -314,6 +314,72 @@ public sealed class ElasticSettingsViewModelTests
     }
 
     [Fact]
+    public async Task StateSync_PreservesUnsavedElasticConnectionDraft()
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var state = new AppState(new LogSourceService(), new TestPersistence());
+        await using var owner = new MainWindowViewModel(
+            state,
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        var editor = Assert.Single(owner.Settings.ElasticConnections);
+        editor.AddViewCommand.Execute().Subscribe();
+
+        owner.Settings.Sync(new AppSettings());
+
+        Assert.Same(editor, Assert.Single(owner.Settings.ElasticConnections));
+        Assert.Single(editor.Views);
+    }
+
+    [Fact]
+    public async Task DataViewReload_PreservesSelectedOutputFields()
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var connection = new ElasticConnectionSettings
+        {
+            Id = "c1",
+            Name = "ops",
+            KibanaUrl = "https://kibana/",
+            ElasticsearchUrl = "https://elastic/",
+            Views =
+            [
+                new ElasticViewSettings
+                {
+                    Id = "v1",
+                    Name = "Logs",
+                    DataViewId = "view-1",
+                    DataViewTitle = "logs-*",
+                    TimeFieldName = "@timestamp",
+                    OutputFields = ["message"],
+                },
+            ],
+        };
+        var client = new FakeElasticApiClient { DataViewFields = [new("message", "text", true)] };
+        var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            new AppSettings { ElasticConnections = [connection] },
+            new InMemoryCredentialVault(),
+            client
+        );
+        await using var owner = new MainWindowViewModel(
+            state,
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        owner.Settings.Sync(state.Settings);
+        var view = Assert.Single(Assert.Single(owner.Settings.ElasticConnections).Views);
+
+        view.SelectedDataViewId = null;
+        view.SelectedDataViewId = "view-1";
+
+        Assert.True(Assert.Single(view.Fields).IsOutput);
+        Assert.Equal(["message"], view.ToSettings().OutputFields);
+    }
+
+    [Fact]
     public async Task Settings_ExposesElasticSectionAndManualSourceEditors()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();

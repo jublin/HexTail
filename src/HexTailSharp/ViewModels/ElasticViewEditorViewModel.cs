@@ -138,6 +138,10 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
 
     private async Task LoadDataViewAsync(string id)
     {
+        var selectedOutputFields = Fields
+            .Where(field => field.IsOutput)
+            .Select(field => field.Name)
+            .ToHashSet(StringComparer.Ordinal);
         try
         {
             var view = await _owner.GetDataViewAsync(id);
@@ -147,7 +151,12 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             Fields.Clear();
             _fieldSnapshot.Clear();
             foreach (var field in view.Fields)
-                AddField(new ElasticFieldOptionViewModel(field.Name));
+                AddField(
+                    new ElasticFieldOptionViewModel(field.Name)
+                    {
+                        IsOutput = selectedOutputFields.Contains(field.Name),
+                    }
+                );
             this.RaisePropertyChanged(nameof(FieldNames));
             RefreshVisibleFields();
         }

@@ -26,6 +26,7 @@ internal sealed class SettingsViewModel : ReactiveObject
     private ThemeOption _selectedTheme;
     private AppTimeZoneMode _timeZoneMode;
     private ElasticConnectionEditorViewModel? _selectedElasticConnection;
+    private readonly HashSet<string> _syncedElasticConnectionIds = new(StringComparer.Ordinal);
 
     internal SettingsViewModel(MainWindowViewModel owner, IScheduler scheduler)
     {
@@ -311,27 +312,31 @@ internal sealed class SettingsViewModel : ReactiveObject
             Exclusions[index].Sync(settings.GlobalExcludeLabels[index]);
         }
 
-        while (ElasticConnections.Count > settings.ElasticConnections.Count)
-            ElasticConnections.RemoveAt(ElasticConnections.Count - 1);
-        for (
-            var connectionIndex = 0;
-            connectionIndex < settings.ElasticConnections.Count;
-            connectionIndex++
-        )
+        var persistedConnectionIds = settings
+            .ElasticConnections.Select(connection => connection.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        for (var index = ElasticConnections.Count - 1; index >= 0; index--)
+            if (
+                _syncedElasticConnectionIds.Contains(ElasticConnections[index].Id)
+                && !persistedConnectionIds.Contains(ElasticConnections[index].Id)
+            )
+                ElasticConnections.RemoveAt(index);
+        foreach (var connection in settings.ElasticConnections)
         {
-            if (connectionIndex == ElasticConnections.Count)
-            {
-                ElasticConnections.Add(
-                    new ElasticConnectionEditorViewModel(
-                        this,
-                        settings.ElasticConnections[connectionIndex].Id
-                    )
-                );
-                ElasticConnections[connectionIndex]
-                    .Sync(settings.ElasticConnections[connectionIndex]);
-            }
+            if (ElasticConnections.Any(editor => editor.Id == connection.Id))
+                continue;
+            var editor = new ElasticConnectionEditorViewModel(this, connection.Id);
+            ElasticConnections.Add(editor);
+            editor.Sync(connection);
         }
-        SelectedElasticConnection ??= ElasticConnections.FirstOrDefault();
+        _syncedElasticConnectionIds.Clear();
+        foreach (var id in persistedConnectionIds)
+            _syncedElasticConnectionIds.Add(id);
+        if (
+            SelectedElasticConnection is null
+            || !ElasticConnections.Contains(SelectedElasticConnection)
+        )
+            SelectedElasticConnection = ElasticConnections.FirstOrDefault();
     }
 
     internal Task CommitLabelAsync(int index, string text, Color color, bool showInOpenFile)
