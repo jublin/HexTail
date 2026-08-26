@@ -15,6 +15,8 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     private bool _isTesting;
     private string _name = string.Empty;
     private string? _status;
+    private string? _lastTestedKibanaUrl;
+    private string? _lastTestedElasticsearchUrl;
 
     public ElasticConnectionEditorViewModel(SettingsViewModel owner, string id)
     {
@@ -80,6 +82,8 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         ElasticsearchUrl = settings.ElasticsearchUrl;
         AuthMode = settings.AuthMode;
         Username = settings.Username ?? string.Empty;
+        _lastTestedKibanaUrl = settings.KibanaUrl;
+        _lastTestedElasticsearchUrl = settings.ElasticsearchUrl;
         DataViews.Clear();
         foreach (
             var view in settings
@@ -137,11 +141,22 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         Status = "Checking…";
         try
         {
+            var refreshDataViews =
+                DataViews.Count == 0
+                || !string.Equals(_lastTestedKibanaUrl, KibanaUrl, StringComparison.Ordinal)
+                || !string.Equals(
+                    _lastTestedElasticsearchUrl,
+                    ElasticsearchUrl,
+                    StringComparison.Ordinal
+                );
             var viewsTask = GetDataViewsAsync();
             var elasticsearchTask = _owner.CheckElasticsearchAsync(ToSettings(), Secret);
             await Task.WhenAll(viewsTask, elasticsearchTask);
             var views = await viewsTask;
-            UpdateDataViews(views);
+            if (refreshDataViews)
+                UpdateDataViews(views);
+            _lastTestedKibanaUrl = KibanaUrl;
+            _lastTestedElasticsearchUrl = ElasticsearchUrl;
             Status =
                 $"Connected ({views.Count} data view{(views.Count == 1 ? string.Empty : "s")})";
         }
