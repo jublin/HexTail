@@ -23,7 +23,8 @@ public sealed record ElasticSearchRequest(
     string FilterField,
     string FilterValue,
     IReadOnlyList<string> OutputFields,
-    IReadOnlyList<JsonElement>? SearchAfter = null
+    IReadOnlyList<JsonElement>? SearchAfter = null,
+    bool SortDescending = false
 );
 
 public sealed record ElasticHit(

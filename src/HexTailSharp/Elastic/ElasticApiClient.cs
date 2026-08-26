@@ -162,7 +162,10 @@ public sealed class ElasticApiClient : IElasticApiClient
             ["query"] = new { @bool = new { filter = filters } },
             ["sort"] = new object[]
             {
-                new Dictionary<string, string> { [request.TimeFieldName] = "asc" },
+                new Dictionary<string, string>
+                {
+                    [request.TimeFieldName] = request.SortDescending ? "desc" : "asc",
+                },
                 "_shard_doc",
             },
             ["_source"] = true,

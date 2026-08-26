@@ -44,6 +44,44 @@ public sealed class ElasticTailerTests
     }
 
     [Fact]
+    public async Task PollOnce_LimitsInitialBatchToNewestTenThousandLines()
+    {
+        using var sortDocument = JsonDocument.Parse("[1]");
+        var baseTime = new DateTimeOffset(2026, 8, 20, 10, 0, 0, TimeSpan.Zero);
+        var hits = Enumerable
+            .Range(1, 10_001)
+            .Reverse()
+            .Select(index => new ElasticHit(
+                $"id-{index}",
+                baseTime.AddSeconds(index),
+                new Line($"line-{index}"),
+                [sortDocument.RootElement[0].Clone()]
+            ));
+        var client = new FakeElasticApiClient();
+        foreach (var page in hits.Chunk(ElasticTailer.PageSize))
+            client.Pages.Enqueue(new ElasticSearchPage("pit-1", page));
+
+        var channel = Channel.CreateUnbounded<SourceEvent>();
+        var connection = Connection();
+        await using var tailer = new ElasticTailer(
+            connection,
+            connection.Views[0],
+            connection.Views[0].Sources[0],
+            "secret",
+            client,
+            channel.Writer,
+            () => new DateTimeOffset(2026, 8, 20, 10, 5, 0, TimeSpan.Zero)
+        );
+
+        await tailer.PollOnceAsync(CancellationToken.None);
+
+        var lines = Assert.IsType<SourceLines>(await channel.Reader.ReadAsync());
+        Assert.Equal(10_000, lines.Lines.Count);
+        Assert.Equal("line-2", lines.Lines[0].Raw);
+        Assert.Equal("line-10001", lines.Lines[^1].Raw);
+    }
+
+    [Fact]
     public async Task PollOnce_UsesViewDataViewTitle()
     {
         var client = new FakeElasticApiClient();

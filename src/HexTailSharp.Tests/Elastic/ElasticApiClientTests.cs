@@ -97,7 +97,8 @@ public sealed class ElasticApiClientTests
             DateTimeOffset.Parse("2026-08-25T12:05:00Z"),
             "service.name",
             "api",
-            ["message"]
+            ["message"],
+            SortDescending: true
         );
 
         await client.SearchAsync(connection, null, "pit-1", request);
@@ -110,6 +111,10 @@ public sealed class ElasticApiClientTests
         Assert.Equal(2, filters.GetArrayLength());
         Assert.Equal("match_phrase", filters[0].EnumerateObject().Single().Name);
         Assert.Equal("range", filters[1].EnumerateObject().Single().Name);
+        Assert.Equal(
+            "desc",
+            body.RootElement.GetProperty("sort")[0].GetProperty("@timestamp").GetString()
+        );
     }
 
     [Fact]

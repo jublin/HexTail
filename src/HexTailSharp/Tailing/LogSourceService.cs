@@ -61,7 +61,8 @@ public sealed class LogSourceService : IAsyncDisposable
             secret,
             client,
             _channel.Writer,
-            now
+            now,
+            options: _options
         );
         lock (_gate)
             _tailers.Add(tailer);
