@@ -599,6 +599,18 @@ public sealed class AppState : IAsyncDisposable
     public bool DrainTailerEvents()
     {
         var changed = false;
+        var pendingLines = new Dictionary<string, List<Line>>(StringComparer.Ordinal);
+
+        void FlushLines(string sourceId)
+        {
+            if (!pendingLines.Remove(sourceId, out var lines) || lines.Count == 0)
+                return;
+            FileTabState? tab;
+            lock (_gate)
+                tab = _files.FirstOrDefault(file => file.Id == sourceId);
+            tab?.Buffer.Append(lines);
+        }
+
         while (_tailers.Events.TryRead(out var sourceEvent))
         {
             FileTabState? tab;
@@ -611,22 +623,30 @@ public sealed class AppState : IAsyncDisposable
             {
                 case SourceLines newLines:
                     tab.Error = null;
-                    tab.Buffer.Append(newLines.Lines);
+                    if (!pendingLines.TryGetValue(sourceEvent.SourceId, out var lines))
+                        pendingLines[sourceEvent.SourceId] = lines = [];
+                    lines.AddRange(newLines.Lines);
                     break;
                 case SourceReset:
+                    FlushLines(sourceEvent.SourceId);
                     tab.Error = null;
                     tab.Buffer.Clear();
                     break;
                 case SourceError error:
+                    FlushLines(sourceEvent.SourceId);
                     tab.Error = $"Source error: {error.Message}";
                     break;
                 case SourceRecovered:
+                    FlushLines(sourceEvent.SourceId);
                     tab.Error = null;
                     break;
             }
 
             changed = true;
         }
+
+        foreach (var sourceId in pendingLines.Keys.ToArray())
+            FlushLines(sourceId);
 
         if (changed)
             NotifyChanged();

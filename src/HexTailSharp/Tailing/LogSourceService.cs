@@ -22,6 +22,8 @@ public sealed class LogSourceService : IAsyncDisposable
     /// <summary>Stream of events from all started tailers. Drained by the state layer each frame.</summary>
     public ChannelReader<SourceEvent> Events => _channel.Reader;
 
+    internal bool Publish(SourceEvent sourceEvent) => _channel.Writer.TryWrite(sourceEvent);
+
     /// <summary>
     /// Starts a background tailer for <paramref name="path"/>. The tailer reads the current
     /// file contents and emits an initial <see cref="NewLines"/> batch, then watches for

@@ -288,6 +288,27 @@ public sealed class AppStateTests
     }
 
     [Fact]
+    public async Task DrainTailerEvents_CoalescesLineBatchesPerSource()
+    {
+        var path = CreateTempFile(string.Empty);
+        await using var tailers = NewTailers();
+        await using var state = new AppState(tailers, new MemoryPersistence());
+        var tab = await state.OpenFileAsync(path, save: false);
+        var bufferChanges = 0;
+        tab.Buffer.Changed += _ => bufferChanges++;
+        var notifications = 0;
+        state.Changed += () => notifications++;
+
+        Assert.True(tailers.Publish(new SourceLines(tab.Id, [new Line("one")])));
+        Assert.True(tailers.Publish(new SourceLines(tab.Id, [new Line("two")])));
+
+        Assert.True(state.DrainTailerEvents());
+        Assert.Equal(1, bufferChanges);
+        Assert.Equal(1, notifications);
+        Assert.Equal(["one", "two"], tab.Buffer.Lines.Select(line => line.Raw));
+    }
+
+    [Fact]
     public async Task Files_ReturnsSnapshotWhileWorkspaceChanges()
     {
         var path = CreateTempFile(string.Empty);
