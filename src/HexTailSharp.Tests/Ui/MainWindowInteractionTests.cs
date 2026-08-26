@@ -525,6 +525,77 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
+    public async Task SwitchingFilesPreservesEachFilesFollowState()
+    {
+        var firstPath = Path.GetTempFileName();
+        var secondPath = Path.GetTempFileName();
+        await File.WriteAllLinesAsync(
+            firstPath,
+            Enumerable.Range(0, 200).Select(index => $"first {index}")
+        );
+        await File.WriteAllLinesAsync(
+            secondPath,
+            Enumerable.Range(0, 200).Select(index => $"second {index}")
+        );
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            await viewModel.OpenPathsCommand.Execute([firstPath, secondPath]);
+            await WaitFor(() =>
+            {
+                viewModel.State.DrainTailerEvents();
+                return viewModel.Files.All(file => file.Model.Buffer.Count == 200);
+            });
+
+            var first = viewModel.Files[0];
+            var second = viewModel.Files[1];
+            viewModel.State.SelectFile(first.Model);
+            Dispatcher.UIThread.RunJobs();
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            var firstButton = window
+                .GetVisualDescendants()
+                .OfType<Button>()
+                .Single(button =>
+                    ReferenceEquals(button.DataContext, first)
+                    && Equals(button.CommandParameter, first)
+                    && button.Content is TextBlock
+                );
+            var secondButton = window
+                .GetVisualDescendants()
+                .OfType<Button>()
+                .Single(button =>
+                    ReferenceEquals(button.DataContext, second)
+                    && Equals(button.CommandParameter, second)
+                    && button.Content is TextBlock
+                );
+
+            Click(firstButton);
+            Dispatcher.UIThread.RunJobs();
+            var following = window
+                .GetVisualDescendants()
+                .OfType<ToggleSwitch>()
+                .Single(toggle => Equals(toggle.OnContent, "Following"));
+            following.IsChecked = false;
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(first.Model.FollowAll);
+            Assert.True(second.Model.FollowAll);
+            Click(secondButton);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(second.Model.FollowAll);
+            Assert.False(first.Model.FollowAll);
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(firstPath);
+            File.Delete(secondPath);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task OpenShortcutAcceptsControlOrMeta()
     {
         var viewModel = new MainWindowViewModel(

@@ -16,6 +16,7 @@ public partial class LogView : UserControl
     private ScrollViewer? _scrollViewer;
     private bool _scrollAttached;
     private bool _scrollingToEnd;
+    private bool _ignoreScrollChanges;
 
     public LogView()
     {
@@ -37,9 +38,13 @@ public partial class LogView : UserControl
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         }
 
+        if (_scrollViewer is not null)
+            _scrollViewer.ScrollChanged -= OnScrollChanged;
+
         _viewModel = DataContext as LogViewViewModel;
         _scrollAttached = false;
         _scrollViewer = null;
+        _ignoreScrollChanges = _viewModel is not null;
         if (_viewModel is not null)
         {
             _viewModel.Lines.CollectionChanged += OnLinesChanged;
@@ -51,7 +56,17 @@ public partial class LogView : UserControl
             () =>
             {
                 TryAttachScrollHandler();
+                RequestScrollLogToEnd();
                 ScrollContextToSelected();
+                var viewModel = _viewModel;
+                Dispatcher.UIThread.Post(
+                    () =>
+                    {
+                        if (ReferenceEquals(_viewModel, viewModel))
+                            _ignoreScrollChanges = false;
+                    },
+                    DispatcherPriority.Render
+                );
             },
             DispatcherPriority.Background
         );
@@ -110,12 +125,15 @@ public partial class LogView : UserControl
 
     private void OnScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        if (_scrollingToEnd || _viewModel is null || _scrollViewer is null)
-            return;
         if (
-            _scrollViewer.Extent.Height - _scrollViewer.Viewport.Height - _scrollViewer.Offset.Y
-            > 8
+            _scrollingToEnd
+            || _ignoreScrollChanges
+            || _viewModel is null
+            || _scrollViewer is not { } viewer
+            || !ReferenceEquals(sender, viewer)
         )
+            return;
+        if (viewer.Extent.Height - viewer.Viewport.Height - viewer.Offset.Y > 8)
             _viewModel.IsFollowing = false;
     }
 
