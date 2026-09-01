@@ -57,8 +57,10 @@ flowchart LR
 
 ## Important behavior
 
-- `.logfmt` paths use `LogfmtParser`; every other extension uses
-  `PlainTextParser`.
+- `.logfmt` paths use `LogfmtParser`, `.jsonl` paths use `JsonlParser`, and every
+  other extension uses `PlainTextParser`.
+- `JsonlParser` preserves raw JSONL text and exposes flattened object leaf fields;
+  malformed or non-object lines remain plain text.
 - Search results are buffer-relative. When old lines roll out, result indices
   are rebased with the buffer.
 - Global exclusions hide matching rows from visible log and context lists but

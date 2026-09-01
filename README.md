@@ -3,7 +3,7 @@
 ![HexTail](assets/hextail-readme-image.png)
 
 HexTail is a native cross-platform desktop application for watching live log
-files. It opens plaintext and `.logfmt` files, keeps multiple files and
+files. It opens plaintext, `.logfmt`, and `.jsonl` files, keeps multiple files and
 searches in separate tabs, and renders a bounded, virtualized log view without
 a browser, WebView, JavaScript runtime, or local HTTP server.
 
@@ -71,9 +71,10 @@ dotnet run --project src/HexTailSharp/HexTailSharp.csproj -- \
 
 ### Input formats
 
-Files with a `.logfmt` extension use the built-in `key=value` parser. All
-other files use the plain-text parser. Log lines remain displayed as raw text;
-malformed logfmt lines are treated as plain text.
+Files with a `.logfmt` extension use the built-in `key=value` parser. Files with
+a `.jsonl` extension parse JSON object fields, flattening nested objects with
+dot-separated keys. All log lines remain displayed as raw text; malformed
+logfmt/JSONL lines and non-object JSONL values are treated as plain text.
 
 The default in-memory limit is 100,000 lines per file. It can be changed in
 `AppSettings.MaxLines` in the application code.

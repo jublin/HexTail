@@ -322,10 +322,29 @@ public sealed class AppStateTests
     }
 
     [Fact]
-    public void LogParserSelector_UsesLogfmtOnlyForLogfmtExtension()
+    public void LogParserSelector_UsesFormatSpecificParsers()
     {
         Assert.IsType<LogfmtParser>(LogParserSelector.ForPath("app.logfmt"));
+        Assert.IsType<JsonlParser>(LogParserSelector.ForPath("events.JSONL"));
         Assert.IsType<PlainTextParser>(LogParserSelector.ForPath("app.log"));
+    }
+
+    [Fact]
+    public void LogParserSelector_ParsesJsonlObjectFields()
+    {
+        const string raw =
+            "{\"message\":\"ready\",\"service\":{\"name\":\"api\"},\"tags\":[\"a\",\"b\"],\"count\":42}";
+
+        var line = LogParserSelector.ForPath("events.jsonl").Parse(raw);
+
+        Assert.Equal(raw, line.Raw);
+        var fields = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(
+            line.ParsedFields
+        );
+        Assert.Equal("ready", fields["message"]);
+        Assert.Equal("api", fields["service.name"]);
+        Assert.Equal("[\"a\",\"b\"]", fields["tags"]);
+        Assert.Equal("42", fields["count"]);
     }
 
     private static LogSourceService NewTailers() =>

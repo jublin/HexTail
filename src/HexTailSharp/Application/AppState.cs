@@ -1019,12 +1019,13 @@ public sealed class AppState : IAsyncDisposable
 
 public static class LogParserSelector
 {
-    public static ILogParser ForPath(string path) =>
-        string.Equals(
-            System.IO.Path.GetExtension(path),
-            ".logfmt",
-            StringComparison.OrdinalIgnoreCase
-        )
-            ? new LogfmtParser()
+    public static ILogParser ForPath(string path)
+    {
+        var extension = System.IO.Path.GetExtension(path);
+        return string.Equals(extension, ".logfmt", StringComparison.OrdinalIgnoreCase)
+                ? new LogfmtParser()
+            : string.Equals(extension, ".jsonl", StringComparison.OrdinalIgnoreCase)
+                ? new JsonlParser()
             : new PlainTextParser();
+    }
 }

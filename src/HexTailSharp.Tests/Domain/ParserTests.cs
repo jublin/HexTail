@@ -6,6 +6,7 @@ public class ParserTests
 {
     private readonly PlainTextParser _plain = new();
     private readonly LogfmtParser _logfmt = new();
+    private readonly JsonlParser _jsonl = new();
 
     [Fact]
     public void PlainText_PreservesRawText_WithNoParsedFields()
@@ -22,6 +23,40 @@ public class ParserTests
         var line = _plain.Parse(string.Empty);
 
         Assert.Equal(string.Empty, line.Raw);
+        Assert.Null(line.ParsedFields);
+    }
+
+    [Fact]
+    public void Jsonl_ParsesObjectFields_AndPreservesRawText()
+    {
+        const string raw =
+            "{\"message\":\"ready\",\"service\":{\"name\":\"api\"},\"tags\":[\"a\",\"b\"],\"count\":42,\"enabled\":true,\"empty\":null}";
+
+        var line = _jsonl.Parse(raw);
+
+        Assert.Equal(raw, line.Raw);
+        var fields = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(
+            line.ParsedFields
+        );
+        Assert.Equal(5, fields.Count);
+        Assert.Equal("ready", fields["message"]);
+        Assert.Equal("api", fields["service.name"]);
+        Assert.Equal("[\"a\",\"b\"]", fields["tags"]);
+        Assert.Equal("42", fields["count"]);
+        Assert.Equal("true", fields["enabled"]);
+        Assert.DoesNotContain("empty", fields.Keys);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not json")]
+    [InlineData("[]")]
+    [InlineData("null")]
+    public void Jsonl_MalformedOrNonObjectLine_IsRawOnly(string raw)
+    {
+        var line = _jsonl.Parse(raw);
+
+        Assert.Equal(raw, line.Raw);
         Assert.Null(line.ParsedFields);
     }
 

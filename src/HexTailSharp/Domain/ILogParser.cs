@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 
 namespace HexTailSharp.Domain;
 
@@ -12,6 +13,64 @@ public interface ILogParser
 public sealed class PlainTextParser : ILogParser
 {
     public Line Parse(string rawText) => new(rawText);
+}
+
+/// <summary>
+/// Parses JSON Lines objects into flattened leaf fields while preserving the
+/// original line text. Malformed or non-object lines are treated as plain text.
+/// </summary>
+public sealed class JsonlParser : ILogParser
+{
+    public Line Parse(string rawText)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(rawText);
+            if (document.RootElement.ValueKind is not JsonValueKind.Object)
+                return new Line(rawText);
+
+            var fields = new Dictionary<string, string>(StringComparer.Ordinal);
+            Flatten(document.RootElement, null, fields);
+            return new Line(rawText, fields);
+        }
+        catch (JsonException)
+        {
+            return new Line(rawText);
+        }
+    }
+
+    private static void Flatten(
+        JsonElement element,
+        string? prefix,
+        IDictionary<string, string> result
+    )
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            if (
+                prefix is not null
+                && element.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
+            )
+                result[prefix] = Compact(element);
+            return;
+        }
+
+        foreach (var property in element.EnumerateObject())
+        {
+            var key = prefix is null ? property.Name : $"{prefix}.{property.Name}";
+            if (property.Value.ValueKind == JsonValueKind.Object)
+                Flatten(property.Value, key, result);
+            else if (
+                property.Value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
+            )
+                result[key] = Compact(property.Value);
+        }
+    }
+
+    private static string Compact(JsonElement element) =>
+        element.ValueKind == JsonValueKind.String
+            ? element.GetString() ?? string.Empty
+            : element.GetRawText();
 }
 
 /// <summary>
