@@ -48,6 +48,20 @@ dotnet run --project src/HexTail/HexTail.csproj -- \
   /var/log/application.log /var/log/worker.log
 ```
 
+## Generate test logs
+
+Generate a continuously appended plaintext log for a live tailing session:
+
+```bash
+dotnet run --project src/HexTail.LogGenerator -- --output /tmp/hextail.log --interval 250 --truncate
+```
+
+Press `Ctrl+C` to stop it. Generate exactly 100 JSONL records instead:
+
+```bash
+dotnet run --project src/HexTail.LogGenerator -- --format jsonl --output /tmp/hextail.jsonl --count 100 --truncate
+```
+
 ## Using HexTail
 
 1. Open one or more files with the folder button, `Ctrl+O`/`Cmd+O`, or
