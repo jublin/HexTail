@@ -5,7 +5,7 @@
       "label": "dotnet: build",
       "type": "process",
       "command": "dotnet",
-      "args": ["build", "${workspaceFolder}/src/HexTailSharp.slnx"],
+      "args": ["build", "${workspaceFolder}/src/HexTail.slnx"],
       "group": {
         "kind": "build",
         "isDefault": true
@@ -16,7 +16,7 @@
       "label": "dotnet: test",
       "type": "process",
       "command": "dotnet",
-      "args": ["test", "${workspaceFolder}/src/HexTailSharp.Tests/HexTailSharp.Tests.csproj"],
+      "args": ["test", "${workspaceFolder}/src/HexTail.Tests/HexTail.Tests.csproj"],
       "group": "test",
       "problemMatcher": "$msCompile"
     },
@@ -24,14 +24,14 @@
       "label": "dotnet: publish desktop",
       "type": "process",
       "command": "dotnet",
-      "args": ["publish", "${workspaceFolder}/src/HexTailSharp/HexTailSharp.csproj", "-c", "Release"],
+      "args": ["publish", "${workspaceFolder}/src/HexTail/HexTail.csproj", "-c", "Release"],
       "problemMatcher": "$msCompile"
     },
     {
       "label": "dotnet: run desktop",
       "type": "process",
       "command": "dotnet",
-      "args": ["run", "--project", "${workspaceFolder}/src/HexTailSharp/HexTailSharp.csproj"],
+      "args": ["run", "--project", "${workspaceFolder}/src/HexTail/HexTail.csproj"],
       "problemMatcher": "$msCompile"
     }
   ]

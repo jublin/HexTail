@@ -1,0 +1,37 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTail.ViewModels"
+  xmlns:views="using:HexTail.Views"
+  x:Class="HexTail.Views.LogLineView"
+  x:DataType="vm:LogLineViewModel"
+>
+  <Border
+    Background="{Binding Background}"
+    BorderBrush="{DynamicResource BorderBrush}"
+    BorderThickness="0,0,0,1"
+    Padding="{Binding RowPadding}"
+    Tapped="OnTapped"
+    DoubleTapped="OnDoubleTapped"
+  >
+    <StackPanel Spacing="3">
+      <views:HighlightedTextBlock
+        Segments="{Binding Segments}"
+        FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+        FontSize="{Binding FontSize}"
+        Foreground="{Binding Foreground}"
+        TextWrapping="NoWrap"
+        TextTrimming="CharacterEllipsis"
+      />
+      <TextBlock
+        Text="{Binding ParsedFieldsText}"
+        FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+        FontSize="{Binding FontSize}"
+        Foreground="{DynamicResource MutedBrush}"
+        TextWrapping="Wrap"
+        Padding="16,2,0,6"
+        IsVisible="{Binding FieldsVisible}"
+      />
+    </StackPanel>
+  </Border>
+</UserControl>

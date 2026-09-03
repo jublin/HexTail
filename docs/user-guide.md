@@ -1,4 +1,4 @@
-# HexTailSharp user guide
+# HexTail user guide
 
 ## Elastic log sources
 
@@ -8,6 +8,6 @@ Opening a source loads the previous five minutes and polls every two seconds. So
 
 Passwords and API keys are stored only in the operating-system credential vault and never in `session.json`. Authenticated configuration fails closed when the vault is unavailable. Linux requires an active Secret Service session and `libsecret` (`libsecret-1-dev` on Debian/Ubuntu, `libsecret-devel` on Red Hat, or `libsecret` on Arch).
 
-To smoke-test a native vault, create a temporary authenticated connection, save it, restart HexTailSharp, test the connection, remove it, restart again, and confirm it no longer works. Do not print or copy the credential during the check.
+To smoke-test a native vault, create a temporary authenticated connection, save it, restart HexTail, test the connection, remove it, restart again, and confirm it no longer works. Do not print or copy the credential during the check.
 
 Verification handoff: the save/read/delete round-trip was executed successfully on the current Linux development host. Windows and macOS vault smoke coverage remains outstanding and requires those platforms.

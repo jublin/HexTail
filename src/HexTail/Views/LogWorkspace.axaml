@@ -1,0 +1,114 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTail.ViewModels"
+  xmlns:views="using:HexTail.Views"
+  xmlns:ic="https://github.com/projektanker/icons.avalonia"
+  xmlns:i="using:Avalonia.Xaml.Interactivity"
+  xmlns:behaviors="using:HexTail.Behaviors"
+  x:Class="HexTail.Views.LogWorkspace"
+  x:DataType="vm:MainWindowViewModel"
+>
+  <Grid Background="{DynamicResource SurfaceBrush}" HorizontalAlignment="Stretch">
+    <TextBlock
+      Text="Open a file to start tailing."
+      HorizontalAlignment="Center"
+      VerticalAlignment="Center"
+      Foreground="{DynamicResource MutedBrush}"
+      IsVisible="{Binding ShowEmpty}"
+    />
+    <ContentControl
+      IsVisible="{Binding HasFile}"
+      Content="{Binding SelectedFile}"
+      HorizontalContentAlignment="Stretch"
+    >
+      <ContentControl.ContentTemplate>
+        <DataTemplate x:DataType="vm:FileTabViewModel">
+          <TabControl
+            ItemsSource="{Binding Views}"
+            BorderThickness="2,2,1,0"
+            SelectedIndex="{Binding SelectedViewIndex, Mode=TwoWay}"
+            Classes="log-tabs"
+          >
+            <i:Interaction.Behaviors>
+              <behaviors:TabReorderBehavior FixedHeaderCount="1" />
+            </i:Interaction.Behaviors>
+            <TabControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:LogViewViewModel">
+                <Border
+                  Classes="search-tab"
+                  Background="{DynamicResource RaisedAltBrush}"
+                  BorderBrush="{Binding HighlightBrush}"
+                  BorderThickness="2,2,0,0"
+                  CornerRadius="4"
+                  Padding="{Binding Workspace.Settings.SecondaryPadding}"
+                  MinHeight="{Binding Workspace.Settings.SearchTabHeight}"
+                >
+                  <Grid
+                    ColumnDefinitions="*,Auto,*"
+                    MinWidth="52"
+                    ColumnSpacing="2"
+                    Margin="2,0,0,0"
+                  >
+                    <TextBlock
+                      Text="{Binding Header}"
+                      Foreground="{DynamicResource TextBrush}"
+                      FontSize="{Binding Workspace.Settings.SecondaryFontSize}"
+                      FontWeight="Normal"
+                      HorizontalAlignment="Left"
+                      VerticalAlignment="Center"
+                    />
+                    <TextBlock
+                      Grid.Column="1"
+                      Margin="2,0"
+                      Text="{Binding MatchSummary}"
+                      Foreground="{DynamicResource MutedBrush}"
+                      FontSize="{Binding Workspace.Settings.SecondaryFontSize}"
+                      FontWeight="Normal"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      IsVisible="{Binding IsSearchView}"
+                    />
+                    <Button
+                      Grid.Column="2"
+                      Classes="icon tab-close search-close"
+                      Width="{Binding Workspace.Settings.SecondaryCloseSize}"
+                      Height="{Binding Workspace.Settings.SecondaryCloseSize}"
+                      Command="{Binding Workspace.RemoveSearchCommand}"
+                      CommandParameter="{Binding}"
+                      HorizontalAlignment="Right"
+                      VerticalAlignment="Center"
+                      HorizontalContentAlignment="Right"
+                      IsVisible="{Binding IsSearchView}"
+                      ToolTip.Tip="Clear search"
+                      AutomationProperties.Name="Clear search"
+                    >
+                      <ic:Icon
+                        Value="mdi-close"
+                        FontSize="{Binding Workspace.Settings.SecondaryCloseButtonSize}"
+                        Foreground="{DynamicResource AccentBrush}"
+                      />
+                    </Button>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </TabControl.ItemTemplate>
+            <TabControl.ContentTemplate>
+              <DataTemplate x:DataType="vm:LogViewViewModel">
+                <views:LogView />
+              </DataTemplate>
+            </TabControl.ContentTemplate>
+          </TabControl>
+        </DataTemplate>
+      </ContentControl.ContentTemplate>
+    </ContentControl>
+    <TextBlock
+      x:Name="SearchError"
+      Classes="error"
+      Margin="12,0"
+      VerticalAlignment="Top"
+      IsVisible="{Binding HasSearchError}"
+      Text="{Binding SearchError}"
+    />
+  </Grid>
+</UserControl>

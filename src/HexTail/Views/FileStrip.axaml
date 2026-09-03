@@ -1,0 +1,74 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTail.ViewModels"
+  xmlns:ic="https://github.com/projektanker/icons.avalonia"
+  xmlns:i="using:Avalonia.Xaml.Interactivity"
+  xmlns:behaviors="using:HexTail.Behaviors"
+  x:Class="HexTail.Views.FileStrip"
+  x:DataType="vm:MainWindowViewModel"
+>
+  <TabControl
+    ItemsSource="{Binding Files}"
+    FontSize="{Binding Settings.FileStripFontSize}"
+    Height="{Binding Settings.FileStripHeight}"
+    HorizontalContentAlignment="Stretch"
+    Background="{DynamicResource SurfaceBrush}"
+    HorizontalAlignment="Stretch"
+    VerticalAlignment="Bottom"
+  >
+    <i:Interaction.Behaviors><behaviors:TabReorderBehavior /></i:Interaction.Behaviors>
+    <TabControl.ContentTemplate>
+      <DataTemplate><Panel /></DataTemplate>
+    </TabControl.ContentTemplate>
+    <TabControl.ItemTemplate>
+      <DataTemplate x:DataType="vm:FileTabViewModel">
+        <Border
+          Classes="file-tab"
+          Height="{Binding Workspace.Settings.TabHeight}"
+          HorizontalAlignment="Stretch"
+          VerticalAlignment="Bottom"
+          BorderBrush="{Binding SelectedTabBrush}"
+          Background="{DynamicResource SurfaceBrush}"
+          Classes.selected="{Binding IsSelected}"
+          ToolTip.Tip="{Binding Model.Source.ToolTip}"
+        >
+          <Grid ColumnDefinitions=".9*, .1*">
+            <Button
+              MinHeight="{Binding Workspace.Settings.FileStripHeight}"
+              Command="{Binding $parent[UserControl].DataContext.SelectFileCommand}"
+              CommandParameter="{Binding}"
+              HorizontalAlignment="Left"
+              HorizontalContentAlignment="Left"
+              VerticalContentAlignment="Center"
+              Padding="{Binding Workspace.Settings.TabPadding}"
+              Height="{Binding Workspace.Settings.TabHeight}"
+            >
+              <TextBlock
+                Text="{Binding DisplayName}"
+                FontSize="{Binding Workspace.Settings.FileStripFontSize}"
+              />
+            </Button>
+            <Button
+              Grid.Column="1"
+              Classes="icon tab-close"
+              Width="{Binding Workspace.Settings.TabCloseSize}"
+              Height="{Binding Workspace.Settings.TabCloseSize}"
+              HorizontalAlignment="Right"
+              Background="Transparent"
+              HorizontalContentAlignment="Right"
+              VerticalContentAlignment="Center"
+              VerticalAlignment="Center"
+              ToolTip.Tip="{Binding Model.Source.ToolTip, StringFormat='Close {0}'}"
+              AutomationProperties.Name="{Binding Model.Source.ToolTip, StringFormat='Close {0}'}"
+              Command="{Binding $parent[UserControl].DataContext.CloseFileCommand}"
+              CommandParameter="{Binding}"
+            >
+              <ic:Icon Value="mdi-close" />
+            </Button>
+          </Grid>
+        </Border>
+      </DataTemplate>
+    </TabControl.ItemTemplate>
+  </TabControl>
+</UserControl>

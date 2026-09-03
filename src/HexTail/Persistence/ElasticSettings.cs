@@ -1,0 +1,53 @@
+namespace HexTail.Persistence;
+
+public enum ElasticAuthMode
+{
+    Anonymous,
+    Basic,
+    ApiKey,
+}
+
+public enum AppTimeZoneMode
+{
+    Local,
+    Utc,
+}
+
+public sealed record ElasticConnectionSettings
+{
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public required string KibanaUrl { get; init; }
+    public required string ElasticsearchUrl { get; init; }
+    public ElasticAuthMode AuthMode { get; init; }
+    public string? Username { get; init; }
+    public string? DataViewId { get; init; }
+    public string? DataViewTitle { get; init; }
+    public string? TimeFieldName { get; init; }
+    public string? ServerField { get; init; }
+    public string? NamespaceField { get; init; }
+    public List<string> OutputFields { get; init; } = [];
+    public List<ElasticSourceSettings> Sources { get; init; } = [];
+    public List<ElasticViewSettings> Views { get; init; } = [];
+}
+
+public sealed record ElasticViewSettings
+{
+    public required string Id { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public string? DataViewId { get; init; }
+    public string? DataViewTitle { get; init; }
+    public string? TimeFieldName { get; init; }
+    public string? ServerField { get; init; }
+    public string? NamespaceField { get; init; }
+    public List<string> OutputFields { get; init; } = [];
+    public List<ElasticSourceSettings> Sources { get; init; } = [];
+}
+
+public sealed record ElasticSourceSettings
+{
+    public required string Id { get; init; }
+    public required string ServerValue { get; init; }
+    public string NamespaceValue { get; init; } = string.Empty;
+    public string DisplayName => ServerValue;
+}

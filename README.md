@@ -36,15 +36,15 @@ lookback, and native OS credential storage for authenticated connections.
 ### Run
 
 ```bash
-dotnet restore src/HexTailSharp.slnx
-dotnet run --project src/HexTailSharp/HexTailSharp.csproj -- /path/to/application.log
+dotnet restore src/HexTail.slnx
+dotnet run --project src/HexTail/HexTail.csproj -- /path/to/application.log
 ```
 
 You can also start without a path and use **Open**, drag files onto the window,
 or pass multiple paths:
 
 ```bash
-dotnet run --project src/HexTailSharp/HexTailSharp.csproj -- \
+dotnet run --project src/HexTail/HexTail.csproj -- \
   /var/log/application.log /var/log/worker.log
 ```
 
@@ -91,15 +91,15 @@ that file when a clean first-launch session is needed.
 Restore, build, and test the solution with:
 
 ```bash
-dotnet restore src/HexTailSharp.slnx
-dotnet build src/HexTailSharp.slnx -c Release --no-restore
-dotnet test src/HexTailSharp.Tests/HexTailSharp.Tests.csproj -c Release
+dotnet restore src/HexTail.slnx
+dotnet build src/HexTail.slnx -c Release --no-restore
+dotnet test src/HexTail.Tests/HexTail.Tests.csproj -c Release
 ```
 
 Publish a desktop build for a runtime identifier:
 
 ```bash
-dotnet publish src/HexTailSharp/HexTailSharp.csproj -c Release \
+dotnet publish src/HexTail/HexTail.csproj -c Release \
   -r linux-x64 --self-contained false
 ```
 

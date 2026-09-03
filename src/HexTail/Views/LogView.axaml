@@ -1,0 +1,73 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTail.ViewModels"
+  xmlns:views="using:HexTail.Views"
+  HorizontalAlignment="Stretch"
+  HorizontalContentAlignment="Stretch"
+  VerticalContentAlignment="Stretch"
+  VerticalAlignment="Stretch"
+  x:Class="HexTail.Views.LogView"
+  x:DataType="vm:LogViewViewModel"
+>
+  <Grid x:Name="LogLayout" Background="{DynamicResource SurfaceBrush}">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="*" />
+      <RowDefinition Height="{Binding ContextSplitterHeight}" />
+      <RowDefinition Height="{Binding ContextRowHeight}" />
+    </Grid.RowDefinitions>
+    <ListBox
+      x:Name="LogList"
+      Grid.Row="0"
+      Background="{DynamicResource SurfaceBrush}"
+      BorderThickness="0"
+      ItemsSource="{Binding Lines}"
+    >
+      <ListBox.ItemsPanel>
+        <ItemsPanelTemplate>
+          <VirtualizingStackPanel />
+        </ItemsPanelTemplate>
+      </ListBox.ItemsPanel>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:LogLineViewModel">
+          <views:LogLineView />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <GridSplitter
+      Grid.Row="1"
+      Background="{DynamicResource BorderBrush}"
+      ResizeDirection="Rows"
+      ResizeBehavior="PreviousAndNext"
+      ShowsPreview="False"
+      IsVisible="{Binding ContextVisible}"
+    />
+    <ListBox
+      x:Name="ContextList"
+      Grid.Row="2"
+      Background="{DynamicResource RaisedBrush}"
+      BorderThickness="0"
+      ItemsSource="{Binding ContextLines}"
+      IsVisible="{Binding ContextVisible}"
+    >
+      <ListBox.ItemsPanel>
+        <ItemsPanelTemplate>
+          <VirtualizingStackPanel />
+        </ItemsPanelTemplate>
+      </ListBox.ItemsPanel>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:LogLineViewModel">
+          <views:LogLineView />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <TextBlock
+      Grid.Row="2"
+      Text="No lines to show."
+      Foreground="{DynamicResource MutedBrush}"
+      FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+      Margin="12,8"
+      IsVisible="{Binding ContextEmptyVisible}"
+    />
+  </Grid>
+</UserControl>
