@@ -21,5 +21,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HexTail\HexTail.csproj" />
+    <ProjectReference Include="..\HexTail.LogGenerator\HexTail.LogGenerator.csproj" />
   </ItemGroup>
 </Project>

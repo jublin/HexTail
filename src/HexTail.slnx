@@ -20,5 +20,6 @@
     <File Path="../docs/specs/2026-07-26-search-toggles-design.md" />
   </Folder>
   <Project Path="HexTail.Tests/HexTail.Tests.csproj" />
+  <Project Path="HexTail.LogGenerator/HexTail.LogGenerator.csproj" />
   <Project Path="HexTail/HexTail.csproj" />
 </Solution>
