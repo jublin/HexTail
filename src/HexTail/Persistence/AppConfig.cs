@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HexTail.Domain;
@@ -86,7 +87,18 @@ public sealed record AppSettings
         }
     }
 
-    private static CompiledQuery? CreateGlobalQuery(string query)
+    // Keys are immutable rule strings. Weak keys release compiled regexes when rules
+    // are removed, and keep record copies/serialization independent of cache state.
+    private static readonly ConditionalWeakTable<string, CachedGlobalQuery> GlobalQueries = new();
+
+    private static CompiledQuery? CreateGlobalQuery(string query) =>
+        GlobalQueries
+            .GetValue(query, static text => new CachedGlobalQuery(CompileGlobalQuery(text)))
+            .Query;
+
+    private sealed record CachedGlobalQuery(CompiledQuery? Query);
+
+    private static CompiledQuery? CompileGlobalQuery(string query)
     {
         try
         {

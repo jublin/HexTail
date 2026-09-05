@@ -12,6 +12,29 @@ public class SearchTests
         Assert.Equal(expected, CompiledQuery.DetectMode(query));
     }
 
+    [Theory]
+    [InlineData(MatchMode.Literal, "error")]
+    [InlineData(MatchMode.Regex, "err.*")]
+    public void IsMatch_DoesNotAllocateHighlightCollections(MatchMode mode, string pattern)
+    {
+        var query = new CompiledQuery(pattern, mode, false);
+        Assert.True(query.IsMatch("ERROR request"));
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 1_000; i++)
+            Assert.True(query.IsMatch("ERROR request"));
+        Assert.True(GC.GetAllocatedBytesForCurrentThread() - before < 10_000);
+    }
+
+    [Theory]
+    [InlineData("^", "hello", false)]
+    [InlineData("^|error", " error", true)]
+    [InlineData("a*", "ba", true)]
+    [InlineData("a*", "bbb", false)]
+    public void IsMatch_IgnoresZeroLengthMatches(string pattern, string text, bool expected)
+    {
+        Assert.Equal(expected, new CompiledQuery(pattern, MatchMode.Regex, true).IsMatch(text));
+    }
+
     private static FileBuffer BufferWith(params string[] lines)
     {
         var buffer = new FileBuffer();

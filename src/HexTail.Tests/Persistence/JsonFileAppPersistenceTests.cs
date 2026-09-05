@@ -6,6 +6,25 @@ namespace HexTail.Tests.Persistence;
 public sealed class JsonFileAppPersistenceTests
 {
     [Fact]
+    public void GlobalExclusions_ReuseCompiledQueriesDuringRefresh()
+    {
+        var settings = new AppSettings { GlobalExcludeLabels = [@"health\s+check"] };
+        Assert.True(settings.Excludes("HEALTH CHECK"));
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        for (var i = 0; i < 1_000; i++)
+            Assert.False(settings.Excludes("request completed"));
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        TestContext.Current.TestOutputHelper?.WriteLine(
+            $"1,000 exclusion checks: {allocated:N0} bytes, {timer.Elapsed.TotalMilliseconds:N3} ms"
+        );
+        Assert.True(
+            allocated < 1_000_000,
+            $"1,000 exclusion checks allocated {allocated:N0} bytes in {timer.Elapsed.TotalMilliseconds:N1} ms."
+        );
+    }
+
+    [Fact]
     public void AppConfigJson_RoundTripsElasticSettingsWithoutSecretMaterial()
     {
         var connection = new ElasticConnectionSettings

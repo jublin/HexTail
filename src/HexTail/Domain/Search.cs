@@ -66,7 +66,22 @@ public sealed class CompiledQuery
         return Mode is MatchMode.Literal ? LiteralHighlights(text) : RegexHighlights(text);
     }
 
-    public bool IsMatch(string text) => GetHighlights(text).Count > 0;
+    public bool IsMatch(string text)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(Query))
+            return false;
+        if (Mode is MatchMode.Literal)
+            return text.Contains(
+                Query,
+                CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase
+            );
+
+        // Preserve the highlight contract: a zero-length match is not a visible hit.
+        foreach (var match in _regex!.EnumerateMatches(text))
+            if (match.Length > 0)
+                return true;
+        return false;
+    }
 
     private List<HighlightRange> LiteralHighlights(string text)
     {
