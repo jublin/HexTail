@@ -181,6 +181,111 @@ public sealed class ElasticTailerTests
         Assert.Equal("logs-*", client.Searches[0].DataViewTitle);
     }
 
+    [Fact]
+    public async Task IncrementalPoll_StreamsBoundedPagesAndDoesNotReplayCursor()
+    {
+        var client = new FakeElasticApiClient();
+        var time = new DateTimeOffset(2026, 8, 20, 10, 0, 0, TimeSpan.Zero);
+        client.Pages.Enqueue(
+            new ElasticSearchPage(
+                "pit-1",
+                [new ElasticHit("initial", time, new Line("initial"), [])]
+            )
+        );
+        var connection = Connection();
+        var channel = Channel.CreateUnbounded<SourceEvent>();
+        await using var tailer = new ElasticTailer(
+            connection,
+            connection.Views[0],
+            connection.Views[0].Sources[0],
+            "secret",
+            client,
+            channel.Writer,
+            () => time.AddMinutes(5)
+        );
+        await tailer.PollOnceAsync(TestContext.Current.CancellationToken);
+        Assert.True(channel.Reader.TryRead(out _));
+        var hits = Enumerable
+            .Range(1, 2_501)
+            .Select(i => new ElasticHit(
+                $"id-{i}",
+                time.AddMilliseconds(i),
+                new Line($"line-{i}"),
+                []
+            ))
+            .ToArray();
+        foreach (var page in hits.Chunk(ElasticTailer.PageSize))
+            client.Pages.Enqueue(new ElasticSearchPage("pit-1", page));
+        await tailer.PollOnceAsync(TestContext.Current.CancellationToken);
+        var actual = new List<Line>();
+        while (channel.Reader.TryRead(out var item))
+        {
+            var batch = Assert.IsType<SourceLines>(item);
+            Assert.InRange(batch.Lines.Count, 1, ElasticTailer.PageSize);
+            actual.AddRange(batch.Lines);
+        }
+        Assert.Equal(hits.Select(hit => hit.Line), actual);
+        client.Pages.Enqueue(new ElasticSearchPage("pit-1", [hits[^1]]));
+        await tailer.PollOnceAsync(TestContext.Current.CancellationToken);
+        Assert.False(channel.Reader.TryRead(out _));
+    }
+
+    [Fact]
+    public async Task IncrementalPoll_FailureAfterDeliveredPageResumesWithoutDuplicates()
+    {
+        var client = new FakeElasticApiClient();
+        var time = new DateTimeOffset(2026, 8, 20, 10, 0, 0, TimeSpan.Zero);
+        var initial = new ElasticHit("initial", time, new Line("initial"), []);
+        client.Pages.Enqueue(new ElasticSearchPage("pit-1", [initial]));
+        var connection = Connection();
+        var channel = Channel.CreateUnbounded<SourceEvent>();
+        await using var tailer = new ElasticTailer(
+            connection,
+            connection.Views[0],
+            connection.Views[0].Sources[0],
+            "secret",
+            client,
+            channel.Writer,
+            () => time.AddMinutes(5)
+        );
+        await tailer.PollOnceAsync(TestContext.Current.CancellationToken);
+        Assert.True(channel.Reader.TryRead(out _));
+        // Same-timestamp hits exercise inclusive cursor deduplication across pages.
+        var hits = Enumerable
+            .Range(1, ElasticTailer.PageSize)
+            .Select(i => new ElasticHit($"id-{i}", time.AddSeconds(1), new Line($"line-{i}"), []))
+            .ToArray();
+        client.Pages.Enqueue(new ElasticSearchPage("pit-1", hits));
+        // The fake throws when the next page is missing.
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            tailer.PollOnceAsync(TestContext.Current.CancellationToken)
+        );
+        Assert.Equal(
+            hits.Length,
+            Assert
+                .IsType<SourceLines>(
+                    await channel.Reader.ReadAsync(TestContext.Current.CancellationToken)
+                )
+                .Lines.Count
+        );
+        var last = new ElasticHit("last", time.AddSeconds(1), new Line("last"), []);
+        client.Pages.Enqueue(new ElasticSearchPage("pit-1", hits));
+        client.Pages.Enqueue(new ElasticSearchPage("pit-1", [last]));
+        await tailer.PollOnceAsync(TestContext.Current.CancellationToken);
+        Assert.Same(
+            last.Line,
+            Assert.Single(
+                Assert
+                    .IsType<SourceLines>(
+                        await channel.Reader.ReadAsync(TestContext.Current.CancellationToken)
+                    )
+                    .Lines
+            )
+        );
+        Assert.False(channel.Reader.TryRead(out _));
+        Assert.Equal(3, client.ClosedPitIds.Count);
+    }
+
     private static ElasticHit Hit(string id, string timestamp, IReadOnlyList<JsonElement> sort) =>
         new(id, DateTimeOffset.Parse(timestamp), new Line("ready"), sort);
 

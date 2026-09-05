@@ -21,6 +21,10 @@ public sealed class AppState : IAsyncDisposable
     private int _nextFileId;
     private Task? _healthLoop;
     private int _disposed;
+    private SourceLines? _pendingBatch;
+    private int _pendingBatchOffset;
+    internal const int MaxLinesPerDrain = 10_000;
+    private const int MaxEventsPerDrain = 128;
 
     public AppState(
         LogSourceService tailers,
@@ -611,13 +615,29 @@ public sealed class AppState : IAsyncDisposable
             tab?.Buffer.Append(lines);
         }
 
-        while (_tailers.Events.TryRead(out var sourceEvent))
+        var remainingLines = MaxLinesPerDrain;
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        for (var events = 0; events < MaxEventsPerDrain && remainingLines > 0; events++)
         {
+            if (
+                events > 0
+                && System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds >= 8
+            )
+                break;
+            SourceEvent sourceEvent;
+            if (_pendingBatch is not null)
+                sourceEvent = _pendingBatch;
+            else if (!_tailers.Events.TryRead(out sourceEvent!))
+                break;
             FileTabState? tab;
             lock (_gate)
                 tab = _files.FirstOrDefault(file => file.Id == sourceEvent.SourceId);
             if (tab is null)
+            {
+                _pendingBatch = null;
+                _pendingBatchOffset = 0;
                 continue;
+            }
 
             switch (sourceEvent)
             {
@@ -625,7 +645,21 @@ public sealed class AppState : IAsyncDisposable
                     tab.Error = null;
                     if (!pendingLines.TryGetValue(sourceEvent.SourceId, out var lines))
                         pendingLines[sourceEvent.SourceId] = lines = [];
-                    lines.AddRange(newLines.Lines);
+                    var count = Math.Min(
+                        remainingLines,
+                        newLines.Lines.Count - _pendingBatchOffset
+                    );
+                    for (var index = 0; index < count; index++)
+                        lines.Add(newLines.Lines[_pendingBatchOffset + index]);
+                    remainingLines -= count;
+                    _pendingBatchOffset += count;
+                    if (_pendingBatchOffset < newLines.Lines.Count)
+                        _pendingBatch = newLines;
+                    else
+                    {
+                        _pendingBatch = null;
+                        _pendingBatchOffset = 0;
+                    }
                     break;
                 case SourceReset:
                     FlushLines(sourceEvent.SourceId);

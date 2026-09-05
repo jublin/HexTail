@@ -30,7 +30,7 @@ public sealed class TailerServiceTests
     [Fact]
     public async Task StartTailer_TailsLargeFileWithoutScanningThePrefix()
     {
-        var path = CreateSparseFile(500_000_000, "tail-1\ntail-2\n");
+        var path = CreateSparseFile(1L << 30, "tail-1\ntail-2\n");
         try
         {
             await using var service = new LogSourceService(
@@ -51,6 +51,104 @@ public sealed class TailerServiceTests
                 $"Initial tail took {stopwatch.Elapsed}."
             );
             Assert.Equal(["tail-1", "tail-2"], initial.Lines.Select(line => line.Raw));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task AppendedBurst_IsDeliveredInBoundedBatchesWithoutLosingLines()
+    {
+        var path = CreateTempFile("ready\n");
+        try
+        {
+            await using var service = new LogSourceService(
+                new TailerOptions
+                {
+                    PollInterval = TimeSpan.FromMilliseconds(10),
+                    UseFileSystemWatcher = false,
+                }
+            );
+            await using var tailer = service.StartFile("file-1", path, new PlainTextParser());
+            await ReadEventAsync<SourceLines>(service.Events);
+            var expected = Enumerable.Range(0, 50_000).Select(i => $"line-{i}").ToArray();
+            await File.AppendAllTextAsync(
+                path,
+                string.Join('\n', expected) + "\n",
+                TestContext.Current.CancellationToken
+            );
+            var actual = new List<string>();
+            while (actual.Count < expected.Length)
+            {
+                var batch = await ReadEventAsync<SourceLines>(service.Events);
+                Assert.InRange(batch.Lines.Count, 1, 1_000);
+                actual.AddRange(batch.Lines.Select(line => line.Raw));
+            }
+            Assert.Equal(expected, actual);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task ConcurrentFiles_DeliverBurstsInOrderThroughSharedQueue()
+    {
+        var paths = Enumerable.Range(0, 3).Select(_ => CreateTempFile("ready\n")).ToArray();
+        try
+        {
+            await using var service = new LogSourceService(
+                new TailerOptions
+                {
+                    PollInterval = TimeSpan.FromMilliseconds(10),
+                    UseFileSystemWatcher = false,
+                }
+            );
+            for (var i = 0; i < paths.Length; i++)
+                service.StartFile(i.ToString(), paths[i], new PlainTextParser());
+            for (var i = 0; i < paths.Length; i++)
+                await ReadEventAsync<SourceLines>(service.Events);
+            var expected = Enumerable.Range(0, 20_000).Select(i => $"line-{i}").ToArray();
+            var burst = string.Join('\n', expected) + "\n";
+            await Task.WhenAll(
+                paths.Select(path =>
+                    File.AppendAllTextAsync(path, burst, TestContext.Current.CancellationToken)
+                )
+            );
+            var actual = paths.Select(_ => new List<string>()).ToArray();
+            while (actual.Sum(lines => lines.Count) < paths.Length * expected.Length)
+            {
+                var batch = await ReadEventAsync<SourceLines>(service.Events);
+                Assert.InRange(batch.Lines.Count, 1, 1_000);
+                actual[int.Parse(batch.SourceId)].AddRange(batch.Lines.Select(line => line.Raw));
+            }
+            foreach (var lines in actual)
+                Assert.Equal(expected, lines);
+        }
+        finally
+        {
+            foreach (var path in paths)
+                File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task EventQueue_AppliesBackpressureAndStopsWhileFull()
+    {
+        await using var service = new LogSourceService();
+        var accepted = 0;
+        while (accepted < 1_000 && service.Publish(new SourceRecovered("test")))
+            accepted++;
+        Assert.InRange(accepted, 1, 64);
+        var path = CreateTempFile("ready\n");
+        try
+        {
+            var tailer = service.StartFile("file-1", path, new PlainTextParser());
+            await tailer.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.True(tailer.Completion.IsCompletedSuccessfully);
         }
         finally
         {

@@ -309,6 +309,31 @@ public sealed class AppStateTests
     }
 
     [Fact]
+    public async Task DrainTailerEvents_YieldsWithBacklogAndPreservesResetOrder()
+    {
+        var path = CreateTempFile(string.Empty);
+        try
+        {
+            await using var tailers = NewTailers();
+            await using var state = new AppState(tailers, new MemoryPersistence());
+            var tab = await state.OpenFileAsync(path, save: false);
+            var lines = Enumerable.Range(0, 20_000).Select(i => new Line(i.ToString())).ToArray();
+            Assert.True(tailers.Publish(new SourceLines(tab.Id, lines)));
+            Assert.True(tailers.Publish(new SourceReset(tab.Id)));
+            Assert.True(tailers.Publish(new SourceLines(tab.Id, [new Line("after reset")])));
+            state.DrainTailerEvents();
+            Assert.InRange(tab.Buffer.Count, 1, AppState.MaxLinesPerDrain);
+            Assert.Equal("0", tab.Buffer[0].Raw);
+            while (state.DrainTailerEvents()) { }
+            Assert.Equal("after reset", Assert.Single(tab.Buffer.Lines).Raw);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task Files_ReturnsSnapshotWhileWorkspaceChanges()
     {
         var path = CreateTempFile(string.Empty);

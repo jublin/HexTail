@@ -111,11 +111,11 @@ internal sealed class FileTailer : ILogTailer
                 }
                 catch (IOException)
                 {
-                    ReportError("The file could not be read; retrying.");
+                    await ReportErrorAsync("The file could not be read; retrying.");
                 }
                 catch (UnauthorizedAccessException exception)
                 {
-                    ReportError(exception.Message);
+                    await ReportErrorAsync(exception.Message);
                 }
 
                 await WaitForWakeOrPollAsync(_stop.Token).ConfigureAwait(false);
@@ -143,13 +143,13 @@ internal sealed class FileTailer : ILogTailer
             ResetReadState();
             _missing = false;
             _rotationHint = false;
-            Write(new SourceReset(SourceId));
+            await WriteAsync(new SourceReset(SourceId), cancellationToken).ConfigureAwait(false);
         }
 
         if (info.Length < _offset)
         {
             ResetReadState();
-            Write(new SourceReset(SourceId));
+            await WriteAsync(new SourceReset(SourceId), cancellationToken).ConfigureAwait(false);
         }
 
         var initialRead = !_hasObservedFile;
@@ -158,7 +158,8 @@ internal sealed class FileTailer : ILogTailer
         if (_lastError is not null)
         {
             _lastError = null;
-            Write(new SourceRecovered(SourceId));
+            await WriteAsync(new SourceRecovered(SourceId), cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 
@@ -185,7 +186,7 @@ internal sealed class FileTailer : ILogTailer
         if (stream.Length < _offset)
         {
             ResetReadState();
-            Write(new SourceReset(SourceId));
+            await WriteAsync(new SourceReset(SourceId), cancellationToken).ConfigureAwait(false);
         }
 
         _offset = initialRead
@@ -193,11 +194,17 @@ internal sealed class FileTailer : ILogTailer
             : _offset;
         stream.Position = _offset;
         var buffer = new byte[81920];
+        // A growing file must not keep a poll running indefinitely.
+        var endOffset = stream.Length;
         int read;
         while (
-            (
+            _offset < endOffset
+            && (
                 read = await stream
-                    .ReadAsync(buffer.AsMemory(), cancellationToken)
+                    .ReadAsync(
+                        buffer.AsMemory(0, (int)Math.Min(buffer.Length, endOffset - _offset)),
+                        cancellationToken
+                    )
                     .ConfigureAwait(false)
             ) > 0
         )
@@ -217,11 +224,20 @@ internal sealed class FileTailer : ILogTailer
                         lines!.Add(line);
                 }
             );
+            if (lines is { Count: > 0 })
+            {
+                await EmitLinesAsync(lines, cancellationToken).ConfigureAwait(false);
+                lines.Clear();
+            }
         }
 
         var completeLines = initialLines?.ToArray() ?? lines!.ToArray();
         if (completeLines.Length > 0)
-            Write(new SourceLines(SourceId, completeLines.Select(_parser.Parse).ToArray()));
+            await WriteAsync(
+                    new SourceLines(SourceId, completeLines.Select(_parser.Parse).ToArray()),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
     }
 
     private static async ValueTask<long> FindInitialReadOffsetAsync(
@@ -280,14 +296,27 @@ internal sealed class FileTailer : ILogTailer
         _pendingBytes.Clear();
     }
 
-    private void Write(SourceEvent tailerEvent) => _events.TryWrite(tailerEvent);
+    private async ValueTask EmitLinesAsync(List<string> lines, CancellationToken cancellationToken)
+    {
+        for (var start = 0; start < lines.Count; start += 1_000)
+        {
+            var batch = new Domain.Line[Math.Min(1_000, lines.Count - start)];
+            for (var index = 0; index < batch.Length; index++)
+                batch[index] = _parser.Parse(lines[start + index]);
+            await WriteAsync(new SourceLines(SourceId, batch), cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
 
-    private void ReportError(string message)
+    private ValueTask WriteAsync(SourceEvent tailerEvent, CancellationToken cancellationToken) =>
+        _events.WriteAsync(tailerEvent, cancellationToken);
+
+    private async ValueTask ReportErrorAsync(string message)
     {
         if (string.Equals(_lastError, message, StringComparison.Ordinal))
             return;
         _lastError = message;
-        Write(new SourceError(SourceId, message));
+        await WriteAsync(new SourceError(SourceId, message), _stop.Token).ConfigureAwait(false);
     }
 
     private async Task WaitForWakeOrPollAsync(CancellationToken cancellationToken)

@@ -4,12 +4,14 @@ namespace HexTail.Tailing;
 
 /// <summary>
 /// Entry point and owner of the tailer layer. Creates one background tailer per file;
-/// all tailers push immutable <see cref="TailerEvent"/>s into a single unbounded channel
+/// all tailers push immutable <see cref="TailerEvent"/>s into a single bounded channel
 /// that the state layer drains. Dispose to stop all tailers and complete the channel.
 /// </summary>
 public sealed class LogSourceService : IAsyncDisposable
 {
-    private readonly Channel<SourceEvent> _channel = Channel.CreateUnbounded<SourceEvent>();
+    private readonly Channel<SourceEvent> _channel = Channel.CreateBounded<SourceEvent>(
+        new BoundedChannelOptions(32) { FullMode = BoundedChannelFullMode.Wait }
+    );
     private readonly TailerOptions _options;
     private readonly List<ILogTailer> _tailers = [];
     private readonly Lock _gate = new();

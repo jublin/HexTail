@@ -78,6 +78,32 @@ internal sealed class ElasticTailer : ILogTailer
         var accepted = new List<ElasticHit>(initialRead ? _maxInitialLines : PageSize);
         var nextCursorTimestamp = _cursorTimestamp;
         var nextIdsAtCursor = new HashSet<string>(_idsAtCursor, StringComparer.Ordinal);
+        async ValueTask EmitAcceptedAsync()
+        {
+            if (accepted.Count == 0)
+                return;
+            accepted.Sort(
+                static (left, right) =>
+                {
+                    var comparison = left.Timestamp.CompareTo(right.Timestamp);
+                    return comparison != 0
+                        ? comparison
+                        : StringComparer.Ordinal.Compare(left.Id, right.Id);
+                }
+            );
+            await _events
+                .WriteAsync(
+                    new SourceLines(SourceId, accepted.Select(hit => hit.Line).ToArray()),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            // Commit only delivered pages, so a later page failure can resume safely.
+            _cursorTimestamp = nextCursorTimestamp;
+            _idsAtCursor.Clear();
+            _idsAtCursor.UnionWith(nextIdsAtCursor);
+            accepted.Clear();
+        }
+
         try
         {
             IReadOnlyList<System.Text.Json.JsonElement>? searchAfter = null;
@@ -125,6 +151,8 @@ internal sealed class ElasticTailer : ILogTailer
                     if (initialRead && accepted.Count == _maxInitialLines)
                         break;
                 }
+                if (!initialRead)
+                    await EmitAcceptedAsync();
                 if (
                     (initialRead && accepted.Count >= _maxInitialLines)
                     || page.Hits.Count < PageSize
@@ -132,25 +160,7 @@ internal sealed class ElasticTailer : ILogTailer
                     break;
                 searchAfter = page.Hits[^1].SortValues;
             }
-            if (accepted.Count > 0)
-            {
-                accepted.Sort(
-                    static (left, right) =>
-                    {
-                        var timestampComparison = left.Timestamp.CompareTo(right.Timestamp);
-                        return timestampComparison != 0
-                            ? timestampComparison
-                            : StringComparer.Ordinal.Compare(left.Id, right.Id);
-                    }
-                );
-                _cursorTimestamp = nextCursorTimestamp;
-                _idsAtCursor.Clear();
-                _idsAtCursor.UnionWith(nextIdsAtCursor);
-                Log($"source={SourceId} emitting lines={accepted.Count}");
-                _events.TryWrite(
-                    new SourceLines(SourceId, accepted.Select(hit => hit.Line).ToArray())
-                );
-            }
+            await EmitAcceptedAsync();
         }
         finally
         {
@@ -199,7 +209,9 @@ internal sealed class ElasticTailer : ILogTailer
             {
                 await PollOnceAsync(_stop.Token).ConfigureAwait(false);
                 if (reportedError)
-                    _events.TryWrite(new SourceRecovered(SourceId));
+                    await _events
+                        .WriteAsync(new SourceRecovered(SourceId), _stop.Token)
+                        .ConfigureAwait(false);
                 reportedError = false;
                 transientAttempt = 0;
                 await _delay(PollInterval, _stop.Token).ConfigureAwait(false);
@@ -211,30 +223,34 @@ internal sealed class ElasticTailer : ILogTailer
             catch (ElasticUnauthorizedException exception)
             {
                 Log($"source={SourceId} unauthorized: {exception.Message}");
-                ReportError(exception.Message, ref reportedError);
+                await ReportErrorAsync(exception.Message, reportedError).ConfigureAwait(false);
+                reportedError = true;
                 await _delay(UnauthorizedDelay, _stop.Token).ConfigureAwait(false);
             }
             catch (ElasticTransientException exception)
             {
                 Log($"source={SourceId} transient failure: {exception.Message}");
-                ReportError(exception.Message, ref reportedError);
+                await ReportErrorAsync(exception.Message, reportedError).ConfigureAwait(false);
+                reportedError = true;
                 var seconds = Math.Min(30, 1 << Math.Min(transientAttempt++, 4));
                 await _delay(TimeSpan.FromSeconds(seconds), _stop.Token).ConfigureAwait(false);
             }
             catch (Exception exception)
             {
                 Log($"source={SourceId} failure: {exception.Message}");
-                ReportError(exception.Message, ref reportedError);
+                await ReportErrorAsync(exception.Message, reportedError).ConfigureAwait(false);
+                reportedError = true;
                 await _delay(PollInterval, _stop.Token).ConfigureAwait(false);
             }
         }
     }
 
-    private void ReportError(string message, ref bool reportedError)
+    private async ValueTask ReportErrorAsync(string message, bool reportedError)
     {
         if (!reportedError)
-            _events.TryWrite(new SourceError(SourceId, message));
-        reportedError = true;
+            await _events
+                .WriteAsync(new SourceError(SourceId, message), _stop.Token)
+                .ConfigureAwait(false);
     }
 
     private static void Log(string message) =>
