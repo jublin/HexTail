@@ -3,6 +3,7 @@ using System.Reactive.Linq;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using HexTail.Application;
@@ -17,6 +18,77 @@ namespace HexTail.Tests.Ui;
 
 public sealed class LogViewTests
 {
+    [AvaloniaFact]
+    public async Task GlobalLabelHighlightsPreserveSearchPriorityAndLabelsWithoutTabs()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var settings = new AppSettings
+            {
+                GlobalLabels =
+                [
+                    new GlobalLabel
+                    {
+                        Text = "error",
+                        Color = "#FF0000",
+                        ShowInOpenFile = true,
+                    },
+                    new GlobalLabel
+                    {
+                        Text = "warn",
+                        Color = "#00FF00",
+                        ShowInOpenFile = false,
+                    },
+                ],
+            };
+            await using var state = new AppState(
+                new LogSourceService(),
+                new TestPersistence(),
+                settings
+            );
+            await using var viewModel = new MainWindowViewModel(
+                state,
+                scheduler: ImmediateScheduler.Instance,
+                startPolling: false
+            );
+            await viewModel.OpenPathsCommand.Execute([path]);
+            var file = viewModel.SelectedFile!;
+            file.Model.Buffer.Append(new Line("error warn"));
+            state.AddSearch(file.Model, "error", MatchMode.Literal, true, "#0000FF");
+            file.SyncViews();
+            var row = Assert.Single(file.Views[0].Lines);
+            row.SetVisible(true);
+            var highlights = row
+                .Segments.Where(segment => segment.Background is not null)
+                .ToArray();
+            Assert.Equal(["error", "warn"], highlights.Select(segment => segment.Text));
+            Assert.Equal(
+                Colors.Red,
+                Assert.IsType<SolidColorBrush>(highlights[0].Background).Color
+            );
+            Assert.Equal(
+                Colors.Lime,
+                Assert.IsType<SolidColorBrush>(highlights[1].Background).Color
+            );
+            Assert.Equal(
+                ["error"],
+                file.Model.Searches.Where(search => search.IsGlobalLabel)
+                    .Select(search => search.Query.Query)
+            );
+            // The settings pass should only evaluate labels not already supplied by search tabs.
+            Assert.Equal(
+                [new LabelHighlight(6, 4, "#00FF00")],
+                state.Settings.GetLabelHighlights("error warn", includeSearchTabs: false)
+            );
+            Assert.Equal(2, state.Settings.GetLabelHighlights("error warn").Count());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [AvaloniaFact]
     public void HundredThousandRowsRemainVirtualized()
     {

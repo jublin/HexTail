@@ -137,7 +137,7 @@ internal sealed class LogLineViewModel : ReactiveObject
             )
             .Concat(
                 settings
-                    .GetLabelHighlights(Line.Raw)
+                    .GetLabelHighlights(Line.Raw, includeSearchTabs: false)
                     .Select(range =>
                         (Range: new HighlightRange(range.Start, range.Length), Color: range.Color)
                     )

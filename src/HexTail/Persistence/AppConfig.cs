@@ -74,10 +74,15 @@ public sealed record AppSettings
     public bool Excludes(string text) =>
         GlobalExcludeLabels.Any(label => CreateGlobalQuery(label)?.IsMatch(text) is true);
 
-    public IEnumerable<LabelHighlight> GetLabelHighlights(string text)
+    public IEnumerable<LabelHighlight> GetLabelHighlights(
+        string text,
+        bool includeSearchTabs = true
+    )
     {
         foreach (var label in GlobalLabels)
         {
+            if (!includeSearchTabs && label.ShowInOpenFile)
+                continue;
             var query = CreateGlobalQuery(label.Text);
             if (query is null)
                 continue;
