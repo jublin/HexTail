@@ -3,7 +3,6 @@ using System.Reactive.Linq;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Headless.XUnit;
-using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using HexTail.Application;
@@ -59,17 +58,9 @@ public sealed class LogViewTests
             file.SyncViews();
             var row = Assert.Single(file.Views[0].Lines);
             row.SetVisible(true);
-            var highlights = row
-                .Segments.Where(segment => segment.Background is not null)
-                .ToArray();
-            Assert.Equal(["error", "warn"], highlights.Select(segment => segment.Text));
             Assert.Equal(
-                Colors.Red,
-                Assert.IsType<SolidColorBrush>(highlights[0].Background).Color
-            );
-            Assert.Equal(
-                Colors.Lime,
-                Assert.IsType<SolidColorBrush>(highlights[1].Background).Color
+                [new HighlightSpan(0, 5, "#FF0000"), new HighlightSpan(6, 4, "#00FF00")],
+                row.Spans
             );
             Assert.Equal(
                 ["error"],
@@ -89,14 +80,8 @@ public sealed class LogViewTests
             file.Views[1].Sync();
             var searchRow = Assert.Single(file.Views[1].Lines);
             searchRow.SetVisible(true);
-            Assert.Equal(
-                row.Segments.Select(segment => segment.Text),
-                contextRow.Segments.Select(segment => segment.Text)
-            );
-            Assert.Equal(
-                row.Segments.Select(segment => segment.Text),
-                searchRow.Segments.Select(segment => segment.Text)
-            );
+            Assert.Same(row.Spans, contextRow.Spans);
+            Assert.Same(row.Spans, searchRow.Spans);
 
             await state.UpdateSettingsAsync(
                 state.Settings with
@@ -114,14 +99,9 @@ public sealed class LogViewTests
                 TestContext.Current.CancellationToken
             );
             file.SyncViews();
-            highlights = row.Segments.Where(segment => segment.Background is not null).ToArray();
             Assert.Equal(
-                Colors.Blue,
-                Assert.IsType<SolidColorBrush>(highlights[0].Background).Color
-            );
-            Assert.Equal(
-                Colors.Magenta,
-                Assert.IsType<SolidColorBrush>(highlights[1].Background).Color
+                [new HighlightSpan(0, 5, "#0000FF"), new HighlightSpan(6, 4, "#FF00FF")],
+                row.Spans
             );
         }
         finally

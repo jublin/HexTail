@@ -33,7 +33,7 @@ internal sealed class LogLineViewModel : ReactiveObject
 
     public Line Line { get; }
     public bool IsContext { get; }
-    public IReadOnlyList<LogTextSegmentViewModel> Segments { get; private set; } = [];
+    public IReadOnlyList<HighlightSpan> Spans { get; private set; } = [];
     public string ParsedFieldsText { get; private set; } = string.Empty;
     public bool HasParsedFields => Line.ParsedFields is { Count: > 0 };
     public bool IsExpanded { get; private set; }
@@ -130,74 +130,9 @@ internal sealed class LogLineViewModel : ReactiveObject
         ParsedFieldsText = Line.ParsedFields is { Count: > 0 }
             ? string.Join("  ", Line.ParsedFields.Select(field => $"{field.Key}={field.Value}"))
             : string.Empty;
-        var segments = new List<LogTextSegmentViewModel>();
-        var ranges = _file.HighlightSpans.Get(Line, _file.Model.Searches, settings);
-
-        var cursor = 0;
-        foreach (var range in ranges)
-        {
-            if (range.Start > cursor)
-                segments.Add(
-                    new LogTextSegmentViewModel(
-                        Line.Raw[cursor..range.Start],
-                        foreground: Foreground
-                    )
-                );
-            segments.Add(
-                new LogTextSegmentViewModel(
-                    Line.Raw.Substring(range.Start, range.Length),
-                    Brush(range.Color),
-                    new SolidColorBrush(ReadableHighlightColor(range.Color))
-                )
-            );
-            cursor = range.Start + range.Length;
-        }
-
-        if (cursor < Line.Raw.Length || segments.Count == 0)
-            segments.Add(new LogTextSegmentViewModel(Line.Raw[cursor..], foreground: Foreground));
-
-        Segments = segments;
-        this.RaisePropertyChanged(nameof(Segments));
+        Spans = _file.HighlightSpans.Get(Line, _file.Model.Searches, settings);
+        this.RaisePropertyChanged(nameof(Spans));
         this.RaisePropertyChanged(nameof(ParsedFieldsText));
         _renderDirty = false;
     }
-
-    private static SolidColorBrush Brush(string value) => new(Color.Parse(value));
-
-    internal static Color ReadableHighlightColor(string color)
-    {
-        var background = Color.Parse(color);
-        return RelativeLuminance(background) > 0.179 ? Colors.Black : Colors.White;
-    }
-
-    private static double RelativeLuminance(Color color)
-    {
-        static double Channel(byte value)
-        {
-            var normalized = value / 255d;
-            return normalized <= 0.03928
-                ? normalized / 12.92
-                : Math.Pow((normalized + 0.055) / 1.055, 2.4);
-        }
-
-        return 0.2126 * Channel(color.R) + 0.7152 * Channel(color.G) + 0.0722 * Channel(color.B);
-    }
-}
-
-public sealed class LogTextSegmentViewModel
-{
-    public LogTextSegmentViewModel(
-        string text,
-        IBrush? background = null,
-        IBrush? foreground = null
-    )
-    {
-        Text = text;
-        Background = background;
-        Foreground = foreground;
-    }
-
-    public string Text { get; }
-    public IBrush? Background { get; }
-    public IBrush? Foreground { get; }
 }

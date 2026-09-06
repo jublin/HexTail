@@ -3,7 +3,7 @@ using HexTail.Persistence;
 
 namespace HexTail.Application;
 
-internal readonly record struct HighlightSpan(int Start, int Length, string Color);
+public readonly record struct HighlightSpan(int Start, int Length, string Color);
 
 /// <summary>UI-thread cache shared by all views of a file. Each rule generation owns one LRU.</summary>
 internal sealed class HighlightSpanCache

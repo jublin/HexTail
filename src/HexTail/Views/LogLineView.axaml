@@ -16,7 +16,8 @@
   >
     <StackPanel Spacing="3">
       <views:HighlightedTextBlock
-        Segments="{Binding Segments}"
+        Text="{Binding Line.Raw}"
+        Spans="{Binding Spans}"
         FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
         FontSize="{Binding FontSize}"
         Foreground="{Binding Foreground}"
