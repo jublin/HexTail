@@ -22,6 +22,8 @@ internal sealed class FileTabViewModel : ReactiveObject
         SyncViews(loadRows);
     }
 
+    internal HighlightSpanCache HighlightSpans { get; } = new();
+
     public MainWindowViewModel Workspace => _owner;
     public FileTabState Model { get; }
     public string DisplayName => Model.DisplayName;

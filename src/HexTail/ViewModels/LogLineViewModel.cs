@@ -131,31 +131,11 @@ internal sealed class LogLineViewModel : ReactiveObject
             ? string.Join("  ", Line.ParsedFields.Select(field => $"{field.Key}={field.Value}"))
             : string.Empty;
         var segments = new List<LogTextSegmentViewModel>();
-        var ranges = _file
-            .Model.Searches.SelectMany(search =>
-                search.GetHighlights(Line).Select(range => (Range: range, Color: search.Color))
-            )
-            .Concat(
-                settings
-                    .GetLabelHighlights(Line.Raw, includeSearchTabs: false)
-                    .Select(range =>
-                        (Range: new HighlightRange(range.Start, range.Length), Color: range.Color)
-                    )
-            )
-            .Where(item =>
-                item.Range.Start >= 0
-                && item.Range.Length > 0
-                && item.Range.Start + item.Range.Length <= Line.Raw.Length
-            )
-            .OrderBy(item => item.Range.Start)
-            .ThenByDescending(item => item.Range.Length)
-            .ToList();
+        var ranges = _file.HighlightSpans.Get(Line, _file.Model.Searches, settings);
 
         var cursor = 0;
-        foreach (var (range, color) in ranges)
+        foreach (var range in ranges)
         {
-            if (range.Start < cursor)
-                continue;
             if (range.Start > cursor)
                 segments.Add(
                     new LogTextSegmentViewModel(
@@ -166,8 +146,8 @@ internal sealed class LogLineViewModel : ReactiveObject
             segments.Add(
                 new LogTextSegmentViewModel(
                     Line.Raw.Substring(range.Start, range.Length),
-                    Brush(color),
-                    new SolidColorBrush(ReadableHighlightColor(color))
+                    Brush(range.Color),
+                    new SolidColorBrush(ReadableHighlightColor(range.Color))
                 )
             );
             cursor = range.Start + range.Length;

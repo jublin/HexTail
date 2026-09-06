@@ -82,6 +82,47 @@ public sealed class LogViewTests
                 state.Settings.GetLabelHighlights("error warn", includeSearchTabs: false)
             );
             Assert.Equal(2, state.Settings.GetLabelHighlights("error warn").Count());
+            file.Model.ShowContext = true;
+            file.Views[0].Sync();
+            var contextRow = Assert.Single(file.Views[0].ContextLines);
+            contextRow.SetVisible(true);
+            file.Views[1].Sync();
+            var searchRow = Assert.Single(file.Views[1].Lines);
+            searchRow.SetVisible(true);
+            Assert.Equal(
+                row.Segments.Select(segment => segment.Text),
+                contextRow.Segments.Select(segment => segment.Text)
+            );
+            Assert.Equal(
+                row.Segments.Select(segment => segment.Text),
+                searchRow.Segments.Select(segment => segment.Text)
+            );
+
+            await state.UpdateSettingsAsync(
+                state.Settings with
+                {
+                    GlobalLabels =
+                    [
+                        new GlobalLabel
+                        {
+                            Text = "warn",
+                            Color = "#FF00FF",
+                            ShowInOpenFile = false,
+                        },
+                    ],
+                },
+                TestContext.Current.CancellationToken
+            );
+            file.SyncViews();
+            highlights = row.Segments.Where(segment => segment.Background is not null).ToArray();
+            Assert.Equal(
+                Colors.Blue,
+                Assert.IsType<SolidColorBrush>(highlights[0].Background).Color
+            );
+            Assert.Equal(
+                Colors.Magenta,
+                Assert.IsType<SolidColorBrush>(highlights[1].Background).Color
+            );
         }
         finally
         {
