@@ -31,10 +31,21 @@ jobs:
       - run: dotnet restore src/HexTail.slnx
       - run: dotnet test src/HexTail.Tests/HexTail.Tests.csproj -c Release --no-restore
       - run: dotnet pack src/HexTail/HexTail.csproj -c Release --no-restore -o artifacts
+      - name: Publish portable archives
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          publish_dir="$(mktemp -d)"
+          trap 'rm -rf "$publish_dir"' EXIT
+          for rid in linux-x64 osx-arm64 osx-x64 win-x64; do
+            dotnet publish src/HexTail/HexTail.csproj -c Release -r "$rid" \
+              --self-contained true -o "$publish_dir/$rid"
+            (cd "$publish_dir/$rid" && zip -qr "$GITHUB_WORKSPACE/artifacts/HexTail-$PACKAGE_VERSION-$rid.zip" .)
+          done
       - uses: actions/upload-artifact@v7
         with:
-          name: hextail-packages
-          path: artifacts/*.nupkg
+          name: hextail-release-assets
+          path: artifacts/*
           if-no-files-found: error
 
   publish:
@@ -49,7 +60,7 @@ jobs:
           dotnet-version: 10.0.x
       - uses: actions/download-artifact@v8
         with:
-          name: hextail-packages
+          name: hextail-release-assets
           path: artifacts
       - uses: NuGet/login@v1
         id: nuget-login
