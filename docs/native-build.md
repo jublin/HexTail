@@ -15,10 +15,10 @@ lists for the bounded live-tail path.
 ## Build and test
 
 ```bash
-dotnet restore src/HexTailSharp.slnx
-dotnet build src/HexTailSharp.slnx -c Release --no-restore
-dotnet test src/HexTailSharp.Tests/HexTailSharp.Tests.csproj -c Release
-dotnet run --project src/HexTailSharp/HexTailSharp.csproj -- /path/to/app.log
+dotnet restore src/HexTail.slnx
+dotnet build src/HexTail.slnx -c Release --no-restore
+dotnet test src/HexTail.Tests/HexTail.Tests.csproj -c Release
+dotnet run --project src/HexTail/HexTail.csproj -- /path/to/app.log
 ```
 
 ## Publish
@@ -26,14 +26,14 @@ dotnet run --project src/HexTailSharp/HexTailSharp.csproj -- /path/to/app.log
 Publish the desktop app for each supported runtime identifier as needed:
 
 ```bash
-dotnet publish src/HexTailSharp/HexTailSharp.csproj -c Release -r win-x64 --self-contained false
-dotnet publish src/HexTailSharp/HexTailSharp.csproj -c Release -r linux-x64 --self-contained false
-dotnet publish src/HexTailSharp/HexTailSharp.csproj -c Release -r osx-x64 --self-contained false
-dotnet publish src/HexTailSharp/HexTailSharp.csproj -c Release -r osx-arm64 --self-contained false
+dotnet publish src/HexTail/HexTail.csproj -c Release -r win-x64 --self-contained false
+dotnet publish src/HexTail/HexTail.csproj -c Release -r linux-x64 --self-contained false
+dotnet publish src/HexTail/HexTail.csproj -c Release -r osx-x64 --self-contained false
+dotnet publish src/HexTail/HexTail.csproj -c Release -r osx-arm64 --self-contained false
 ```
 
 The publish directory is under
-`build/HexTailSharp/Release/net10.0/<rid>/publish`.
+`build/HexTail/Release/net10.0/<rid>/publish`.
 
 ## Manual smoke pass
 

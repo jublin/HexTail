@@ -3,7 +3,7 @@
 ![HexTail](assets/hextail-readme-image.png)
 
 HexTail is a native cross-platform desktop application for watching live log
-files. It opens plaintext and `.logfmt` files, keeps multiple files and
+files. It opens plaintext, `.logfmt`, and `.jsonl` files, keeps multiple files and
 searches in separate tabs, and renders a bounded, virtualized log view without
 a browser, WebView, JavaScript runtime, or local HTTP server.
 
@@ -29,23 +29,45 @@ lookback, and native OS credential storage for authenticated connections.
 
 ## Quick start
 
-### Prerequisites
+### Install from NuGet
 
-- .NET 10 SDK
-
-### Run
+Use the .NET 10 SDK to install HexTail as a global tool. Release packages
+include the .NET runtime for Windows x64, Linux x64, and macOS x64/arm64.
 
 ```bash
-dotnet restore src/HexTailSharp.slnx
-dotnet run --project src/HexTailSharp/HexTailSharp.csproj -- /path/to/application.log
+dotnet tool install --global HexTail
+hextail /path/to/application.log
+```
+
+### Run from source
+
+Requires the .NET 10 SDK.
+
+```bash
+dotnet restore src/HexTail.slnx
+dotnet run --project src/HexTail/HexTail.csproj -- /path/to/application.log
 ```
 
 You can also start without a path and use **Open**, drag files onto the window,
 or pass multiple paths:
 
 ```bash
-dotnet run --project src/HexTailSharp/HexTailSharp.csproj -- \
+dotnet run --project src/HexTail/HexTail.csproj -- \
   /var/log/application.log /var/log/worker.log
+```
+
+## Generate test logs for development
+
+Generate a continuously appended plaintext log for a live tailing session:
+
+```bash
+dotnet run --project src/HexTail.LogGenerator -- --output /tmp/hextail.log --interval 250 --truncate
+```
+
+Press `Ctrl+C` to stop it. Generate exactly 100 JSONL records instead:
+
+```bash
+dotnet run --project src/HexTail.LogGenerator -- --format jsonl --output /tmp/hextail.jsonl --count 100 --truncate
 ```
 
 ## Using HexTail
@@ -71,9 +93,10 @@ dotnet run --project src/HexTailSharp/HexTailSharp.csproj -- \
 
 ### Input formats
 
-Files with a `.logfmt` extension use the built-in `key=value` parser. All
-other files use the plain-text parser. Log lines remain displayed as raw text;
-malformed logfmt lines are treated as plain text.
+Files with a `.logfmt` extension use the built-in `key=value` parser. Files with
+a `.jsonl` extension parse JSON object fields, flattening nested objects with
+dot-separated keys. All log lines remain displayed as raw text; malformed
+logfmt/JSONL lines and non-object JSONL values are treated as plain text.
 
 The default in-memory limit is 100,000 lines per file. It can be changed in
 `AppSettings.MaxLines` in the application code.
@@ -90,15 +113,15 @@ that file when a clean first-launch session is needed.
 Restore, build, and test the solution with:
 
 ```bash
-dotnet restore src/HexTailSharp.slnx
-dotnet build src/HexTailSharp.slnx -c Release --no-restore
-dotnet test src/HexTailSharp.Tests/HexTailSharp.Tests.csproj -c Release
+dotnet restore src/HexTail.slnx
+dotnet build src/HexTail.slnx -c Release --no-restore
+dotnet test src/HexTail.Tests/HexTail.Tests.csproj -c Release
 ```
 
 Publish a desktop build for a runtime identifier:
 
 ```bash
-dotnet publish src/HexTailSharp/HexTailSharp.csproj -c Release \
+dotnet publish src/HexTail/HexTail.csproj -c Release \
   -r linux-x64 --self-contained false
 ```
 

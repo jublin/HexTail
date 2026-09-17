@@ -46,19 +46,21 @@ flowchart LR
 
 | Area | Source | Responsibility |
 | --- | --- | --- |
-| Application shell | `src/HexTailSharp/MainWindow.axaml` | Commands, tabs, search controls, follow/context toggles, settings pane |
-| State | `src/HexTailSharp/Application/AppState.cs` | Open files, selected file, settings, searches, persistence coordination |
-| File state | `src/HexTailSharp/Application/FileTabState.cs` | One file buffer, derived views, follow state, selected context line |
-| Domain | `src/HexTailSharp/Domain/` | Lines, bounded buffers, parsers, search compilation, highlight ranges |
-| Tailing | `src/HexTailSharp/Tailing/` | Background file monitoring and resilient tail events |
-| Views | `src/HexTailSharp/Views/` | Native Avalonia log rows, search tabs, context view, and settings controls |
-| Persistence | `src/HexTailSharp/Persistence/` | Atomic JSON session load/save and persisted configuration types |
-| Tests | `src/HexTailSharp.Tests/` | Domain, tailing, persistence, view-model, and headless UI coverage |
+| Application shell | `src/HexTail/MainWindow.axaml` | Commands, tabs, search controls, follow/context toggles, settings pane |
+| State | `src/HexTail/Application/AppState.cs` | Open files, selected file, settings, searches, persistence coordination |
+| File state | `src/HexTail/Application/FileTabState.cs` | One file buffer, derived views, follow state, selected context line |
+| Domain | `src/HexTail/Domain/` | Lines, bounded buffers, parsers, search compilation, highlight ranges |
+| Tailing | `src/HexTail/Tailing/` | Background file monitoring and resilient tail events |
+| Views | `src/HexTail/Views/` | Native Avalonia log rows, search tabs, context view, and settings controls |
+| Persistence | `src/HexTail/Persistence/` | Atomic JSON session load/save and persisted configuration types |
+| Tests | `src/HexTail.Tests/` | Domain, tailing, persistence, view-model, and headless UI coverage |
 
 ## Important behavior
 
-- `.logfmt` paths use `LogfmtParser`; every other extension uses
-  `PlainTextParser`.
+- `.logfmt` paths use `LogfmtParser`, `.jsonl` paths use `JsonlParser`, and every
+  other extension uses `PlainTextParser`.
+- `JsonlParser` preserves raw JSONL text and exposes flattened object leaf fields;
+  malformed or non-object lines remain plain text.
 - Search results are buffer-relative. When old lines roll out, result indices
   are rebased with the buffer.
 - Global exclusions hide matching rows from visible log and context lists but
@@ -76,13 +78,13 @@ flowchart LR
 
 To add another file parser:
 
-1. Implement `ILogParser` in `src/HexTailSharp/Domain/`.
+1. Implement `ILogParser` in `src/HexTail/Domain/`.
 2. Register the extension in `LogParserSelector.ForPath` in
-   `src/HexTailSharp/Application/AppState.cs`.
-3. Add parser coverage under `src/HexTailSharp.Tests/Domain/`.
+   `src/HexTail/Application/AppState.cs`.
+3. Add parser coverage under `src/HexTail.Tests/Domain/`.
 
 To change a user-visible setting, update the persisted model in
-`src/HexTailSharp/Persistence/AppConfig.cs`, normalize it in `AppState`, and
+`src/HexTail/Persistence/AppConfig.cs`, normalize it in `AppState`, and
 cover round-trip behavior in the persistence or application tests.
 
 ## Current boundary
