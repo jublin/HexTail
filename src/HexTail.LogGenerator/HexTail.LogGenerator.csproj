@@ -2,13 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <OutputType>Exe</OutputType>
-    <PackAsTool>true</PackAsTool>
-    <ToolCommandName>hextail-log-generator</ToolCommandName>
-    <PackageId>HexTail.LogGenerator</PackageId>
-    <Description>Configurable plaintext and JSONL log generator for HexTail.</Description>
-    <PackageTags>hextail;logs;log-generator;jsonl</PackageTags>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/jublin/HexTail</RepositoryUrl>
+    <IsPackable>false</IsPackable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>

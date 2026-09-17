@@ -28,3 +28,12 @@ jobs:
       - run: dotnet restore src/HexTail.slnx
       - run: dotnet test src/HexTail.Tests/HexTail.Tests.csproj -c Release --no-restore
       - run: dotnet publish src/HexTail/HexTail.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+      - if: matrix.rid == 'linux-x64'
+        name: Pack and install HexTail tool
+        run: |
+          package_dir="${{ runner.temp }}/hextail-tool"
+          install_dir="${{ runner.temp }}/hextail-install"
+          package_version="$(dotnet msbuild src/HexTail/HexTail.csproj -getProperty:Version)"
+          dotnet pack src/HexTail/HexTail.csproj -c Release --no-restore -o "$package_dir"
+          dotnet tool install --tool-path "$install_dir" --add-source "$package_dir" HexTail --version "$package_version"
+          dotnet tool list --tool-path "$install_dir"

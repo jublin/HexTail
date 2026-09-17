@@ -2,11 +2,30 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>hextail</ToolCommandName>
+    <PackageId>HexTail</PackageId>
+    <Authors>Justin Moore</Authors>
+    <Description>Cross-platform desktop log viewer for tailing and searching plaintext, logfmt, JSONL, and Elasticsearch logs.</Description>
+    <Copyright>Copyright (c) 2026 Justin Moore</Copyright>
+    <PackageTags>hextail;logs;log-viewer;log-tail;desktop;dotnet-tool;logfmt;jsonl;elasticsearch</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/jublin/HexTail</PackageProjectUrl>
+    <PackageIcon>assets/hextail-logo.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>See the release notes for v$(Version): https://github.com/jublin/HexTail/releases/tag/v$(Version)</PackageReleaseNotes>
+    <RepositoryUrl>https://github.com/jublin/HexTail</RepositoryUrl>
+    <RuntimeIdentifiers>win-x64;linux-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>$(RepoRootPath)assets/hextail-logo.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="README.md" Pack="true" PackagePath="\" />
+    <None Include="../../assets/hextail-logo.png" Pack="true" PackagePath="assets/hextail-logo.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia" />

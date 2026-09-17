@@ -29,11 +29,19 @@ lookback, and native OS credential storage for authenticated connections.
 
 ## Quick start
 
-### Prerequisites
+### Install from NuGet
 
-- .NET 10 SDK
+Use the .NET 10 SDK to install HexTail as a global tool. Release packages
+include the .NET runtime for Windows x64, Linux x64, and macOS x64/arm64.
 
-### Run
+```bash
+dotnet tool install --global HexTail
+hextail /path/to/application.log
+```
+
+### Run from source
+
+Requires the .NET 10 SDK.
 
 ```bash
 dotnet restore src/HexTail.slnx
@@ -48,7 +56,7 @@ dotnet run --project src/HexTail/HexTail.csproj -- \
   /var/log/application.log /var/log/worker.log
 ```
 
-## Generate test logs
+## Generate test logs for development
 
 Generate a continuously appended plaintext log for a live tailing session:
 
