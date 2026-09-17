@@ -184,7 +184,7 @@ public sealed class MainWindowInteractionTests
         Assert.Equal(UiDensity.Compact, viewModel.Settings.Density);
         Assert.Equal(LogFontSize.Large, viewModel.Settings.FontSize);
         Assert.Equal(4, viewModel.Settings.TabPadding.Left);
-        Assert.Equal(22, viewModel.Settings.TabCloseSize);
+        Assert.Equal(20, viewModel.Settings.TabCloseSize);
         Assert.Equal(12, viewModel.Settings.SecondaryFontSize);
         window.Close();
     }

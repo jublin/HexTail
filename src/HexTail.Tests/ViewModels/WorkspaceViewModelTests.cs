@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using System.Reactive.Concurrency;
 using Avalonia.Collections;
+using Avalonia.Headless.XUnit;
 using HexTail.Application;
 using HexTail.Domain;
 using HexTail.Tailing;
@@ -14,7 +15,7 @@ namespace HexTail.Tests.ViewModels;
 
 public sealed class WorkspaceViewModelTests
 {
-    [Fact]
+    [AvaloniaFact]
     public async Task SetShowContext_PersistsOnce()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
