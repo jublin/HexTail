@@ -39,6 +39,12 @@ dotnet tool install --global HexTail
 hextail /path/to/application.log
 ```
 
+### Portable downloads
+
+GitHub releases also include self-contained ZIPs for `linux-x64`, `win-x64`,
+`osx-x64`, and `osx-arm64`. Extract the ZIP and launch HexTail; no .NET
+installation is required.
+
 ### Run from source
 
 Requires the .NET 10 SDK.
