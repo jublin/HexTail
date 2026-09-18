@@ -77,11 +77,21 @@ jobs:
           dotnet nuget push "artifacts/HexTail.${PACKAGE_VERSION}.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
       - name: Create or update GitHub release
         run: |
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" artifacts/* --clobber --repo "$GITHUB_REPOSITORY"
-            gh release edit "$GITHUB_REF_NAME" --draft=false --repo "$GITHUB_REPOSITORY"
-          else
-            gh release create "$GITHUB_REF_NAME" artifacts/* --generate-notes --repo "$GITHUB_REPOSITORY"
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --generate-notes --repo "$GITHUB_REPOSITORY"
           fi
+          for asset in artifacts/*; do
+            for attempt in 1 2 3; do
+              if gh release upload "$GITHUB_REF_NAME" "$asset" --clobber --repo "$GITHUB_REPOSITORY"; then
+                break
+              fi
+              if [[ "$attempt" -eq 3 ]]; then
+                echo "::error::Failed to upload $asset after $attempt attempts."
+                exit 1
+              fi
+              sleep "$((attempt * 5))"
+            done
+          done
+          gh release edit "$GITHUB_REF_NAME" --draft=false --repo "$GITHUB_REPOSITORY"
         env:
           GH_TOKEN: ${{ github.token }}
