@@ -6,6 +6,13 @@
   x:Class="HexTail.Views.LogLineView"
   x:DataType="vm:LogLineViewModel"
 >
+  <UserControl.ContextMenu>
+    <ContextMenu Opening="OnContextMenuOpening">
+      <MenuItem Header="Toggle full row details" InputGesture="Enter" Click="OnToggleDetails" />
+      <MenuItem x:Name="CopyRawLine" Header="Copy raw line" InputGesture="Ctrl+C" Click="OnCopyRawLine" />
+      <MenuItem Header="Copy fields" InputGesture="Ctrl+Shift+C" IsEnabled="{Binding HasParsedFields}" Click="OnCopyFields" />
+    </ContextMenu>
+  </UserControl.ContextMenu>
   <Border
     Background="{Binding Background}"
     BorderBrush="{DynamicResource BorderBrush}"
@@ -24,7 +31,18 @@
         TextWrapping="NoWrap"
         TextTrimming="CharacterEllipsis"
       />
-      <TextBlock
+      <SelectableTextBlock
+        x:Name="RawLineDetails"
+        AutomationProperties.Name="Full raw log text"
+        Text="{Binding Line.Raw}"
+        FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+        FontSize="{Binding FontSize}"
+        Foreground="{Binding Foreground}"
+        TextWrapping="Wrap"
+        IsVisible="{Binding IsExpanded}"
+        Margin="16,2,0,6"
+      />
+      <SelectableTextBlock
         Text="{Binding ParsedFieldsText}"
         FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
         FontSize="{Binding FontSize}"
