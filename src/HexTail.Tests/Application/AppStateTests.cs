@@ -10,6 +10,52 @@ namespace HexTail.Tests.Application;
 public sealed class AppStateTests
 {
     [Fact]
+    public async Task RemovingConfiguredSource_SavesOnceAndClosesItsTab()
+    {
+        var persistence = new MemoryPersistence { FailOnSaveNumber = 2 };
+        var connection = ElasticConnection("Ops") with
+        {
+            Views =
+            [
+                new ElasticViewSettings
+                {
+                    Id = "view",
+                    Name = "Logs",
+                    DataViewId = "view",
+                    DataViewTitle = "logs-*",
+                    TimeFieldName = "@timestamp",
+                    ServerField = "server",
+                    OutputFields = ["message"],
+                    Sources = [new ElasticSourceSettings { Id = "source-1", ServerValue = "api" }],
+                },
+            ],
+        };
+        var client = new FakeElasticApiClient
+        {
+            SearchHandler = _ => Task.FromResult(new ElasticSearchPage("pit", [])),
+        };
+        await using var state = new AppState(
+            new LogSourceService(),
+            persistence,
+            new AppSettings { ElasticConnections = [connection] },
+            elastic: client
+        );
+        try
+        {
+            await state.OpenElasticSourceAsync("source-1", save: false);
+            await state.SaveElasticConnectionAsync(connection with { Views = [] }, null);
+            Assert.Empty(state.Files);
+            Assert.Equal(1, persistence.SaveCount);
+            Assert.Empty(persistence.Config!.OpenElasticTabs);
+            Assert.Null(persistence.Config.SelectedElasticSourceId);
+        }
+        finally
+        {
+            persistence.FailOnSaveNumber = null;
+        }
+    }
+
+    [Fact]
     public async Task ElasticSourceIdentity_DistinguishesFiltersAndRefreshesAfterSave()
     {
         var connection = ElasticConnection("ops") with
@@ -769,6 +815,9 @@ public sealed class AppStateTests
 
     private sealed class MemoryPersistence : IAppPersistence
     {
+        public int SaveCount { get; private set; }
+        public int? FailOnSaveNumber { get; set; }
+
         public AppConfig? Config { get; private set; }
         public Exception? SaveError { get; set; }
 
@@ -777,6 +826,8 @@ public sealed class AppStateTests
 
         public ValueTask SaveAsync(AppConfig config, CancellationToken cancellationToken = default)
         {
+            if (++SaveCount == FailOnSaveNumber)
+                throw new IOException("second write failed");
             if (SaveError is not null)
                 throw SaveError;
             Config = AppConfigJson.Deserialize(AppConfigJson.Serialize(config));

@@ -132,7 +132,7 @@ public sealed class AppState : IAsyncDisposable
                 .FirstOrDefault(item => item.source.Id == tab.Id);
             if (match.source is null)
             {
-                await CloseFileAsync(tab).ConfigureAwait(false);
+                await CloseFileAsync(tab, save: false).ConfigureAwait(false);
                 continue;
             }
             var replacement = _tailers.CreateElastic(
@@ -518,7 +518,8 @@ public sealed class AppState : IAsyncDisposable
 
     public async ValueTask CloseFileAsync(
         FileTabState tab,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        bool save = true
     )
     {
         lock (_gate)
@@ -531,7 +532,8 @@ public sealed class AppState : IAsyncDisposable
         await tab.DisposeAsync().ConfigureAwait(false);
         NotifyChanged();
         SignalHealthCheck();
-        await SaveAsync(cancellationToken).ConfigureAwait(false);
+        if (save)
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public Search AddSearch(
@@ -717,9 +719,7 @@ public sealed class AppState : IAsyncDisposable
             {
                 if (!pendingLines.Remove(sourceId, out var lines) || lines.Count == 0)
                     return;
-                FileTabState? tab;
-                lock (_gate)
-                    tab = _files.FirstOrDefault(file => file.Id == sourceId);
+                var tab = _files.FirstOrDefault(file => file.Id == sourceId);
                 tab?.Buffer.Append(lines);
             }
 
@@ -737,9 +737,7 @@ public sealed class AppState : IAsyncDisposable
                     sourceEvent = _pendingBatch;
                 else if (!_tailers.Events.TryRead(out sourceEvent!))
                     break;
-                FileTabState? tab;
-                lock (_gate)
-                    tab = _files.FirstOrDefault(file => file.Id == sourceEvent.SourceId);
+                var tab = _files.FirstOrDefault(file => file.Id == sourceEvent.SourceId);
                 if (
                     tab is null
                     || (
@@ -822,6 +820,11 @@ public sealed class AppState : IAsyncDisposable
         AppConfig config;
         lock (_gate)
         {
+            var sourceIds = _settings
+                .ElasticConnections.SelectMany(connection => connection.Views)
+                .SelectMany(view => view.Sources)
+                .Select(source => source.Id)
+                .ToHashSet(StringComparer.Ordinal);
             config = new AppConfig
             {
                 OpenFiles = _files
@@ -852,7 +855,9 @@ public sealed class AppState : IAsyncDisposable
                     })
                     .ToList(),
                 OpenElasticTabs = _files
-                    .Where(tab => tab.Source.Kind == LogSourceKind.Elastic)
+                    .Where(tab =>
+                        tab.Source.Kind == LogSourceKind.Elastic && sourceIds.Contains(tab.Id)
+                    )
                     .Select(tab => new PersistedElasticTab
                     {
                         SourceId = tab.Source.ElasticSourceId!,
@@ -883,7 +888,11 @@ public sealed class AppState : IAsyncDisposable
                     .ToList(),
                 SelectedFilePath =
                     SelectedFile?.Source.Kind == LogSourceKind.File ? SelectedFile.Path : null,
-                SelectedElasticSourceId = SelectedFile?.Source.ElasticSourceId,
+                SelectedElasticSourceId =
+                    SelectedFile?.Source.ElasticSourceId is { } selectedId
+                    && sourceIds.Contains(selectedId)
+                        ? selectedId
+                        : null,
                 Window = Window,
                 Settings = _settings,
             };
