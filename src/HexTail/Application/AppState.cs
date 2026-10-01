@@ -407,6 +407,9 @@ public sealed class AppState : IAsyncDisposable
         tab.Error = null;
         tab.ElasticFrom = from.Trim();
         tab.ElasticTo = to.Trim();
+        tab.ElasticLoading = true;
+        tab.ElasticResolvedFrom = null;
+        tab.ElasticResolvedTo = null;
         NotifyChanged();
     }
 
@@ -675,7 +678,16 @@ public sealed class AppState : IAsyncDisposable
                     tab.Error = null;
                     tab.Buffer.Clear();
                     break;
+                case SourceRangeLoaded loaded:
+                    FlushLines(sourceEvent.SourceId);
+                    tab.ElasticLoading = false;
+                    tab.Error = null;
+                    if (loaded.Initial || tab.ElasticResolvedFrom is null)
+                        tab.ElasticResolvedFrom = loaded.From;
+                    tab.ElasticResolvedTo = loaded.To;
+                    break;
                 case SourceError error:
+                    tab.ElasticLoading = false;
                     FlushLines(sourceEvent.SourceId);
                     tab.Error = $"Source error: {error.Message}";
                     break;

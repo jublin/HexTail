@@ -156,37 +156,57 @@
                     AutomationProperties.Name="Elastic log time range">
               <Button.Flyout>
                 <Flyout>
+                  <ScrollViewer MaxHeight="570" HorizontalScrollBarVisibility="Disabled">
                   <StackPanel Spacing="8" Width="390">
-                    <TextBlock Text="Log time range (UTC)" FontWeight="SemiBold" />
+                    <TextBlock Text="Log time range" FontWeight="SemiBold" />
+                    <TextBlock Text="Preset" />
+                    <ComboBox x:Name="ElasticPresetPicker" ItemsSource="{Binding ElasticPresets}"
+                              SelectedIndex="{Binding ElasticPresetIndex, Mode=TwoWay}" HorizontalAlignment="Stretch"
+                              AutomationProperties.Name="Log time range preset" />
+                    <TextBlock Text="Input and interval display time zone" />
+                    <ComboBox x:Name="ElasticZonePicker" ItemsSource="{Binding ElasticInputZones}"
+                              SelectedItem="{Binding ElasticInputZone, Mode=TwoWay}" HorizontalAlignment="Stretch"
+                              AutomationProperties.Name="Range input and display time zone" />
+                    <TextBlock Text="Local uses this computer’s time zone. Log message timestamps are unchanged."
+                               TextWrapping="Wrap" FontSize="12" />
                     <TextBlock Text="From (inclusive)" />
                     <StackPanel Spacing="4">
                       <DatePicker x:Name="ElasticFromDatePicker" SelectedDate="{Binding ElasticFromDate, Mode=TwoWay}"
                                   MonthFormat="MM" DayFormat="dd" YearFormat="yyyy"
-                                  HorizontalAlignment="Stretch" AutomationProperties.Name="From date UTC" />
+                                  HorizontalAlignment="Stretch" AutomationProperties.Name="From date" />
                       <TimePicker x:Name="ElasticFromTimePicker" HorizontalAlignment="Stretch"
                                   SelectedTime="{Binding ElasticFromTime, Mode=TwoWay}"
                                   ClockIdentifier="24HourClock" UseSeconds="True"
-                                  AutomationProperties.Name="From time UTC" />
+                                  AutomationProperties.Name="From time" />
                     </StackPanel>
                     <CheckBox x:Name="ElasticToNowCheckBox" Content="To now (live logs)" IsChecked="{Binding ElasticToNow, Mode=TwoWay}" />
                     <TextBlock Text="To (inclusive)" />
                     <StackPanel Spacing="4" IsEnabled="{Binding !ElasticToNow}">
                       <DatePicker x:Name="ElasticToDatePicker" SelectedDate="{Binding ElasticToDate, Mode=TwoWay}"
                                   MonthFormat="MM" DayFormat="dd" YearFormat="yyyy"
-                                  HorizontalAlignment="Stretch" AutomationProperties.Name="To date UTC" />
+                                  HorizontalAlignment="Stretch" AutomationProperties.Name="To date" />
                       <TimePicker x:Name="ElasticToTimePicker" HorizontalAlignment="Stretch"
                                   SelectedTime="{Binding ElasticToTime, Mode=TwoWay}"
                                   ClockIdentifier="24HourClock" UseSeconds="True"
-                                  AutomationProperties.Name="To time UTC" />
+                                  AutomationProperties.Name="To time" />
                     </StackPanel>
+                    <TextBlock Text="{Binding ElasticDraftStatus}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding ElasticAppliedRange}" TextWrapping="Wrap" FontSize="12" />
+                    <TextBlock Text="{Binding ElasticRangeStatus}" TextWrapping="Wrap" FontSize="12" />
+                    <TextBlock Text="Presets start at Apply; live logs append from that interval. Fixed-end intervals load once."
+                               TextWrapping="Wrap" FontSize="12" />
                     <TextBlock Text="{Binding FileError}" IsVisible="{Binding HasFileError}"
                                TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" />
                     <Button x:Name="ApplyElasticTimeRangeButton" Content="Apply"
                             Command="{Binding ApplyElasticTimeRangeCommand}" Classes="primary" />
                   </StackPanel>
+                  </ScrollViewer>
                 </Flyout>
               </Button.Flyout>
             </Button>
+            <TextBlock x:Name="ElasticAppliedSummary" Text="{Binding ElasticAppliedRange}"
+                       TextWrapping="Wrap" FontSize="12" />
+            <TextBlock Text="{Binding ElasticRangeStatus}" TextWrapping="Wrap" FontSize="12" />
           </StackPanel>
       </Grid>
       <views:FileStrip Grid.Column="0" Grid.Row="1" />

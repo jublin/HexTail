@@ -31,3 +31,11 @@ public sealed record SourceReset(string SourceId) : SourceEvent(SourceId);
 public sealed record SourceError(string SourceId, string Message) : SourceEvent(SourceId);
 
 public sealed record SourceRecovered(string SourceId) : SourceEvent(SourceId);
+
+public sealed record SourceRangeLoaded(
+    string SourceId,
+    DateTimeOffset From,
+    DateTimeOffset To,
+    bool Initial,
+    bool Live
+) : SourceEvent(SourceId);

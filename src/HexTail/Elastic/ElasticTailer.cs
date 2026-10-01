@@ -64,8 +64,10 @@ internal sealed class ElasticTailer : ILogTailer
 
     internal void Start() => _completion = Task.Run(RunAsync);
 
-    internal async Task PollOnceAsync(CancellationToken cancellationToken)
+    internal async Task<SourceRangeLoaded?> PollOnceAsync(CancellationToken cancellationToken)
     {
+        DateTimeOffset rangeFrom;
+        bool live;
         long generation;
         DateTimeOffset toInclusive,
             fromInclusive;
@@ -76,7 +78,9 @@ internal sealed class ElasticTailer : ILogTailer
             generation = Generation;
             var now = _utcNow();
             toInclusive = ParseTime(_toExpression, now);
-            fromInclusive = _cursorTimestamp ?? ParseTime(_fromExpression, now);
+            rangeFrom = ParseTime(_fromExpression, now);
+            fromInclusive = _cursorTimestamp ?? rangeFrom;
+            live = string.Equals(_toExpression, "now", StringComparison.OrdinalIgnoreCase);
             nextCursorTimestamp = _cursorTimestamp;
             nextIdsAtCursor = new HashSet<string>(_idsAtCursor, StringComparer.Ordinal);
         }
@@ -150,7 +154,7 @@ internal sealed class ElasticTailer : ILogTailer
                 );
                 pitId = page.PitId;
                 if (generation != Generation)
-                    return;
+                    return null;
                 Log($"source={SourceId} search page hits={page.Hits.Count}");
                 foreach (var hit in page.Hits)
                 {
@@ -194,6 +198,12 @@ internal sealed class ElasticTailer : ILogTailer
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         }
+        return generation == Generation
+            ? new SourceRangeLoaded(SourceId, rangeFrom, toInclusive, initialRead, live)
+            {
+                Generation = generation,
+            }
+            : null;
     }
 
     internal void SetTimeRange(string from, string to)
@@ -232,6 +242,7 @@ internal sealed class ElasticTailer : ILogTailer
         var reportedError = false;
         var transientAttempt = 0;
         var lastGeneration = Generation;
+        long? completedHistoricalGeneration = null;
         while (!_stop.IsCancellationRequested)
         {
             var generation = Generation;
@@ -243,7 +254,17 @@ internal sealed class ElasticTailer : ILogTailer
             }
             try
             {
-                await PollOnceAsync(_stop.Token).ConfigureAwait(false);
+                if (completedHistoricalGeneration == generation)
+                {
+                    await _delay(PollInterval, _stop.Token).ConfigureAwait(false);
+                    continue;
+                }
+                var loaded = await PollOnceAsync(_stop.Token).ConfigureAwait(false);
+                if (loaded is null)
+                    continue;
+                await _events.WriteAsync(loaded, _stop.Token).ConfigureAwait(false);
+                if (!loaded.Live)
+                    completedHistoricalGeneration = generation;
                 if (reportedError)
                     await _events
                         .WriteAsync(

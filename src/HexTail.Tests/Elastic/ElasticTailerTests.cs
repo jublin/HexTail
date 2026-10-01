@@ -369,6 +369,66 @@ public sealed class ElasticTailerTests
         Assert.Equal(now.AddMinutes(-5), client.Searches[0].FromInclusive);
     }
 
+    [Fact]
+    public async Task HistoricalRange_ReportsEmptyLoadAndDoesNotKeepRequesting()
+    {
+        var client = new FakeElasticApiClient
+        {
+            SearchHandler = _ => Task.FromResult(new ElasticSearchPage("pit", [])),
+        };
+        var connection = Connection();
+        var channel = Channel.CreateUnbounded<SourceEvent>();
+        var firstDelay = new TaskCompletionSource();
+        var secondDelay = new TaskCompletionSource();
+        var resume = new TaskCompletionSource();
+        var resumeSecond = new TaskCompletionSource();
+        var thirdDelay = new TaskCompletionSource();
+        var delays = 0;
+        await using var tailer = new ElasticTailer(
+            connection,
+            connection.Views[0],
+            connection.Views[0].Sources[0],
+            "",
+            client,
+            channel.Writer,
+            delay: async (_, token) =>
+            {
+                if (Interlocked.Increment(ref delays) == 1)
+                {
+                    firstDelay.SetResult();
+                    await resume.Task.WaitAsync(token);
+                }
+                else if (delays == 2)
+                {
+                    secondDelay.TrySetResult();
+                    await resumeSecond.Task.WaitAsync(token);
+                }
+                else
+                {
+                    thirdDelay.TrySetResult();
+                    await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                }
+            }
+        );
+        tailer.SetTimeRange("2026-08-20T10:00:00Z", "2026-08-20T11:00:00Z");
+        tailer.Start();
+        await firstDelay.Task.WaitAsync(TestContext.Current.CancellationToken);
+        resume.SetResult();
+        await secondDelay.Task.WaitAsync(TestContext.Current.CancellationToken);
+        Assert.Single(client.Searches);
+        Assert.True(channel.Reader.TryRead(out var completed));
+        Assert.NotNull(completed);
+        Assert.Equal("SourceRangeLoaded", completed.GetType().Name);
+        tailer.SetTimeRange("2026-08-20T09:00:00Z", "2026-08-20T10:00:00Z");
+        resumeSecond.SetResult();
+        await thirdDelay.Task.WaitAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(2, client.Searches.Count);
+        Assert.Equal(
+            DateTimeOffset.Parse("2026-08-20T09:00:00Z"),
+            client.Searches[^1].FromInclusive
+        );
+    }
+
     private static ElasticHit Hit(string id, string timestamp, IReadOnlyList<JsonElement> sort) =>
         new(id, DateTimeOffset.Parse(timestamp), new Line("ready"), sort);
 

@@ -397,6 +397,8 @@ public sealed class AppStateTests
         };
         await state.UpdateSettingsAsync(new AppSettings { ElasticConnections = [connection] });
         var tab = await state.OpenElasticSourceAsync("s1", save: false);
+        // This test supplies events directly; stop the producer to avoid injected-event races.
+        await tab.Tailer.DisposeAsync();
         tab.AddSearch(
             new Search(
                 new CompiledQuery("old", CompiledQuery.DetectMode("old"), false),
@@ -426,6 +428,27 @@ public sealed class AppStateTests
         while (state.DrainTailerEvents()) { }
         Assert.Equal("new", Assert.Single(tab.Buffer.Lines).Raw);
         Assert.Null(tab.Error);
+        Assert.True(tab.ElasticLoading);
+        var from = DateTimeOffset.Parse("2026-08-20T10:00:00Z");
+        var to = from.AddHours(1);
+        Assert.True(
+            tailers.Publish(new SourceRangeLoaded(tab.Id, from, to, true, true) { Generation = 1 })
+        );
+        while (state.DrainTailerEvents()) { }
+        Assert.False(tab.ElasticLoading);
+        Assert.Equal(from, tab.ElasticResolvedFrom);
+        Assert.Equal(to, tab.ElasticResolvedTo);
+        Assert.True(
+            tailers.Publish(
+                new SourceRangeLoaded(tab.Id, from.AddMinutes(1), to.AddMinutes(1), false, true)
+                {
+                    Generation = 1,
+                }
+            )
+        );
+        while (state.DrainTailerEvents()) { }
+        Assert.Equal(from, tab.ElasticResolvedFrom);
+        Assert.Equal(to.AddMinutes(1), tab.ElasticResolvedTo);
     }
 
     private static LogSourceService NewTailers() =>
