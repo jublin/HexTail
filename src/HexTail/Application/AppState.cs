@@ -156,6 +156,7 @@ public sealed class AppState : IAsyncDisposable
                 {
                     installed = true;
                     tab.Tailer = replacement;
+                    tab.Source = LogSourceDescriptor.Elastic(connection, match.view, match.source);
                     tab.Buffer.Clear();
                     tab.Error = null;
                     tab.ElasticLoading = true;
@@ -431,16 +432,9 @@ public sealed class AppState : IAsyncDisposable
             ? _credentials.Get(connection.Id)
                 ?? throw new InvalidOperationException("The Elastic credential is unavailable.")
             : string.Empty;
-        var viewName = string.IsNullOrWhiteSpace(view.Name) ? view.DataViewTitle! : view.Name;
         var tailer = _tailers.CreateElastic(connection, view, match.source, secret, _elastic, Now);
         var tab = new FileTabState(
-            new LogSourceDescriptor(
-                sourceId,
-                LogSourceKind.Elastic,
-                $"{match.connection.Name}-{viewName}",
-                $"{match.connection.Name} / {viewName}",
-                ElasticSourceId: sourceId
-            ),
+            LogSourceDescriptor.Elastic(connection, view, match.source),
             new FileBuffer(_settings.MaxLines),
             new PlainTextParser(),
             tailer

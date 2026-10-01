@@ -36,14 +36,14 @@
           BorderBrush="{Binding SelectedTabBrush}"
           Background="{DynamicResource SurfaceBrush}"
           Classes.selected="{Binding IsSelected}"
-          ToolTip.Tip="{Binding Model.Source.ToolTip}"
+          ToolTip.Tip="{Binding SourceDetails}"
         >
           <Grid ColumnDefinitions="*,Auto">
             <Button
               MinHeight="{Binding Workspace.Settings.FileStripHeight}"
               Command="{Binding $parent[UserControl].DataContext.SelectFileCommand}"
               CommandParameter="{Binding}"
-              AutomationProperties.Name="{Binding Model.Source.ToolTip, StringFormat='Select {0}'}"
+              AutomationProperties.Name="{Binding SourceDetails, StringFormat='Select {0}'}"
               MinWidth="0"
               HorizontalAlignment="Stretch"
               HorizontalContentAlignment="Left"
@@ -67,8 +67,8 @@
               HorizontalContentAlignment="Right"
               VerticalContentAlignment="Center"
               VerticalAlignment="Center"
-              ToolTip.Tip="{Binding Model.Source.ToolTip, StringFormat='Close {0}'}"
-              AutomationProperties.Name="{Binding Model.Source.ToolTip, StringFormat='Close {0}'}"
+              ToolTip.Tip="{Binding SourceDetails, StringFormat='Close {0}'}"
+              AutomationProperties.Name="{Binding SourceDetails, StringFormat='Close {0}'}"
               Command="{Binding $parent[UserControl].DataContext.CloseFileCommand}"
               CommandParameter="{Binding}"
             >
@@ -88,11 +88,11 @@
             SelectionChanged="OnFileSelected" MaxDropDownHeight="280"
             AutomationProperties.Name="Open tabs"
             AutomationProperties.HelpText="Choose an open tab. Alt+Left or Alt+Right on a tab header reorders it."
-            ToolTip.Tip="{Binding SelectedFile.Model.Source.ToolTip}">
+            ToolTip.Tip="{Binding SelectedFile.SourceDetails}">
     <ComboBox.ItemTemplate>
       <DataTemplate x:DataType="vm:FileTabViewModel">
         <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" MaxWidth="280"
-                   ToolTip.Tip="{Binding Model.Source.ToolTip}" />
+                   ToolTip.Tip="{Binding SourceDetails}" />
       </DataTemplate>
     </ComboBox.ItemTemplate>
   </ComboBox>
@@ -100,8 +100,8 @@
           Width="{Binding Settings.TabCloseSize}" Height="{Binding Settings.TabCloseSize}"
           VerticalAlignment="Center" Command="{Binding CloseFileCommand}"
           CommandParameter="{Binding SelectedFile}"
-          ToolTip.Tip="{Binding SelectedFile.Model.Source.ToolTip, StringFormat='Close {0}'}"
-          AutomationProperties.Name="Close selected tab">
+          ToolTip.Tip="{Binding SelectedFile.SourceDetails, StringFormat='Close {0}'}"
+          AutomationProperties.Name="{Binding SelectedFile.DisplayName, StringFormat='Close {0}'}">
     <ic:Icon Value="mdi-close" />
   </Button>
   </Grid>

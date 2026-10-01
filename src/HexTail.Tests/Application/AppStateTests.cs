@@ -10,6 +10,77 @@ namespace HexTail.Tests.Application;
 public sealed class AppStateTests
 {
     [Fact]
+    public async Task ElasticSourceIdentity_DistinguishesFiltersAndRefreshesAfterSave()
+    {
+        var connection = ElasticConnection("ops") with
+        {
+            Sources =
+            [
+                new ElasticSourceSettings
+                {
+                    Id = "api",
+                    ServerValue = "api",
+                    NamespaceValue = "prod",
+                },
+                new ElasticSourceSettings
+                {
+                    Id = "worker",
+                    ServerValue = "worker",
+                    NamespaceValue = "stage",
+                },
+            ],
+        };
+        await using var state = new AppState(
+            NewTailers(),
+            new MemoryPersistence(),
+            new AppSettings { ElasticConnections = [connection] },
+            elastic: new FakeElasticApiClient
+            {
+                SearchHandler = _ => Task.FromResult(new ElasticSearchPage("pit", [])),
+            }
+        );
+        var api = await state.OpenElasticSourceAsync(
+            "api",
+            false,
+            TestContext.Current.CancellationToken
+        );
+        var worker = await state.OpenElasticSourceAsync(
+            "worker",
+            false,
+            TestContext.Current.CancellationToken
+        );
+        Assert.NotEqual(api.DisplayName, worker.DisplayName);
+        Assert.Contains("api", api.Source.ToolTip);
+        var saved = state.Settings.ElasticConnections[0];
+        var view = saved.Views[0];
+        await state.SaveElasticConnectionAsync(
+            saved with
+            {
+                Name = "Renamed",
+                Views =
+                [
+                    view with
+                    {
+                        Sources =
+                        [
+                            view.Sources[0] with
+                            {
+                                ServerValue = "changed-api",
+                            },
+                            view.Sources[1],
+                        ],
+                    },
+                ],
+            },
+            null,
+            TestContext.Current.CancellationToken
+        );
+        Assert.Contains("Renamed", api.DisplayName);
+        Assert.Contains("changed-api", api.DisplayName);
+        Assert.Contains("prod", api.Source.ToolTip);
+    }
+
+    [Fact]
     public async Task RestoreElasticHistory_UsesSavedIntervalOnFirstRequest()
     {
         var persistence = new MemoryPersistence();
@@ -296,7 +367,7 @@ public sealed class AppStateTests
 
         Assert.Same(first, second);
         Assert.Equal(LogSourceKind.Elastic, first.Source.Kind);
-        Assert.Equal("ops-logs-*", first.DisplayName);
+        Assert.Equal("ops / logs-* · api", first.DisplayName);
         Assert.Empty(Assert.IsType<AppConfig>(persistence.Config).OpenFiles);
         Assert.Equal(
             "source-1",

@@ -711,11 +711,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             .Settings.ElasticConnections.SelectMany(connection =>
                 connection.Views.SelectMany(view =>
                     view.Sources.Select(source =>
-                        (
-                            source.Id,
-                            DisplayName: $"{connection.Name}-{view.Name}",
-                            ToolTip: $"{connection.Name} / {view.Name}"
-                        )
+                        LogSourceDescriptor.Elastic(connection, view, source)
                     )
                 )
             )
@@ -730,6 +726,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 );
         foreach (var option in ElasticSources)
         {
+            option.SyncIdentity(configured.First(source => source.Id == option.SourceId));
             var status =
                 _state.ElasticSourceStatuses.GetValueOrDefault(option.SourceId)?.Status.ToString()
                 ?? "Checking";

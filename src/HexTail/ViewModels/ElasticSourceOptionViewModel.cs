@@ -28,8 +28,8 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
     }
 
     public string SourceId { get; }
-    public string DisplayName { get; }
-    public string ToolTip { get; }
+    public string DisplayName { get; private set; }
+    public string ToolTip { get; private set; }
     public string Status
     {
         get => _status;
@@ -107,6 +107,20 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
         finally
         {
             IsOpening = false;
+        }
+    }
+
+    internal void SyncIdentity(LogSourceDescriptor source)
+    {
+        if (DisplayName != source.DisplayName)
+        {
+            DisplayName = source.DisplayName;
+            this.RaisePropertyChanged(nameof(DisplayName));
+        }
+        if (ToolTip != source.ToolTip)
+        {
+            ToolTip = source.ToolTip;
+            this.RaisePropertyChanged(nameof(ToolTip));
         }
     }
 

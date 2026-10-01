@@ -41,7 +41,7 @@ public sealed class FileTabState : IAsyncDisposable
         Buffer.Changed += OnBufferChanged;
     }
 
-    public LogSourceDescriptor Source { get; }
+    public LogSourceDescriptor Source { get; internal set; }
     public string Id => Source.Id;
     public string Path => Source.LocalPath ?? string.Empty;
     public FileBuffer Buffer { get; }

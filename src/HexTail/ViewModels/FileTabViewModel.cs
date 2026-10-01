@@ -27,6 +27,7 @@ internal sealed class FileTabViewModel : ReactiveObject
     public MainWindowViewModel Workspace => _owner;
     public FileTabState Model { get; }
     public string DisplayName => Model.DisplayName;
+    public string SourceDetails => Model.Source.ToolTip;
     public string Path => Model.Path;
     public string? Error => Model.Error;
     public bool IsSelected => ReferenceEquals(_owner.SelectedFile, this);
@@ -117,13 +118,11 @@ internal sealed class FileTabViewModel : ReactiveObject
         if (loadRows && Views.Count > 0)
             Views[SelectedViewIndex].Sync();
 
-        if (!loadRows)
-            return;
-
         var snapshot = new FileSnapshot(
             FollowAll,
             ShowContext,
             DisplayName,
+            SourceDetails,
             Error,
             Model.Searches.Count
         );
@@ -135,6 +134,8 @@ internal sealed class FileTabViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(ShowContext));
         if (previous is null || previous.Value.DisplayName != snapshot.DisplayName)
             this.RaisePropertyChanged(nameof(DisplayName));
+        if (previous is null || previous.Value.SourceDetails != snapshot.SourceDetails)
+            this.RaisePropertyChanged(nameof(SourceDetails));
         if (previous is null || previous.Value.Error != snapshot.Error)
             this.RaisePropertyChanged(nameof(Error));
         if (previous is null || previous.Value.SearchCount != snapshot.SearchCount)
@@ -175,6 +176,7 @@ internal sealed class FileTabViewModel : ReactiveObject
         bool FollowAll,
         bool ShowContext,
         string DisplayName,
+        string SourceDetails,
         string? Error,
         int SearchCount
     );

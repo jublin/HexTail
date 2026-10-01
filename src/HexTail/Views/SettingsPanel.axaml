@@ -414,16 +414,19 @@
                                       <TextBlock Text="{Binding MetadataStatus}" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" />
                                       <TextBlock Text="{Binding TimestampStatus}" TextWrapping="Wrap" />
                                       <TextBlock Text="{Binding TimestampError}" Classes="error" TextWrapping="Wrap" />
-                                      <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                                        <StackPanel Spacing="4">
-                                          <TextBlock Text="Value" Classes="elastic-form-label" />
-                                          <TextBox
-                                            Text="{Binding FilterValue, Mode=TwoWay}"
-                                            PlaceholderText="Filter value"
-                                          />
-                                          <TextBlock Text="{Binding FilterValueError}" Classes="error" TextWrapping="Wrap" />
-                                        </StackPanel>
-                                      </Grid>
+                                      <TextBlock Text="Source filter values" Classes="elastic-form-label" />
+                                      <ItemsControl ItemsSource="{Binding Sources}">
+                                        <ItemsControl.ItemTemplate>
+                                          <DataTemplate x:DataType="vm:ElasticSourceSettingViewModel">
+                                            <StackPanel Spacing="4" Margin="0,4">
+                                              <TextBox Text="{Binding ServerValue, Mode=TwoWay}" PlaceholderText="Filter value" AutomationProperties.Name="Source filter value" />
+                                              <TextBlock Text="{Binding NamespaceValue, StringFormat='Saved namespace metadata (not queried): {0}'}" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                          </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                      </ItemsControl>
+                                      <TextBlock Text="{Binding NamespaceField, StringFormat='Saved namespace field (not queried): {0}'}" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" />
+                                      <TextBlock Text="{Binding FilterValueError}" Classes="error" TextWrapping="Wrap" />
                                       <TextBlock
                                         Text="Fields to display"
                                         Classes="elastic-form-label"
