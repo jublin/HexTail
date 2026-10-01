@@ -104,8 +104,68 @@ public sealed class AppState : IAsyncDisposable
         }
         if (!authenticated && previous is not null)
             _credentials.Delete(connection.Id);
+        await ReloadElasticConnectionAsync(connection, previous, secret ?? string.Empty)
+            .ConfigureAwait(false);
         NotifyChanged();
         SignalHealthCheck();
+    }
+
+    private async ValueTask ReloadElasticConnectionAsync(
+        ElasticConnectionSettings connection,
+        ElasticConnectionSettings? previous,
+        string secret
+    )
+    {
+        var previousIds =
+            previous
+                ?.Views.SelectMany(view => view.Sources)
+                .Select(source => source.Id)
+                .ToHashSet(StringComparer.Ordinal)
+            ?? [];
+        var tabs = Files
+            .Where(tab => tab.Source.Kind == LogSourceKind.Elastic && previousIds.Contains(tab.Id))
+            .ToArray();
+        foreach (var tab in tabs)
+        {
+            var match = connection
+                .Views.SelectMany(view => view.Sources.Select(source => (view, source)))
+                .FirstOrDefault(item => item.source.Id == tab.Id);
+            if (match.source is null)
+            {
+                await CloseFileAsync(tab).ConfigureAwait(false);
+                continue;
+            }
+            var replacement = _tailers.CreateElastic(
+                connection,
+                match.view,
+                match.source,
+                secret,
+                _elastic,
+                Now
+            );
+            replacement.SetTimeRange(
+                tab.ElasticResolvedFrom?.ToString("O") ?? tab.ElasticFrom,
+                tab.ElasticTo
+            );
+            var old = tab.Tailer;
+            await old.DisposeAsync().ConfigureAwait(false);
+            var installed = false;
+            lock (_gate)
+            {
+                if (_files.Contains(tab))
+                {
+                    installed = true;
+                    tab.Tailer = replacement;
+                    tab.Buffer.Clear();
+                    tab.Error = null;
+                    tab.ElasticLoading = true;
+                    tab.ElasticResolvedTo = null;
+                    replacement.Start();
+                }
+            }
+            if (!installed)
+                await replacement.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     public async ValueTask RemoveElasticConnectionAsync(
@@ -365,7 +425,7 @@ public sealed class AppState : IAsyncDisposable
                 ?? throw new InvalidOperationException("The Elastic credential is unavailable.")
             : string.Empty;
         var viewName = string.IsNullOrWhiteSpace(view.Name) ? view.DataViewTitle! : view.Name;
-        var tailer = _tailers.StartElastic(connection, view, match.source, secret, _elastic, Now);
+        var tailer = _tailers.CreateElastic(connection, view, match.source, secret, _elastic, Now);
         var tab = new FileTabState(
             new LogSourceDescriptor(
                 sourceId,
@@ -388,6 +448,7 @@ public sealed class AppState : IAsyncDisposable
             _files.Add(tab);
             SelectedFile = tab;
         }
+        tailer.Start();
         NotifyChanged();
         if (save)
             await SaveAsync(cancellationToken).ConfigureAwait(false);
@@ -608,108 +669,112 @@ public sealed class AppState : IAsyncDisposable
 
     public bool DrainTailerEvents()
     {
-        var changed = false;
-        var pendingLines = new Dictionary<string, List<Line>>(StringComparer.Ordinal);
-
-        void FlushLines(string sourceId)
+        // ponytail: one lock for the bounded UI drain; split per source if draining causes contention.
+        lock (_gate)
         {
-            if (!pendingLines.Remove(sourceId, out var lines) || lines.Count == 0)
-                return;
-            FileTabState? tab;
-            lock (_gate)
-                tab = _files.FirstOrDefault(file => file.Id == sourceId);
-            tab?.Buffer.Append(lines);
-        }
+            var changed = false;
+            var pendingLines = new Dictionary<string, List<Line>>(StringComparer.Ordinal);
 
-        var remainingLines = MaxLinesPerDrain;
-        var started = System.Diagnostics.Stopwatch.GetTimestamp();
-        for (var events = 0; events < MaxEventsPerDrain && remainingLines > 0; events++)
-        {
-            if (
-                events > 0
-                && System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds >= 8
-            )
-                break;
-            SourceEvent sourceEvent;
-            if (_pendingBatch is not null)
-                sourceEvent = _pendingBatch;
-            else if (!_tailers.Events.TryRead(out sourceEvent!))
-                break;
-            FileTabState? tab;
-            lock (_gate)
-                tab = _files.FirstOrDefault(file => file.Id == sourceEvent.SourceId);
-            if (
-                tab is null
-                || (
-                    tab.Tailer is ElasticTailer elastic
-                    && (
-                        sourceEvent.InstanceId != elastic.InstanceId
-                        || sourceEvent.Generation != elastic.Generation
+            void FlushLines(string sourceId)
+            {
+                if (!pendingLines.Remove(sourceId, out var lines) || lines.Count == 0)
+                    return;
+                FileTabState? tab;
+                lock (_gate)
+                    tab = _files.FirstOrDefault(file => file.Id == sourceId);
+                tab?.Buffer.Append(lines);
+            }
+
+            var remainingLines = MaxLinesPerDrain;
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            for (var events = 0; events < MaxEventsPerDrain && remainingLines > 0; events++)
+            {
+                if (
+                    events > 0
+                    && System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds >= 8
+                )
+                    break;
+                SourceEvent sourceEvent;
+                if (_pendingBatch is not null)
+                    sourceEvent = _pendingBatch;
+                else if (!_tailers.Events.TryRead(out sourceEvent!))
+                    break;
+                FileTabState? tab;
+                lock (_gate)
+                    tab = _files.FirstOrDefault(file => file.Id == sourceEvent.SourceId);
+                if (
+                    tab is null
+                    || (
+                        tab.Tailer is ElasticTailer elastic
+                        && (
+                            sourceEvent.InstanceId != elastic.InstanceId
+                            || sourceEvent.Generation != elastic.Generation
+                        )
                     )
                 )
-            )
-            {
-                _pendingBatch = null;
-                _pendingBatchOffset = 0;
-                continue;
+                {
+                    _pendingBatch = null;
+                    _pendingBatchOffset = 0;
+                    continue;
+                }
+
+                switch (sourceEvent)
+                {
+                    case SourceLines newLines:
+                        tab.Error = null;
+                        if (!pendingLines.TryGetValue(sourceEvent.SourceId, out var lines))
+                            pendingLines[sourceEvent.SourceId] = lines = [];
+                        var count = Math.Min(
+                            remainingLines,
+                            newLines.Lines.Count - _pendingBatchOffset
+                        );
+                        for (var index = 0; index < count; index++)
+                            lines.Add(newLines.Lines[_pendingBatchOffset + index]);
+                        remainingLines -= count;
+                        _pendingBatchOffset += count;
+                        if (_pendingBatchOffset < newLines.Lines.Count)
+                            _pendingBatch = newLines;
+                        else
+                        {
+                            _pendingBatch = null;
+                            _pendingBatchOffset = 0;
+                        }
+                        break;
+                    case SourceReset:
+                        FlushLines(sourceEvent.SourceId);
+                        tab.Error = null;
+                        tab.Buffer.Clear();
+                        break;
+                    case SourceRangeLoaded loaded:
+                        FlushLines(sourceEvent.SourceId);
+                        tab.ElasticLoading = false;
+                        tab.Error = null;
+                        if (loaded.Initial || tab.ElasticResolvedFrom is null)
+                            tab.ElasticResolvedFrom = loaded.From;
+                        tab.ElasticResolvedTo = loaded.To;
+                        break;
+                    case SourceError error:
+                        tab.ElasticLoading = false;
+                        FlushLines(sourceEvent.SourceId);
+                        tab.Error = $"Source error: {error.Message}";
+                        break;
+                    case SourceRecovered:
+                        FlushLines(sourceEvent.SourceId);
+                        tab.Error = null;
+                        break;
+                }
+
+                changed = true;
             }
 
-            switch (sourceEvent)
-            {
-                case SourceLines newLines:
-                    tab.Error = null;
-                    if (!pendingLines.TryGetValue(sourceEvent.SourceId, out var lines))
-                        pendingLines[sourceEvent.SourceId] = lines = [];
-                    var count = Math.Min(
-                        remainingLines,
-                        newLines.Lines.Count - _pendingBatchOffset
-                    );
-                    for (var index = 0; index < count; index++)
-                        lines.Add(newLines.Lines[_pendingBatchOffset + index]);
-                    remainingLines -= count;
-                    _pendingBatchOffset += count;
-                    if (_pendingBatchOffset < newLines.Lines.Count)
-                        _pendingBatch = newLines;
-                    else
-                    {
-                        _pendingBatch = null;
-                        _pendingBatchOffset = 0;
-                    }
-                    break;
-                case SourceReset:
-                    FlushLines(sourceEvent.SourceId);
-                    tab.Error = null;
-                    tab.Buffer.Clear();
-                    break;
-                case SourceRangeLoaded loaded:
-                    FlushLines(sourceEvent.SourceId);
-                    tab.ElasticLoading = false;
-                    tab.Error = null;
-                    if (loaded.Initial || tab.ElasticResolvedFrom is null)
-                        tab.ElasticResolvedFrom = loaded.From;
-                    tab.ElasticResolvedTo = loaded.To;
-                    break;
-                case SourceError error:
-                    tab.ElasticLoading = false;
-                    FlushLines(sourceEvent.SourceId);
-                    tab.Error = $"Source error: {error.Message}";
-                    break;
-                case SourceRecovered:
-                    FlushLines(sourceEvent.SourceId);
-                    tab.Error = null;
-                    break;
-            }
+            foreach (var sourceId in pendingLines.Keys.ToArray())
+                FlushLines(sourceId);
 
-            changed = true;
+            if (changed)
+                NotifyChanged();
+
+            return changed;
         }
-
-        foreach (var sourceId in pendingLines.Keys.ToArray())
-            FlushLines(sourceId);
-
-        if (changed)
-            NotifyChanged();
-
-        return changed;
     }
 
     public async ValueTask SaveAsync(CancellationToken cancellationToken = default)

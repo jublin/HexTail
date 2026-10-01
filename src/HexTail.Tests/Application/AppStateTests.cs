@@ -9,6 +9,82 @@ namespace HexTail.Tests.Application;
 
 public sealed class AppStateTests
 {
+    [Fact]
+    public async Task SavingOpenElasticSettings_ReloadsTheSavedFilterAndPreservesInvestigation()
+    {
+        var connection = ElasticConnection("ops") with
+        {
+            Sources = [new ElasticSourceSettings { Id = "source-1", ServerValue = "api" }],
+        };
+        var changedRequested = new TaskCompletionSource<ElasticSearchRequest>();
+        var client = new FakeElasticApiClient
+        {
+            SearchHandler = request =>
+            {
+                if (request.FilterValue == "changed-api")
+                    changedRequested.TrySetResult(request);
+                return Task.FromResult(new ElasticSearchPage("pit", []));
+            },
+        };
+        await using var state = new AppState(
+            NewTailers(),
+            new MemoryPersistence(),
+            new AppSettings { ElasticConnections = [connection] },
+            elastic: client
+        );
+        var tab = await state.OpenElasticSourceAsync(
+            "source-1",
+            save: false,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        var oldTailer = tab.Tailer;
+        await oldTailer.DisposeAsync();
+        var from = "2026-08-20T10:00:00Z";
+        var to = "2026-08-20T11:00:00Z";
+        state.SetElasticTimeRange(tab, from, to);
+        tab.Buffer.Append(new Line("old results"));
+        tab.AddSearch(
+            new Search(
+                new CompiledQuery("message", MatchMode.Literal, false),
+                "#ff0000",
+                tab.Buffer
+            )
+        );
+        tab.FollowAll = false;
+        var saved = state.Settings.ElasticConnections[0];
+        var view = saved.Views[0];
+        var updated = saved with
+        {
+            Views =
+            [
+                view with
+                {
+                    Sources = [view.Sources[0] with { ServerValue = "changed-api" }],
+                },
+            ],
+        };
+
+        await state.SaveElasticConnectionAsync(
+            updated,
+            null,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Same(tab, state.SelectedFile);
+        Assert.NotSame(oldTailer, tab.Tailer);
+        Assert.Empty(tab.Buffer.Lines);
+        Assert.Single(tab.Searches);
+        Assert.False(tab.FollowAll);
+        Assert.Equal(from, tab.ElasticFrom);
+        Assert.Equal(to, tab.ElasticTo);
+        var request = await changedRequested.Task.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken
+        );
+        Assert.Equal(DateTimeOffset.Parse(from), request.FromInclusive);
+        Assert.Equal(DateTimeOffset.Parse(to), request.ToInclusive);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

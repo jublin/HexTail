@@ -59,7 +59,7 @@ public sealed class FileTabState : IAsyncDisposable
     public DateTimeOffset? ElasticResolvedFrom { get; internal set; }
     public DateTimeOffset? ElasticResolvedTo { get; internal set; }
     public string? Error { get; internal set; }
-    public ILogTailer Tailer { get; }
+    public ILogTailer Tailer { get; internal set; }
     public string DisplayName => Source.DisplayName;
 
     public IReadOnlyList<Line> ContextLines =>
