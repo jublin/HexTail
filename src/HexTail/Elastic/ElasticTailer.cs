@@ -24,6 +24,7 @@ internal sealed class ElasticTailer : ILogTailer
     private readonly CancellationTokenSource _stop = new();
     private readonly Lock _rangeGate = new();
     private long _generation;
+    internal Guid InstanceId { get; } = Guid.NewGuid();
     internal long Generation => Interlocked.Read(ref _generation);
     private readonly HashSet<string> _idsAtCursor = new(StringComparer.Ordinal);
     private readonly int _maxInitialLines;
@@ -114,6 +115,7 @@ internal sealed class ElasticTailer : ILogTailer
                     new SourceLines(SourceId, accepted.Select(hit => hit.Line).ToArray())
                     {
                         Generation = generation,
+                        InstanceId = InstanceId,
                     },
                     cancellationToken
                 )
@@ -202,6 +204,7 @@ internal sealed class ElasticTailer : ILogTailer
             ? new SourceRangeLoaded(SourceId, rangeFrom, toInclusive, initialRead, live)
             {
                 Generation = generation,
+                InstanceId = InstanceId,
             }
             : null;
     }
@@ -268,7 +271,11 @@ internal sealed class ElasticTailer : ILogTailer
                 if (reportedError)
                     await _events
                         .WriteAsync(
-                            new SourceRecovered(SourceId) { Generation = generation },
+                            new SourceRecovered(SourceId)
+                            {
+                                Generation = generation,
+                                InstanceId = InstanceId,
+                            },
                             _stop.Token
                         )
                         .ConfigureAwait(false);
@@ -313,7 +320,11 @@ internal sealed class ElasticTailer : ILogTailer
         if (!reportedError)
             await _events
                 .WriteAsync(
-                    new SourceError(SourceId, message) { Generation = generation },
+                    new SourceError(SourceId, message)
+                    {
+                        Generation = generation,
+                        InstanceId = InstanceId,
+                    },
                     _stop.Token
                 )
                 .ConfigureAwait(false);

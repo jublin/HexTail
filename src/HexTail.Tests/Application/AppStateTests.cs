@@ -9,6 +9,76 @@ namespace HexTail.Tests.Application;
 
 public sealed class AppStateTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReopeningElasticSource_RejectsQueuedEventsFromItsPreviousOpening(bool partial)
+    {
+        var connection = ElasticConnection("ops") with
+        {
+            Sources = [new ElasticSourceSettings { Id = "source-1", ServerValue = "api" }],
+        };
+        var payload = "old opening";
+        var client = new FakeElasticApiClient
+        {
+            SearchHandler = _ =>
+                Task.FromResult(
+                    new ElasticSearchPage(
+                        "pit",
+                        [
+                            new ElasticHit(
+                                Guid.NewGuid().ToString(),
+                                DateTimeOffset.UtcNow,
+                                new Line(payload),
+                                []
+                            ),
+                        ]
+                    )
+                ),
+        };
+        await using var service = NewTailers();
+        await using var state = new AppState(
+            service,
+            new MemoryPersistence(),
+            new AppSettings { ElasticConnections = [connection] },
+            elastic: client
+        );
+        var old = await state.OpenElasticSourceAsync(
+            "source-1",
+            save: false,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        await old.Tailer.DisposeAsync();
+        await ((ElasticTailer)old.Tailer).PollOnceAsync(TestContext.Current.CancellationToken);
+        SourceLines? oldRows = null;
+        while (service.Events.TryRead(out var sourceEvent))
+            if (sourceEvent is SourceLines rows)
+                oldRows = rows;
+        Assert.NotNull(oldRows);
+        var queued = oldRows with
+        {
+            Lines = Enumerable.Repeat(new Line("old opening"), partial ? 20_000 : 1).ToArray(),
+        };
+        Assert.True(service.Publish(queued));
+        if (partial)
+        {
+            state.DrainTailerEvents();
+            Assert.NotEmpty(old.Buffer.Lines);
+        }
+        await state.CloseFileAsync(old, TestContext.Current.CancellationToken);
+        payload = "new opening";
+        var current = await state.OpenElasticSourceAsync(
+            "source-1",
+            save: false,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        await current.Tailer.DisposeAsync();
+        await ((ElasticTailer)current.Tailer).PollOnceAsync(TestContext.Current.CancellationToken);
+        while (state.DrainTailerEvents()) { }
+        Assert.DoesNotContain(current.Buffer.Lines, line => line.Raw == "old opening");
+        Assert.Contains(current.Buffer.Lines, line => line.Raw == "new opening");
+    }
+
     [Fact]
     public async Task SaveElasticConnection_PreservesExistingApiKeyWhenSecretIsBlank()
     {
@@ -412,6 +482,7 @@ public sealed class AppStateTests
         )
         {
             Generation = 0,
+            InstanceId = ((ElasticTailer)tab.Tailer).InstanceId,
         };
         Assert.True(tailers.Publish(oldBatch));
         state.DrainTailerEvents();
@@ -423,8 +494,24 @@ public sealed class AppStateTests
         Assert.Single(tab.Searches);
         Assert.Null(tab.SelectedLine);
         Assert.Null(tab.ExpandedLine);
-        Assert.True(tailers.Publish(new SourceError(tab.Id, "old failure") { Generation = 0 }));
-        Assert.True(tailers.Publish(new SourceLines(tab.Id, [new Line("new")]) { Generation = 1 }));
+        Assert.True(
+            tailers.Publish(
+                new SourceError(tab.Id, "old failure")
+                {
+                    Generation = 0,
+                    InstanceId = ((ElasticTailer)tab.Tailer).InstanceId,
+                }
+            )
+        );
+        Assert.True(
+            tailers.Publish(
+                new SourceLines(tab.Id, [new Line("new")])
+                {
+                    Generation = 1,
+                    InstanceId = ((ElasticTailer)tab.Tailer).InstanceId,
+                }
+            )
+        );
         while (state.DrainTailerEvents()) { }
         Assert.Equal("new", Assert.Single(tab.Buffer.Lines).Raw);
         Assert.Null(tab.Error);
@@ -432,7 +519,13 @@ public sealed class AppStateTests
         var from = DateTimeOffset.Parse("2026-08-20T10:00:00Z");
         var to = from.AddHours(1);
         Assert.True(
-            tailers.Publish(new SourceRangeLoaded(tab.Id, from, to, true, true) { Generation = 1 })
+            tailers.Publish(
+                new SourceRangeLoaded(tab.Id, from, to, true, true)
+                {
+                    Generation = 1,
+                    InstanceId = ((ElasticTailer)tab.Tailer).InstanceId,
+                }
+            )
         );
         while (state.DrainTailerEvents()) { }
         Assert.False(tab.ElasticLoading);
@@ -443,6 +536,7 @@ public sealed class AppStateTests
                 new SourceRangeLoaded(tab.Id, from.AddMinutes(1), to.AddMinutes(1), false, true)
                 {
                     Generation = 1,
+                    InstanceId = ((ElasticTailer)tab.Tailer).InstanceId,
                 }
             )
         );

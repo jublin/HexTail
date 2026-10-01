@@ -7,6 +7,7 @@ namespace HexTail.Tailing;
 /// <param name="FileId">Identifier of the tailed file, as assigned by the caller of <see cref="TailerService.StartTailer"/>.</param>
 public abstract record SourceEvent(string SourceId)
 {
+    public Guid? InstanceId { get; init; }
     public long? Generation { get; init; }
 }
 

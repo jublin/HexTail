@@ -642,7 +642,10 @@ public sealed class AppState : IAsyncDisposable
                 tab is null
                 || (
                     tab.Tailer is ElasticTailer elastic
-                    && sourceEvent.Generation != elastic.Generation
+                    && (
+                        sourceEvent.InstanceId != elastic.InstanceId
+                        || sourceEvent.Generation != elastic.Generation
+                    )
                 )
             )
             {
