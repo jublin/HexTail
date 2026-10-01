@@ -126,9 +126,13 @@ public sealed class AppStateTests
         Assert.Contains("prod", api.Source.ToolTip);
     }
 
-    [Fact]
-    public async Task RestoreElasticHistory_UsesSavedIntervalOnFirstRequest()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RestoreElasticHistory_UsesSavedIntervalOnFirstRequest(bool relative)
     {
+        var from = relative ? "now-15m" : "2026-08-20T10:00:00Z";
+        var to = relative ? "now" : "2026-08-20T11:00:00Z";
         var persistence = new MemoryPersistence();
         var connection = ElasticConnection("ops") with
         {
@@ -148,7 +152,7 @@ public sealed class AppStateTests
                 save: false,
                 cancellationToken: TestContext.Current.CancellationToken
             );
-            original.SetElasticTimeRange(tab, "2026-08-20T10:00:00Z", "2026-08-20T11:00:00Z");
+            original.SetElasticTimeRange(tab, from, to);
             tab.ElasticInputZone = AppTimeZoneMode.Local;
             await original.SaveAsync(TestContext.Current.CancellationToken);
         }
@@ -162,14 +166,29 @@ public sealed class AppStateTests
             },
         };
         await using var restored = new AppState(NewTailers(), persistence, elastic: client);
+        var beforeRestore = DateTimeOffset.UtcNow;
         await restored.RestoreAsync(TestContext.Current.CancellationToken);
         var first = await requested.Task.WaitAsync(
             TimeSpan.FromSeconds(5),
             TestContext.Current.CancellationToken
         );
-        Assert.Equal(DateTimeOffset.Parse("2026-08-20T10:00:00Z"), first.FromInclusive);
-        Assert.Equal(DateTimeOffset.Parse("2026-08-20T11:00:00Z"), first.ToInclusive);
-        Assert.Equal("2026-08-20T11:00:00Z", restored.SelectedFile!.ElasticTo);
+        if (relative)
+        {
+            var afterRequest = DateTimeOffset.UtcNow;
+            Assert.InRange(
+                first.FromInclusive,
+                beforeRestore.AddMinutes(-15),
+                afterRequest.AddMinutes(-15)
+            );
+            Assert.InRange(first.ToInclusive, beforeRestore, afterRequest);
+        }
+        else
+        {
+            Assert.Equal(DateTimeOffset.Parse(from), first.FromInclusive);
+            Assert.Equal(DateTimeOffset.Parse(to), first.ToInclusive);
+        }
+        Assert.Equal(from, restored.SelectedFile!.ElasticFrom);
+        Assert.Equal(to, restored.SelectedFile.ElasticTo);
         Assert.Equal(AppTimeZoneMode.Local, restored.SelectedFile.ElasticInputZone);
     }
 
@@ -317,6 +336,70 @@ public sealed class AppStateTests
         while (state.DrainTailerEvents()) { }
         Assert.DoesNotContain(current.Buffer.Lines, line => line.Raw == "old opening");
         Assert.Contains(current.Buffer.Lines, line => line.Raw == "new opening");
+    }
+
+    [Fact]
+    public async Task FailedSettingsSave_PreservesOpenTailerRangeAndRows()
+    {
+        var connection = ElasticConnection("ops") with
+        {
+            Sources = [new ElasticSourceSettings { Id = "source-1", ServerValue = "api" }],
+        };
+        var persistence = new MemoryPersistence();
+        var client = new FakeElasticApiClient
+        {
+            SearchHandler = _ => Task.FromResult(new ElasticSearchPage("pit", [])),
+        };
+        await using var state = new AppState(
+            NewTailers(),
+            persistence,
+            new AppSettings { ElasticConnections = [connection] },
+            elastic: client
+        );
+        var tab = await state.OpenElasticSourceAsync("source-1", save: false);
+        const string from = "2026-08-20T10:00:00Z";
+        const string to = "2026-08-20T11:00:00Z";
+        state.SetElasticTimeRange(tab, from, to);
+        var tailer = tab.Tailer;
+        tab.Buffer.Append(new Line("preserved row"));
+        var saved = state.Settings.ElasticConnections[0];
+        var updated = saved with
+        {
+            Views =
+            [
+                saved.Views[0] with
+                {
+                    Sources = [saved.Views[0].Sources[0] with { ServerValue = "changed-api" }],
+                },
+            ],
+        };
+        try
+        {
+            persistence.SaveError = new IOException("disk full");
+            await Assert.ThrowsAsync<IOException>(() =>
+                state.SaveElasticConnectionAsync(updated, null).AsTask()
+            );
+            Assert.Same(tailer, tab.Tailer);
+            Assert.Same(tab, state.SelectedFile);
+            Assert.Equal(from, tab.ElasticFrom);
+            Assert.Equal(to, tab.ElasticTo);
+            Assert.Equal("preserved row", Assert.Single(tab.Buffer.Lines).Raw);
+            Assert.Equal(
+                "api",
+                state.Settings.ElasticConnections[0].Views[0].Sources[0].ServerValue
+            );
+            var completed = await ((ElasticTailer)tailer).PollOnceAsync(
+                TestContext.Current.CancellationToken
+            );
+            Assert.NotNull(completed);
+            Assert.Equal(DateTimeOffset.Parse(from), completed.From);
+            Assert.Equal(DateTimeOffset.Parse(to), completed.To);
+            Assert.Equal("api", client.Searches[^1].FilterValue);
+        }
+        finally
+        {
+            persistence.SaveError = null;
+        }
     }
 
     [Fact]

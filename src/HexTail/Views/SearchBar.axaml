@@ -33,12 +33,20 @@
           </events:KeyDownEventTrigger>
         </i:Interaction.Behaviors>
       </TextBox>
-      <ComboBox x:Name="SearchModePicker" Grid.Column="1" Width="94" Margin="4,0,0,0"
-                ItemsSource="{Binding MatchModes}" SelectedItem="{Binding MatchMode, Mode=TwoWay}"
-                Height="{Binding Settings.SecondaryControlHeight}" MinHeight="{Binding Settings.SecondaryControlHeight}"
-                FontSize="{Binding Settings.SecondaryFontSize}" Padding="{Binding Settings.SecondaryPadding}"
-                ToolTip.Tip="Literal matches exact text; Regex interprets a regular expression."
-                AutomationProperties.Name="Search mode" />
+      <ComboBox
+        x:Name="SearchModePicker"
+        Grid.Column="1"
+        Width="94"
+        Margin="4,0,0,0"
+        ItemsSource="{Binding MatchModes}"
+        SelectedItem="{Binding MatchMode, Mode=TwoWay}"
+        Height="{Binding Settings.SecondaryControlHeight}"
+        MinHeight="{Binding Settings.SecondaryControlHeight}"
+        FontSize="{Binding Settings.SecondaryFontSize}"
+        Padding="{Binding Settings.SecondaryPadding}"
+        ToolTip.Tip="Literal matches exact text; Regex interprets a regular expression."
+        AutomationProperties.Name="Search mode"
+      />
       <ToggleButton
         x:Name="CaseToggle"
         Name="CaseToggle"

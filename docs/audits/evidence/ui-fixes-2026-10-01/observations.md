@@ -4,7 +4,7 @@ All 17 findings from the [re-audit](../../2026-10-01-ui-reaudit.md) are implemen
 
 ## Checks
 
-- Complete Release suite: **244 passed, 0 failed**. The isolated post-test dispatcher error seen during development did not recur in either complete run.
+- Complete Release suite: **249 passed, 0 failed**. The isolated post-test dispatcher error seen during development did not recur in the complete runs.
 - Narrow settings: Labels, Appearance and Elastic checked at 720, 1280 and 1920 pixels, all three densities and 14/24px panel fonts. Forms stack and restore columns; actions remain inside the panel with vertical scrolling.
 - Native modal input: focus enters Settings, forward/backward Tab stays inside, Control/Meta+F cannot move focus to the workspace, Escape returns focus. Draft dismissal via Escape, backdrop, button and binding retains the native dialog until Save/Discard/Keep editing.
 - Draft save progress/failure, edits during save, nested field/credential changes, deletion cancellation and failed-delete rollback are covered by executable checks.

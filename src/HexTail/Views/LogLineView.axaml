@@ -9,8 +9,18 @@
   <UserControl.ContextMenu>
     <ContextMenu Opening="OnContextMenuOpening">
       <MenuItem Header="Toggle full row details" InputGesture="Enter" Click="OnToggleDetails" />
-      <MenuItem x:Name="CopyRawLine" Header="Copy raw line" InputGesture="Ctrl+C" Click="OnCopyRawLine" />
-      <MenuItem Header="Copy fields" InputGesture="Ctrl+Shift+C" IsEnabled="{Binding HasParsedFields}" Click="OnCopyFields" />
+      <MenuItem
+        x:Name="CopyRawLine"
+        Header="Copy raw line"
+        InputGesture="Ctrl+C"
+        Click="OnCopyRawLine"
+      />
+      <MenuItem
+        Header="Copy fields"
+        InputGesture="Ctrl+Shift+C"
+        IsEnabled="{Binding HasParsedFields}"
+        Click="OnCopyFields"
+      />
     </ContextMenu>
   </UserControl.ContextMenu>
   <Border

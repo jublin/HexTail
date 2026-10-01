@@ -79,7 +79,12 @@ public sealed class ElasticDraftTests
         Assert.Equal("Unsaved", editor.SaveStatus);
 
         persistence.Pending = new TaskCompletionSource();
-        var saving = editor.SaveCommand.Execute().FirstAsync().ToTask();
+        owner.SettingsOpen = true;
+        owner.SettingsOpen = false;
+        var saving = owner.Settings.SaveDraftsAndCloseCommand.Execute().FirstAsync().ToTask();
+        Assert.True(owner.SettingsOpen);
+        Assert.True(owner.Settings.CloseConfirmationVisible);
+        Assert.False(owner.Settings.CanDiscardDrafts);
         Assert.True(editor.IsSaving);
         Assert.Equal("Saving…", editor.SaveStatus);
         persistence.Pending.SetResult();
@@ -87,6 +92,8 @@ public sealed class ElasticDraftTests
         Dispatcher.UIThread.RunJobs();
         Assert.False(editor.IsDirty);
         Assert.Equal("Saved", editor.SaveStatus);
+        Assert.False(owner.SettingsOpen);
+        Assert.False(owner.Settings.CloseConfirmationVisible);
         Assert.Equal(
             "Updated Ops",
             Assert.Single(persistence.Config!.Settings.ElasticConnections).Name
