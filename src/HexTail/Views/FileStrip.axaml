@@ -8,8 +8,12 @@
   x:Class="HexTail.Views.FileStrip"
   x:DataType="vm:MainWindowViewModel"
 >
+  <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4"
+        Background="{DynamicResource SurfaceBrush}" IsVisible="{Binding HasFile}">
+  <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
   <TabControl
     ItemsSource="{Binding Files}"
+    SelectedItem="{Binding SelectedFile, Mode=OneWay}"
     FontSize="{Binding Settings.FileStripFontSize}"
     Height="{Binding Settings.FileStripHeight}"
     HorizontalContentAlignment="Stretch"
@@ -25,6 +29,7 @@
       <DataTemplate x:DataType="vm:FileTabViewModel">
         <Border
           Classes="file-tab"
+          MaxWidth="240"
           Height="{Binding Workspace.Settings.TabHeight}"
           HorizontalAlignment="Stretch"
           VerticalAlignment="Bottom"
@@ -33,12 +38,14 @@
           Classes.selected="{Binding IsSelected}"
           ToolTip.Tip="{Binding Model.Source.ToolTip}"
         >
-          <Grid ColumnDefinitions=".9*, .1*">
+          <Grid ColumnDefinitions="*,Auto">
             <Button
               MinHeight="{Binding Workspace.Settings.FileStripHeight}"
               Command="{Binding $parent[UserControl].DataContext.SelectFileCommand}"
               CommandParameter="{Binding}"
-              HorizontalAlignment="Left"
+              AutomationProperties.Name="{Binding Model.Source.ToolTip, StringFormat='Select {0}'}"
+              MinWidth="0"
+              HorizontalAlignment="Stretch"
               HorizontalContentAlignment="Left"
               VerticalContentAlignment="Center"
               Padding="{Binding Workspace.Settings.TabPadding}"
@@ -46,6 +53,7 @@
             >
               <TextBlock
                 Text="{Binding DisplayName}"
+                TextTrimming="CharacterEllipsis"
                 FontSize="{Binding Workspace.Settings.FileStripFontSize}"
               />
             </Button>
@@ -71,4 +79,30 @@
       </DataTemplate>
     </TabControl.ItemTemplate>
   </TabControl>
+  </ScrollViewer>
+  <TextBlock Grid.Column="1" Text="Tabs" VerticalAlignment="Center" FontSize="12"
+             ToolTip.Tip="Choose any open tab. Drag a header or press Alt+Left / Alt+Right on a tab to reorder." />
+  <ComboBox x:Name="FileTabPicker" Grid.Column="2" Width="150" MinHeight="0"
+            Height="{Binding Settings.FileStripHeight}" Padding="4,0"
+            ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile, Mode=OneWay}"
+            SelectionChanged="OnFileSelected" MaxDropDownHeight="280"
+            AutomationProperties.Name="Open tabs"
+            AutomationProperties.HelpText="Choose an open tab. Alt+Left or Alt+Right on a tab header reorders it."
+            ToolTip.Tip="{Binding SelectedFile.Model.Source.ToolTip}">
+    <ComboBox.ItemTemplate>
+      <DataTemplate x:DataType="vm:FileTabViewModel">
+        <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" MaxWidth="280"
+                   ToolTip.Tip="{Binding Model.Source.ToolTip}" />
+      </DataTemplate>
+    </ComboBox.ItemTemplate>
+  </ComboBox>
+  <Button x:Name="CloseSelectedFile" Grid.Column="3" Classes="icon tab-close"
+          Width="{Binding Settings.TabCloseSize}" Height="{Binding Settings.TabCloseSize}"
+          VerticalAlignment="Center" Command="{Binding CloseFileCommand}"
+          CommandParameter="{Binding SelectedFile}"
+          ToolTip.Tip="{Binding SelectedFile.Model.Source.ToolTip, StringFormat='Close {0}'}"
+          AutomationProperties.Name="Close selected tab">
+    <ic:Icon Value="mdi-close" />
+  </Button>
+  </Grid>
 </UserControl>
