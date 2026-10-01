@@ -106,6 +106,36 @@ public sealed class MainWindowInteractionTests
 
         Assert.True(viewModel.IsElasticSelected);
         Assert.True(window.FindControl<StackPanel>("ElasticTimeRangePanel")!.IsVisible);
+        foreach (var width in new[] { 720, 1280, 1920 })
+        foreach (var density in viewModel.Settings.DensityOptions)
+        {
+            window.Width = width;
+            window.FontSize = 24;
+            viewModel.Settings.Density = density;
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            foreach (
+                var name in new[]
+                {
+                    "SettingsButton",
+                    "SaveSessionButton",
+                    "OpenFileButton",
+                    "AutoScrollToggle",
+                    "InlineContextToggle",
+                    "ElasticTimeRangeButton",
+                }
+            )
+            {
+                var control = window.FindControl<Control>(name);
+                Assert.NotNull(control);
+                var position = control.TranslatePoint(default, window)!.Value;
+                Assert.True(control.IsVisible && control.Bounds.Width > 0);
+                Assert.True(
+                    position.X >= 0 && position.X + control.Bounds.Width <= window.Bounds.Width,
+                    name
+                );
+            }
+        }
         window.Width = 720;
         window.UpdateLayout();
         var rangeButton = window.FindControl<Button>("ElasticTimeRangeButton")!;
@@ -755,10 +785,7 @@ public sealed class MainWindowInteractionTests
 
             Click(firstButton);
             Dispatcher.UIThread.RunJobs();
-            var following = window
-                .GetVisualDescendants()
-                .OfType<ToggleSwitch>()
-                .Single(toggle => Equals(toggle.OnContent, "Following"));
+            var following = window.FindControl<ToggleSwitch>("AutoScrollToggle")!;
             following.IsChecked = false;
             Dispatcher.UIThread.RunJobs();
 

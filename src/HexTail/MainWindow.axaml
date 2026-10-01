@@ -29,7 +29,7 @@
       Background="{DynamicResource SurfaceBrush}"
       HorizontalAlignment="Stretch"
     >
-      <Grid Grid.Row="0" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" HorizontalAlignment="Stretch">
+      <Grid Grid.Row="0" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" HorizontalAlignment="Stretch">
         <CommandBar
           Grid.Column="0"
           HorizontalAlignment="Left"
@@ -88,7 +88,7 @@
               </CommandBarButton.Flyout>
             </CommandBarButton>
             <CommandBarSeparator />
-            <CommandBarButton
+            <CommandBarButton x:Name="SaveSessionButton"
               Command="{Binding SaveCommand}"
               Foreground="{DynamicResource TextBrush}"
               Label="Save Session"
@@ -104,7 +104,7 @@
                 />
               </CommandBarButton.Icon>
             </CommandBarButton>
-            <CommandBarButton
+            <CommandBarButton x:Name="OpenFileButton"
               Label="Open"
               Command="{Binding OpenCommand}"
               Foreground="{DynamicResource TextBrush}"
@@ -124,9 +124,10 @@
         </CommandBar>
 
         <DockPanel Grid.Column="1" HorizontalAlignment="Right" Margin="0,0,5,0">
-          <ToggleSwitch
-            OnContent="Following"
-            OffContent="Not Following"
+          <ToggleSwitch x:Name="AutoScrollToggle"
+            AutomationProperties.Name="Auto-scroll logs" ToolTip.Tip="Auto-scroll follows new rows; it does not pause log retrieval."
+            OnContent="Auto-scroll on"
+            OffContent="Auto-scroll off"
             FontSize="12"
             DockPanel.Dock="Right"
             DataContext="{Binding SelectedFile}"
@@ -134,7 +135,8 @@
             MinHeight="{Binding Workspace.Settings.SecondaryControlHeight}"
             IsChecked="{Binding SelectedView.IsFollowing, Mode=TwoWay}"
           />
-          <ToggleSwitch
+          <ToggleSwitch x:Name="InlineContextToggle"
+            AutomationProperties.Name="Show inline context"
             OnContent="Inline Shown"
             OffContent="No Inline"
             FontSize="12"
@@ -147,9 +149,9 @@
         </DockPanel>
         <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto" Margin="0,0,5,0">
           <views:SearchBar DataContext="{Binding }" />
-
-          <StackPanel Grid.Column="1" x:Name="ElasticTimeRangePanel" VerticalAlignment="Center"
-                      Margin="6,0,0,0" IsVisible="{Binding IsElasticSelected}">
+        </Grid>
+          <StackPanel Grid.Row="2" Grid.ColumnSpan="2" x:Name="ElasticTimeRangePanel" VerticalAlignment="Center"
+                      Margin="4,0,4,4" IsVisible="{Binding IsElasticSelected}">
             <Button x:Name="ElasticTimeRangeButton" Content="Time range…"
                     AutomationProperties.Name="Elastic log time range">
               <Button.Flyout>
@@ -186,8 +188,6 @@
               </Button.Flyout>
             </Button>
           </StackPanel>
-
-        </Grid>
       </Grid>
       <views:FileStrip Grid.Column="0" Grid.Row="1" />
       <views:WorkspaceError Grid.Column="0" Grid.Row="2" />
