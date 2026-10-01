@@ -17,6 +17,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     private string _outputFieldQuery = string.Empty;
     private readonly DispatcherTimer _fieldFilterTimer;
     private readonly List<ElasticFieldOptionViewModel> _fieldSnapshot = [];
+    private readonly List<string> _outputFieldOrder = [];
     private int _fieldFilterVersion;
     private int _metadataVersion;
     private bool _isLoading;
@@ -41,6 +42,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         AddSource();
         _fieldFilterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
         _fieldFilterTimer.Tick += (_, _) => ApplyQueuedFieldFilter();
+        RefreshFieldsCommand = ReactiveCommand.CreateFromTask(RefreshFieldsAsync);
     }
 
     public string Id { get; }
@@ -110,6 +112,16 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     public ObservableCollection<ElasticSourceSettingViewModel> Sources { get; } = [];
     public IEnumerable<string> FieldNames => Fields.Select(option => option.Name);
     public ObservableCollection<ElasticFieldOptionViewModel> VisibleFields { get; } = [];
+    public ReactiveCommand<Unit, Unit> RefreshFieldsCommand { get; }
+    public int SelectedFieldCount => _outputFieldOrder.Count;
+    public string SelectedFieldsSummary =>
+        SelectedFieldCount == 0
+            ? "No output fields selected."
+            : string.Join(" → ", _outputFieldOrder);
+    public string RowPreview => string.Join(' ', _outputFieldOrder.Select(name => $"<{name}>"));
+    public string FieldDiscoveryStatus =>
+        "Showing up to 50 matching candidates plus selected fields. Search by field name to find more.";
+    public string FilterFieldStatus => DescribeField(ServerField);
     public string OutputFieldQuery
     {
         get => _outputFieldQuery;
@@ -171,16 +183,17 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         IsLoading ? "Timestamp field: loading…"
         : !IsSelectionResolved ? "Timestamp field: not loaded"
         : string.IsNullOrWhiteSpace(TimeFieldName) ? "Timestamp field: not detected"
-        : $"Timestamp field: {TimeFieldName}";
+        : $"Timestamp field: {TimeFieldName} · {DescribeField(TimeFieldName)}";
     public string? NameError => string.IsNullOrWhiteSpace(Name) ? "Enter a view name." : null;
     public string? TimestampError =>
         IsSelectionResolved && string.IsNullOrWhiteSpace(TimeFieldName)
             ? "Choose a data view with a timestamp field configured in Kibana."
             : null;
     public string? FilterFieldError =>
-        string.IsNullOrWhiteSpace(ServerField)
-            ? "Choose the field used to filter this source."
-            : null;
+        string.IsNullOrWhiteSpace(ServerField) ? "Choose the field used to filter this source."
+        : Fields.FirstOrDefault(option => option.Name == ServerField)?.Searchable == false
+            ? "This field is not searchable. Choose a searchable filter field."
+        : null;
     public string? FilterValueError =>
         Sources.Count == 0 || Sources.Any(source => string.IsNullOrWhiteSpace(source.ServerValue))
             ? "Enter a filter value for every source."
@@ -221,6 +234,10 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
                 nameof(FilterFieldError),
                 nameof(FilterValueError),
                 nameof(OutputFieldsError),
+                nameof(SelectedFieldCount),
+                nameof(SelectedFieldsSummary),
+                nameof(RowPreview),
+                nameof(FilterFieldStatus),
                 nameof(CanSave),
             }
         )
@@ -252,6 +269,29 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         return LoadDataViewAsync(SelectedDataViewId, ++_metadataVersion);
     }
 
+    private Task RefreshFieldsAsync()
+    {
+        if (IsLoading || string.IsNullOrWhiteSpace(SelectedDataViewId))
+            return Task.CompletedTask;
+        Error = null;
+        IsSelectionResolved = false;
+        IsLoading = true;
+        return LoadDataViewAsync(SelectedDataViewId, ++_metadataVersion);
+    }
+
+    private string DescribeField(string? name) =>
+        Fields.FirstOrDefault(field => field.Name == name)?.MetadataDescription
+        ?? "Metadata not loaded";
+
+    private void ClearFields()
+    {
+        ++_fieldFilterVersion;
+        _fieldFilterTimer.Stop();
+        Fields.Clear();
+        _fieldSnapshot.Clear();
+        _outputFieldOrder.Clear();
+    }
+
     internal void NotifyDataViewSelectionChanged()
     {
         this.RaisePropertyChanged(nameof(SelectedDataViewId));
@@ -271,8 +311,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         TimeFieldName = settings.TimeFieldName;
         ServerField = settings.ServerField;
         NamespaceField = settings.NamespaceField;
-        Fields.Clear();
-        _fieldSnapshot.Clear();
+        ClearFields();
         foreach (var field in settings.OutputFields.Distinct(StringComparer.Ordinal))
             AddField(new ElasticFieldOptionViewModel(field) { IsOutput = true });
         this.RaisePropertyChanged(nameof(FieldNames));
@@ -313,10 +352,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             TimeFieldName = TimeFieldName,
             ServerField = ServerField,
             NamespaceField = NamespaceField,
-            OutputFields = Fields
-                .Where(field => field.IsOutput)
-                .Select(field => field.Name)
-                .ToList(),
+            OutputFields = _outputFieldOrder.ToList(),
             Sources = Sources.Select(source => source.ToSettings()).ToList(),
         };
     }
@@ -328,22 +364,26 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             var view = await _owner.GetDataViewAsync(id);
             if (version != _metadataVersion)
                 return;
-            var selectedOutputFields = Fields
-                .Where(field => field.IsOutput)
-                .Select(field => field.Name)
-                .ToHashSet(StringComparer.Ordinal);
+            var selectedOutputFields = _outputFieldOrder.ToArray();
+            var selectedNames = selectedOutputFields.ToHashSet(StringComparer.Ordinal);
             DataViewId = view.Id;
             DataViewTitle = view.Title;
             TimeFieldName = view.TimeFieldName;
-            Fields.Clear();
-            _fieldSnapshot.Clear();
+            ClearFields();
             foreach (var field in view.Fields)
                 AddField(
-                    new ElasticFieldOptionViewModel(field.Name)
+                    new ElasticFieldOptionViewModel(field.Name, field.Type, field.Searchable)
                     {
-                        IsOutput = selectedOutputFields.Contains(field.Name),
+                        IsOutput = selectedNames.Contains(field.Name),
                     }
                 );
+            var availableNames = Fields
+                .Select(field => field.Name)
+                .ToHashSet(StringComparer.Ordinal);
+            foreach (var name in selectedOutputFields.Where(name => !availableNames.Contains(name)))
+                AddField(new ElasticFieldOptionViewModel(name) { IsOutput = true });
+            _outputFieldOrder.Clear();
+            _outputFieldOrder.AddRange(selectedOutputFields);
             this.RaisePropertyChanged(nameof(FieldNames));
             RefreshVisibleFields();
             IsSelectionResolved = true;
@@ -367,10 +407,18 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     private void AddField(ElasticFieldOptionViewModel field)
     {
         _fieldSnapshot.Add(field);
+        if (field.IsOutput)
+            _outputFieldOrder.Add(field.Name);
         field.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(ElasticFieldOptionViewModel.IsOutput))
             {
+                if (!Fields.Contains(field))
+                    return;
+                if (field.IsOutput)
+                    _outputFieldOrder.Add(field.Name);
+                else
+                    _outputFieldOrder.Remove(field.Name);
                 _fieldFilterVersion++;
                 _fieldFilterTimer.Stop();
                 RefreshVisibleFields();
@@ -416,15 +464,24 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     internal static IReadOnlyList<ElasticFieldOptionViewModel> FilterFields(
         IReadOnlyList<(ElasticFieldOptionViewModel Field, string Name, bool IsOutput)> fields,
         string query
-    ) =>
-        fields
+    )
+    {
+        var matching = fields
             .Where(item =>
                 string.IsNullOrWhiteSpace(query)
-                    ? item.IsOutput
-                    : item.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || item.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
             )
+            .ToArray();
+        var candidates = matching
+            .Where(item => !item.IsOutput)
+            .Take(50)
+            .Select(item => item.Field)
+            .ToHashSet();
+        return matching
+            .Where(item => item.IsOutput || candidates.Contains(item.Field))
             .Select(item => item.Field)
             .ToArray();
+    }
 
     private void RefreshVisibleFields()
     {
@@ -434,11 +491,10 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             return;
         }
         var query = OutputFieldQuery.Trim();
-        var fields = string.IsNullOrWhiteSpace(query)
-            ? Fields.Where(option => option.IsOutput)
-            : Fields.Where(option =>
-                option.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
-            );
+        var fields = FilterFields(
+            Fields.Select(field => (field, field.Name, field.IsOutput)).ToArray(),
+            query
+        );
         VisibleFields.Clear();
         foreach (var field in fields)
             VisibleFields.Add(field);

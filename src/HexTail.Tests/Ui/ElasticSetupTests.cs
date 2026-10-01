@@ -72,7 +72,9 @@ public sealed class ElasticSetupTests
         );
         Assert.Contains(
             window.GetVisualDescendants().OfType<TextBlock>(),
-            text => text.Text == "Timestamp field: @timestamp"
+            text =>
+                text.Text?.StartsWith("Timestamp field: @timestamp", StringComparison.Ordinal)
+                    is true
         );
         var save = Assert.Single(
             window.GetVisualDescendants().OfType<Button>(),

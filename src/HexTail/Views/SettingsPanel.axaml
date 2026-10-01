@@ -409,6 +409,7 @@
                                             IsEnabled="{Binding IsSelectionResolved}"
                                           />
                                           <TextBlock Text="{Binding FilterFieldError}" Classes="error" TextWrapping="Wrap" />
+                                          <TextBlock Text="{Binding FilterFieldStatus}" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" />
                                         </StackPanel>
                                       </Grid>
                                       <TextBlock Text="{Binding MetadataStatus}" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" />
@@ -427,31 +428,29 @@
                                       </ItemsControl>
                                       <TextBlock Text="{Binding NamespaceField, StringFormat='Saved namespace field (not queried): {0}'}" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" />
                                       <TextBlock Text="{Binding FilterValueError}" Classes="error" TextWrapping="Wrap" />
-                                      <TextBlock
-                                        Text="Fields to display"
-                                        Classes="elastic-form-label"
-                                      />
+                                      <TextBlock Text="Fields to display" Classes="elastic-form-label" />
+                                      <TextBox Text="{Binding OutputFieldQuery, Mode=TwoWay}" PlaceholderText="Search fields…" AutomationProperties.Name="Search output fields" />
+                                      <Button Content="Refresh fields" Command="{Binding RefreshFieldsCommand}" IsEnabled="{Binding IsSelectionResolved}" HorizontalAlignment="Left" />
+                                      <TextBlock Text="{Binding FieldDiscoveryStatus}" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" />
+                                      <TextBlock Text="{Binding SelectedFieldCount, StringFormat='Selected: {0} fields'}" />
+                                      <TextBlock Text="{Binding SelectedFieldsSummary}" TextWrapping="Wrap" />
+                                      <TextBlock Text="Selected fields appear in the order shown above. New selections go last; uncheck and recheck a field to move it last. Missing values are omitted; available values are joined with spaces." TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" />
+                                      <TextBlock Text="Row composition preview" Classes="elastic-form-label" />
+                                      <TextBlock Text="{Binding RowPreview}" TextWrapping="Wrap" />
                                       <TextBlock Text="{Binding OutputFieldsError}" Classes="error" TextWrapping="Wrap" />
                                       <ItemsControl ItemsSource="{Binding VisibleFields}">
-                                        <ItemsControl.ItemsPanel>
-                                          <ItemsPanelTemplate>
-                                            <WrapPanel />
-                                          </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                           <DataTemplate x:DataType="vm:ElasticFieldOptionViewModel">
-                                            <CheckBox
-                                              Classes="elastic-field-chip"
-                                              Content="{Binding Name}"
-                                              IsChecked="{Binding IsOutput, Mode=TwoWay}"
-                                            />
+                                            <CheckBox Classes="elastic-field-chip" MaxWidth="260" ToolTip.Tip="{Binding Name}" AutomationProperties.Name="{Binding Name, StringFormat='Display field {0}'}" IsChecked="{Binding IsOutput, Mode=TwoWay}">
+                                              <StackPanel MaxWidth="210">
+                                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding MetadataDescription}" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" FontSize="12" />
+                                              </StackPanel>
+                                            </CheckBox>
                                           </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                       </ItemsControl>
-                                      <TextBox
-                                        Text="{Binding OutputFieldQuery, Mode=TwoWay}"
-                                        PlaceholderText="Search fields…"
-                                      />
                                     </StackPanel>
                                   </Expander>
                                 </DataTemplate>
