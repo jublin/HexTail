@@ -106,13 +106,16 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(FieldNames));
         RefreshVisibleFields();
         Sources.Clear();
-        var source = settings.Sources.FirstOrDefault();
-        Sources.Add(
-            new ElasticSourceSettingViewModel(source?.Id ?? Guid.NewGuid().ToString("N"))
-            {
-                ServerValue = source?.ServerValue ?? string.Empty,
-            }
-        );
+        foreach (var source in settings.Sources)
+            Sources.Add(
+                new ElasticSourceSettingViewModel(source.Id)
+                {
+                    ServerValue = source.ServerValue,
+                    NamespaceValue = source.NamespaceValue,
+                }
+            );
+        if (Sources.Count == 0)
+            AddSource();
         this.RaisePropertyChanged(nameof(FilterValue));
     }
 
@@ -125,15 +128,12 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             DataViewTitle = DataViewTitle,
             TimeFieldName = TimeFieldName,
             ServerField = ServerField,
-            NamespaceField = NamespaceField ?? ServerField,
+            NamespaceField = NamespaceField,
             OutputFields = Fields
                 .Where(field => field.IsOutput)
                 .Select(field => field.Name)
                 .ToList(),
-            Sources = Sources
-                .Take(1)
-                .Select(source => source.ToSettings() with { NamespaceValue = string.Empty })
-                .ToList(),
+            Sources = Sources.Select(source => source.ToSettings()).ToList(),
         };
 
     private async Task LoadDataViewAsync(string id)

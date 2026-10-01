@@ -11,6 +11,60 @@ namespace HexTail.Tests.ViewModels;
 
 public sealed class ElasticSettingsViewModelTests
 {
+    [Theory]
+    [InlineData("namespace")]
+    [InlineData(null)]
+    public async Task EditingView_PreservesEverySourceAndNamespace(string? namespaceField)
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var state = new AppState(new LogSourceService(), new TestPersistence());
+        await using var owner = new MainWindowViewModel(
+            state,
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        var editor = Assert.Single(owner.Settings.ElasticConnections);
+        editor.AddViewCommand.Execute().Subscribe();
+        var view = Assert.Single(editor.Views);
+        var original = new ElasticViewSettings
+        {
+            Id = view.Id,
+            Name = "Logs",
+            DataViewTitle = "logs-*",
+            TimeFieldName = "@timestamp",
+            ServerField = "server",
+            NamespaceField = namespaceField,
+            OutputFields = ["message"],
+            Sources =
+            [
+                new ElasticSourceSettings
+                {
+                    Id = "s1",
+                    ServerValue = "api",
+                    NamespaceValue = "prod",
+                },
+                new ElasticSourceSettings
+                {
+                    Id = "s2",
+                    ServerValue = "worker",
+                    NamespaceValue = "stage",
+                },
+            ],
+        };
+        view.Sync(original);
+        var unchanged = view.ToSettings();
+        Assert.Equal(original.NamespaceField, unchanged.NamespaceField);
+        Assert.Equal(original.Sources, unchanged.Sources);
+        view.FilterValue = "api-edited";
+        var edited = view.ToSettings();
+        Assert.Equal("api-edited", edited.Sources[0].ServerValue);
+        Assert.Equal("s1", edited.Sources[0].Id);
+        Assert.Equal("prod", edited.Sources[0].NamespaceValue);
+        Assert.Equal(original.Sources[1], edited.Sources[1]);
+        Assert.Equal(original.NamespaceField, edited.NamespaceField);
+    }
+
     [Fact]
     public async Task ChangingAuthModeNotifiesCredentialVisibility()
     {
