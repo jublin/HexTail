@@ -38,6 +38,7 @@ internal sealed class LogViewViewModel : ReactiveObject
     public AppSettings Settings => _owner.State.Settings;
     public bool IsAllView => Search is null;
     public string Header => Search is null ? "All" : Truncate(Search.Query.Query);
+    public string SearchModeLabel => Search?.Query.Mode.ToString() ?? string.Empty;
     public string MatchSummary => Search is null ? string.Empty : $"({Search.Results.Count:N0})";
 
     public override string ToString() => Header;

@@ -631,6 +631,53 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
+    public async Task LiteralSearchDoesNotInterpretPunctuationAndRegexIsExplicit()
+    {
+        var path = Path.GetTempFileName();
+        var persistence = new TestPersistence();
+        var window = TestWindow.Create(persistence, out var vm);
+        try
+        {
+            await vm.InitializeAsync();
+            await vm.OpenPathsCommand.Execute([path]);
+            window.Show();
+            vm.State.SelectedFile!.Buffer.Append([
+                new Line("[ERROR] failed"),
+                new Line("ERROR plain"),
+            ]);
+            vm.Query = "[ERROR]";
+            Assert.Equal(MatchMode.Literal, vm.MatchMode);
+            Click(FindVisual<Button>(window, "AddSearchButton"));
+            await WaitFor(() => vm.State.SelectedFile.Searches.Count == 1);
+            var literal = Assert.Single(vm.State.SelectedFile.Searches);
+            Assert.Equal(MatchMode.Literal, literal.Query.Mode);
+            Assert.Equal([0], literal.Results);
+            FindVisual<ComboBox>(window, "SearchModePicker").SelectedItem = MatchMode.Regex;
+            vm.Query = "^ERROR";
+            var queryBox = FindVisual<TextBox>(window, "QueryBox");
+            queryBox.Focus();
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            await WaitFor(() => vm.State.SelectedFile.Searches.Count == 2);
+            var regex = vm.State.SelectedFile.Searches[1];
+            Assert.Equal(MatchMode.Regex, regex.Query.Mode);
+            Assert.Equal([1], regex.Results);
+            Assert.Equal(MatchMode.Regex, vm.MatchMode);
+            await vm.SaveCommand.Execute().FirstAsync();
+            Assert.Equal(
+                [MatchMode.Literal, MatchMode.Regex],
+                Assert.Single(persistence.Config!.OpenFiles).Searches.Select(search => search.Mode)
+            );
+            Assert.Equal("Literal", vm.SelectedFile!.Views[1].SearchModeLabel);
+            Assert.Equal("Regex", vm.SelectedFile.Views[2].SearchModeLabel);
+        }
+        finally
+        {
+            window.Close();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task InvalidRegexStaysVisibleAndPreservesQuery()
     {
         var path = Path.GetTempFileName();
@@ -639,6 +686,7 @@ public sealed class MainWindowInteractionTests
             var window = TestWindow.Create(out var viewModel);
             await viewModel.OpenPathsCommand.Execute([path]);
             window.Show();
+            viewModel.MatchMode = MatchMode.Regex;
             viewModel.Query = "[";
             Dispatcher.UIThread.RunJobs();
 

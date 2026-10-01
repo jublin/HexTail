@@ -623,13 +623,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
         try
         {
-            _state.AddSearch(
-                file.Model,
-                Query,
-                CompiledQuery.DetectMode(Query),
-                CaseSensitive,
-                ColorToHex(SearchColor)
-            );
+            _state.AddSearch(file.Model, Query, MatchMode, CaseSensitive, ColorToHex(SearchColor));
             SearchColor = Color.Parse(
                 NextSearchColor(
                     file.Model.Searches.Select(search => search.Color),
