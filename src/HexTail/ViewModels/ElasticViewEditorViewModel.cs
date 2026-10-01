@@ -18,6 +18,9 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     private readonly DispatcherTimer _fieldFilterTimer;
     private readonly List<ElasticFieldOptionViewModel> _fieldSnapshot = [];
     private int _fieldFilterVersion;
+    private int _metadataVersion;
+    private bool _isLoading;
+    private bool _isSelectionResolved;
 
     public ElasticViewEditorViewModel(ElasticConnectionEditorViewModel owner, string id)
     {
@@ -43,10 +46,16 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             if (string.Equals(_selectedDataViewId, value, StringComparison.Ordinal))
                 return;
             this.RaiseAndSetIfChanged(ref _selectedDataViewId, value);
+            var version = ++_metadataVersion;
+            IsSelectionResolved = false;
+            Error = null;
             if (value is null)
+            {
+                IsLoading = false;
                 return;
-            DataViewId = value;
-            _ = LoadDataViewAsync(value);
+            }
+            IsLoading = true;
+            _ = LoadDataViewAsync(value, version);
         }
     }
     public string? DataViewTitle { get; set; }
@@ -89,9 +98,23 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         get => _error;
         private set => this.RaiseAndSetIfChanged(ref _error, value);
     }
+    public bool IsLoading
+    {
+        get => _isLoading;
+        private set => this.RaiseAndSetIfChanged(ref _isLoading, value);
+    }
+    public bool IsSelectionResolved
+    {
+        get => _isSelectionResolved;
+        private set => this.RaiseAndSetIfChanged(ref _isSelectionResolved, value);
+    }
 
     internal void Sync(ElasticViewSettings settings)
     {
+        ++_metadataVersion;
+        IsLoading = false;
+        IsSelectionResolved = true;
+        Error = null;
         Name = settings.Name;
         DataViewId = settings.DataViewId;
         _selectedDataViewId = settings.DataViewId;
@@ -119,8 +142,18 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(FilterValue));
     }
 
-    internal ElasticViewSettings ToSettings() =>
-        new()
+    internal ElasticViewSettings ToSettings()
+    {
+        if (
+            !IsSelectionResolved
+            || !string.Equals(SelectedDataViewId, DataViewId, StringComparison.Ordinal)
+        )
+            throw new InvalidOperationException(
+                IsLoading
+                    ? "Wait for the selected data view to finish loading before saving."
+                    : "Load the selected data view successfully before saving."
+            );
+        return new()
         {
             Id = Id,
             Name = Name,
@@ -135,16 +168,19 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
                 .ToList(),
             Sources = Sources.Select(source => source.ToSettings()).ToList(),
         };
+    }
 
-    private async Task LoadDataViewAsync(string id)
+    private async Task LoadDataViewAsync(string id, int version)
     {
-        var selectedOutputFields = Fields
-            .Where(field => field.IsOutput)
-            .Select(field => field.Name)
-            .ToHashSet(StringComparer.Ordinal);
         try
         {
             var view = await _owner.GetDataViewAsync(id);
+            if (version != _metadataVersion)
+                return;
+            var selectedOutputFields = Fields
+                .Where(field => field.IsOutput)
+                .Select(field => field.Name)
+                .ToHashSet(StringComparer.Ordinal);
             DataViewId = view.Id;
             DataViewTitle = view.Title;
             TimeFieldName = view.TimeFieldName;
@@ -159,10 +195,17 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
                 );
             this.RaisePropertyChanged(nameof(FieldNames));
             RefreshVisibleFields();
+            IsSelectionResolved = true;
         }
         catch (Exception exception)
         {
-            Error = exception.Message;
+            if (version == _metadataVersion)
+                Error = exception.Message;
+        }
+        finally
+        {
+            if (version == _metadataVersion)
+                IsLoading = false;
         }
     }
 

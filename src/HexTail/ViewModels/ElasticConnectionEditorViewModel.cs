@@ -107,7 +107,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         }
     }
 
-    internal ElasticConnectionSettings ToSettings() =>
+    internal ElasticConnectionSettings ToSettings(bool includeViews = true) =>
         new()
         {
             Id = Id,
@@ -116,14 +116,14 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             ElasticsearchUrl = ElasticsearchUrl,
             AuthMode = AuthMode,
             Username = Username,
-            Views = Views.Select(view => view.ToSettings()).ToList(),
+            Views = includeViews ? Views.Select(view => view.ToSettings()).ToList() : [],
         };
 
     internal Task<IReadOnlyList<ElasticDataViewSummary>> GetDataViewsAsync() =>
-        _owner.GetDataViewsAsync(ToSettings(), Secret);
+        _owner.GetDataViewsAsync(ToSettings(includeViews: false), Secret);
 
     internal Task<ElasticDataView> GetDataViewAsync(string dataViewId) =>
-        _owner.GetDataViewAsync(ToSettings(), dataViewId, Secret);
+        _owner.GetDataViewAsync(ToSettings(includeViews: false), dataViewId, Secret);
 
     private void AddView()
     {
@@ -150,7 +150,10 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
                     StringComparison.Ordinal
                 );
             var viewsTask = GetDataViewsAsync();
-            var elasticsearchTask = _owner.CheckElasticsearchAsync(ToSettings(), Secret);
+            var elasticsearchTask = _owner.CheckElasticsearchAsync(
+                ToSettings(includeViews: false),
+                Secret
+            );
             await Task.WhenAll(viewsTask, elasticsearchTask);
             var views = await viewsTask;
             if (refreshDataViews)

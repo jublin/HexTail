@@ -7,6 +7,7 @@ namespace HexTail.Tests.Support;
 internal sealed class FakeElasticApiClient : IElasticApiClient
 {
     public Func<ElasticSearchRequest, Task<ElasticSearchPage>>? SearchHandler { get; set; }
+    public Func<string, Task<ElasticDataView>>? DataViewHandler { get; set; }
     public Queue<ElasticSearchPage> Pages { get; } = [];
     public List<ElasticSearchRequest> Searches { get; } = [];
     public List<string> ClosedPitIds { get; } = [];
@@ -46,6 +47,8 @@ internal sealed class FakeElasticApiClient : IElasticApiClient
         CancellationToken t = default
     )
     {
+        if (DataViewHandler is not null)
+            return DataViewHandler(id);
         if (DataViewError is not null)
             throw DataViewError;
         var view = c.Views.FirstOrDefault();

@@ -1,6 +1,7 @@
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using HexTail.Application;
+using HexTail.Elastic;
 using HexTail.Persistence;
 using HexTail.Tailing;
 using HexTail.Tests.Support;
@@ -11,6 +12,100 @@ namespace HexTail.Tests.ViewModels;
 
 public sealed class ElasticSettingsViewModelTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DataViewSelection_KeepsLatestMetadataWhenRequestsCompleteOutOfOrder(
+        bool latestCompletesFirst
+    )
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var first = new TaskCompletionSource<ElasticDataView>();
+        var latest = new TaskCompletionSource<ElasticDataView>();
+        var client = new FakeElasticApiClient
+        {
+            DataViewHandler = id => id == "first" ? first.Task : latest.Task,
+        };
+        var state = new AppState(new LogSourceService(), new TestPersistence(), elastic: client);
+        await using var owner = new MainWindowViewModel(
+            state,
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        var editor = Assert.Single(owner.Settings.ElasticConnections);
+        editor.AddViewCommand.Execute().Subscribe();
+        var view = Assert.Single(editor.Views);
+        view.Sync(new ElasticViewSettings { Id = view.Id, OutputFields = ["message"] });
+
+        view.SelectedDataViewId = "first";
+        view.SelectedDataViewId = "latest";
+        Assert.True(view.IsLoading);
+        Assert.False(view.IsSelectionResolved);
+        var firstMetadata = new ElasticDataView(
+            "first",
+            "old-*",
+            "old.time",
+            [new("old.message", "text", true)]
+        );
+        var latestMetadata = new ElasticDataView(
+            "latest",
+            "current-*",
+            "@timestamp",
+            [new("message", "text", true)]
+        );
+        if (latestCompletesFirst)
+        {
+            latest.SetResult(latestMetadata);
+            first.SetResult(firstMetadata);
+        }
+        else
+        {
+            first.SetResult(firstMetadata);
+            Assert.True(view.IsLoading);
+            Assert.False(view.IsSelectionResolved);
+            Assert.Throws<InvalidOperationException>(() => view.ToSettings());
+            latest.SetResult(latestMetadata);
+        }
+
+        var saved = view.ToSettings();
+        Assert.False(view.IsLoading);
+        Assert.True(view.IsSelectionResolved);
+        Assert.Equal("latest", view.SelectedDataViewId);
+        Assert.Equal("latest", saved.DataViewId);
+        Assert.Equal("current-*", saved.DataViewTitle);
+        Assert.Equal("@timestamp", saved.TimeFieldName);
+        Assert.Equal(["message"], saved.OutputFields);
+    }
+
+    [Fact]
+    public async Task DataViewSelection_CannotSavePendingOrFailedCurrentMetadata()
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var pending = new TaskCompletionSource<ElasticDataView>();
+        var client = new FakeElasticApiClient { DataViewHandler = _ => pending.Task };
+        var state = new AppState(new LogSourceService(), new TestPersistence(), elastic: client);
+        await using var owner = new MainWindowViewModel(
+            state,
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        var editor = Assert.Single(owner.Settings.ElasticConnections);
+        editor.AddViewCommand.Execute().Subscribe();
+        var view = Assert.Single(editor.Views);
+        view.SelectedDataViewId = "pending";
+
+        Assert.True(view.IsLoading);
+        Assert.False(view.IsSelectionResolved);
+        Assert.Throws<InvalidOperationException>(() => view.ToSettings());
+        pending.SetException(new InvalidOperationException("metadata unavailable"));
+        Assert.False(view.IsLoading);
+        Assert.False(view.IsSelectionResolved);
+        Assert.Equal("metadata unavailable", view.Error);
+        Assert.Throws<InvalidOperationException>(() => view.ToSettings());
+    }
+
     [Theory]
     [InlineData("namespace")]
     [InlineData(null)]
