@@ -287,7 +287,10 @@ public sealed class AppState : IAsyncDisposable
                 var tab = await OpenElasticSourceAsync(
                         persisted.SourceId,
                         save: false,
-                        cancellationToken
+                        cancellationToken,
+                        persisted.From,
+                        persisted.To,
+                        persisted.InputZone
                     )
                     .ConfigureAwait(false);
                 tab.FollowAll = persisted.FollowAll;
@@ -388,7 +391,10 @@ public sealed class AppState : IAsyncDisposable
     public async ValueTask<FileTabState> OpenElasticSourceAsync(
         string sourceId,
         bool save = true,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        string from = "now-5m",
+        string to = "now",
+        AppTimeZoneMode inputZone = AppTimeZoneMode.Utc
     )
     {
         var match = _settings
@@ -442,6 +448,14 @@ public sealed class AppState : IAsyncDisposable
             ContextAbove = _settings.ContextAbove,
             ContextBelow = _settings.ContextBelow,
         };
+        if (tailer is ElasticTailer elasticTailer)
+        {
+            if (from != "now-5m" || to != "now")
+                elasticTailer.SetTimeRange(from, to);
+            tab.ElasticFrom = from;
+            tab.ElasticTo = to;
+            tab.ElasticInputZone = inputZone;
+        }
         tab.SyncGlobalLabelSearches(_settings.GlobalLabels);
         lock (_gate)
         {
@@ -816,6 +830,9 @@ public sealed class AppState : IAsyncDisposable
                     .Select(tab => new PersistedElasticTab
                     {
                         SourceId = tab.Source.ElasticSourceId!,
+                        From = tab.ElasticFrom,
+                        To = tab.ElasticTo,
+                        InputZone = tab.ElasticInputZone,
                         FollowAll = tab.FollowAll,
                         FollowSearches = tab
                             .Searches.Select((search, index) => (search, index))

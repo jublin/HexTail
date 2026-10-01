@@ -18,6 +18,9 @@ public sealed class AppConfig
 public sealed class PersistedElasticTab
 {
     public required string SourceId { get; init; }
+    public string From { get; init; } = "now-5m";
+    public string To { get; init; } = "now";
+    public AppTimeZoneMode InputZone { get; init; } = AppTimeZoneMode.Utc;
     public List<PersistedSearch> Searches { get; init; } = [];
     public bool FollowAll { get; init; } = true;
     public List<bool> FollowSearches { get; init; } = [];

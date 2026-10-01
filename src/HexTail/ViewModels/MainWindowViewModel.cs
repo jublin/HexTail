@@ -169,6 +169,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             if (value is not null)
             {
                 _syncingRange = true;
+                _elasticInputZone = value.Model.ElasticInputZone;
+                this.RaisePropertyChanged(nameof(ElasticInputZone));
                 var now = DateTimeOffset.UtcNow;
                 SetPickerValues(
                     ElasticTailer.ParseTime(value.Model.ElasticFrom, now),
@@ -312,6 +314,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             }
             catch (ArgumentException) { }
             this.RaiseAndSetIfChanged(ref _elasticInputZone, value);
+            if (SelectedFile is not null)
+                SelectedFile.Model.ElasticInputZone = value;
             if (from is not null && to is not null)
             {
                 _syncingRange = true;

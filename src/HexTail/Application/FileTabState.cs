@@ -53,6 +53,7 @@ public sealed class FileTabState : IAsyncDisposable
     public int? ExpandedLine { get; set; }
     public int ContextAbove { get; set; } = 3;
     public int ContextBelow { get; set; } = 10;
+    public AppTimeZoneMode ElasticInputZone { get; set; } = AppTimeZoneMode.Utc;
     public string ElasticFrom { get; set; } = "now-5m";
     public string ElasticTo { get; set; } = "now";
     public bool ElasticLoading { get; internal set; } = true;

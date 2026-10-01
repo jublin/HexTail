@@ -10,6 +10,53 @@ namespace HexTail.Tests.Application;
 public sealed class AppStateTests
 {
     [Fact]
+    public async Task RestoreElasticHistory_UsesSavedIntervalOnFirstRequest()
+    {
+        var persistence = new MemoryPersistence();
+        var connection = ElasticConnection("ops") with
+        {
+            Sources = [new ElasticSourceSettings { Id = "source-1", ServerValue = "api" }],
+        };
+        await using (
+            var original = new AppState(
+                NewTailers(),
+                persistence,
+                new AppSettings { ElasticConnections = [connection] },
+                elastic: new FakeElasticApiClient()
+            )
+        )
+        {
+            var tab = await original.OpenElasticSourceAsync(
+                "source-1",
+                save: false,
+                cancellationToken: TestContext.Current.CancellationToken
+            );
+            original.SetElasticTimeRange(tab, "2026-08-20T10:00:00Z", "2026-08-20T11:00:00Z");
+            tab.ElasticInputZone = AppTimeZoneMode.Local;
+            await original.SaveAsync(TestContext.Current.CancellationToken);
+        }
+        var requested = new TaskCompletionSource<ElasticSearchRequest>();
+        var client = new FakeElasticApiClient
+        {
+            SearchHandler = request =>
+            {
+                requested.TrySetResult(request);
+                return Task.FromResult(new ElasticSearchPage("pit", []));
+            },
+        };
+        await using var restored = new AppState(NewTailers(), persistence, elastic: client);
+        await restored.RestoreAsync(TestContext.Current.CancellationToken);
+        var first = await requested.Task.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken
+        );
+        Assert.Equal(DateTimeOffset.Parse("2026-08-20T10:00:00Z"), first.FromInclusive);
+        Assert.Equal(DateTimeOffset.Parse("2026-08-20T11:00:00Z"), first.ToInclusive);
+        Assert.Equal("2026-08-20T11:00:00Z", restored.SelectedFile!.ElasticTo);
+        Assert.Equal(AppTimeZoneMode.Local, restored.SelectedFile.ElasticInputZone);
+    }
+
+    [Fact]
     public async Task SavingOpenElasticSettings_ReloadsTheSavedFilterAndPreservesInvestigation()
     {
         var connection = ElasticConnection("ops") with
