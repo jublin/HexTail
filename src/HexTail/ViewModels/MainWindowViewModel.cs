@@ -84,6 +84,14 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             },
             _scheduler
         );
+        SetUpElasticCommand = ReactiveCommand.Create(
+            () =>
+            {
+                Settings.SectionIndex = 2;
+                SettingsOpen = true;
+            },
+            _scheduler
+        );
         SelectFileCommand = ReactiveCommand.Create<FileTabViewModel>(SelectFile, _scheduler);
         ApplyElasticTimeRangeCommand = ReactiveCommand.Create(ApplyElasticTimeRange, _scheduler);
         CloseFileCommand = ReactiveCommand.CreateFromTask<FileTabViewModel>(
@@ -147,6 +155,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<IEnumerable<string>, Unit> OpenPathsCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSettingsCommand { get; }
+    public ReactiveCommand<Unit, Unit> SetUpElasticCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> SelectFileCommand { get; }
     public ReactiveCommand<Unit, Unit> ApplyElasticTimeRangeCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> CloseFileCommand { get; }

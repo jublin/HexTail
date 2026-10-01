@@ -10,13 +10,35 @@
   x:DataType="vm:MainWindowViewModel"
 >
   <Grid Background="{DynamicResource SurfaceBrush}" HorizontalAlignment="Stretch">
-    <TextBlock
-      Text="Open a file to start tailing."
+    <StackPanel
       HorizontalAlignment="Center"
       VerticalAlignment="Center"
-      Foreground="{DynamicResource MutedBrush}"
+      Margin="16"
+      Spacing="12"
       IsVisible="{Binding ShowEmpty}"
-    />
+    >
+      <TextBlock
+        Text="Open a log file or set up Elastic to start tailing."
+        TextAlignment="Center"
+        TextWrapping="Wrap"
+        Foreground="{DynamicResource MutedBrush}"
+      />
+      <WrapPanel HorizontalAlignment="Center">
+        <Button
+          x:Name="OpenEmptyFileButton"
+          Content="Open file"
+          Command="{Binding OpenCommand}"
+          Margin="4"
+        />
+        <Button
+          x:Name="SetUpElasticButton"
+          Content="Set up Elastic"
+          Command="{Binding SetUpElasticCommand}"
+          Classes="primary"
+          Margin="4"
+        />
+      </WrapPanel>
+    </StackPanel>
     <ContentControl
       IsVisible="{Binding HasFile}"
       Content="{Binding SelectedFile}"
@@ -69,9 +91,15 @@
                       VerticalAlignment="Center"
                       IsVisible="{Binding IsSearchView}"
                     />
-                    <TextBlock Grid.Column="2" Text="{Binding SearchModeLabel}" Margin="4,0"
-                               Foreground="{DynamicResource MutedBrush}" FontSize="12"
-                               VerticalAlignment="Center" IsVisible="{Binding IsSearchView}" />
+                    <TextBlock
+                      Grid.Column="2"
+                      Text="{Binding SearchModeLabel}"
+                      Margin="4,0"
+                      Foreground="{DynamicResource MutedBrush}"
+                      FontSize="12"
+                      VerticalAlignment="Center"
+                      IsVisible="{Binding IsSearchView}"
+                    />
                     <Button
                       Grid.Column="3"
                       Classes="icon tab-close search-close"
@@ -100,14 +128,25 @@
               <DataTemplate x:DataType="vm:LogViewViewModel">
                 <Grid RowDefinitions="Auto,*">
                   <StackPanel Margin="12,6" Spacing="4">
-                    <TextBlock x:Name="ResultMessage" Text="{Binding ResultMessage}"
-                               IsVisible="{Binding HasResultMessage}" TextWrapping="Wrap"
-                               Foreground="{DynamicResource TextBrush}" />
-                    <TextBlock x:Name="ResultCount" Text="{Binding ResultCount}"
-                               Foreground="{DynamicResource MutedBrush}" />
-                    <TextBlock x:Name="InitialLimitMessage" Text="{Binding InitialLimitMessage}"
-                               IsVisible="{Binding HasInitialLimitMessage}" TextWrapping="Wrap"
-                               Foreground="{DynamicResource AccentBrush}" />
+                    <TextBlock
+                      x:Name="ResultMessage"
+                      Text="{Binding ResultMessage}"
+                      IsVisible="{Binding HasResultMessage}"
+                      TextWrapping="Wrap"
+                      Foreground="{DynamicResource TextBrush}"
+                    />
+                    <TextBlock
+                      x:Name="ResultCount"
+                      Text="{Binding ResultCount}"
+                      Foreground="{DynamicResource MutedBrush}"
+                    />
+                    <TextBlock
+                      x:Name="InitialLimitMessage"
+                      Text="{Binding InitialLimitMessage}"
+                      IsVisible="{Binding HasInitialLimitMessage}"
+                      TextWrapping="Wrap"
+                      Foreground="{DynamicResource AccentBrush}"
+                    />
                   </StackPanel>
                   <views:LogView Grid.Row="1" />
                 </Grid>
