@@ -98,7 +98,19 @@
             </TabControl.ItemTemplate>
             <TabControl.ContentTemplate>
               <DataTemplate x:DataType="vm:LogViewViewModel">
-                <views:LogView />
+                <Grid RowDefinitions="Auto,*">
+                  <StackPanel Margin="12,6" Spacing="4">
+                    <TextBlock x:Name="ResultMessage" Text="{Binding ResultMessage}"
+                               IsVisible="{Binding HasResultMessage}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextBrush}" />
+                    <TextBlock x:Name="ResultCount" Text="{Binding ResultCount}"
+                               Foreground="{DynamicResource MutedBrush}" />
+                    <TextBlock x:Name="InitialLimitMessage" Text="{Binding InitialLimitMessage}"
+                               IsVisible="{Binding HasInitialLimitMessage}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource AccentBrush}" />
+                  </StackPanel>
+                  <views:LogView Grid.Row="1" />
+                </Grid>
               </DataTemplate>
             </TabControl.ContentTemplate>
           </TabControl>

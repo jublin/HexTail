@@ -86,6 +86,7 @@ internal sealed class ElasticTailer : ILogTailer
             nextIdsAtCursor = new HashSet<string>(_idsAtCursor, StringComparer.Ordinal);
         }
         var initialRead = nextCursorTimestamp is null;
+        int? initialLimitReached = null;
         Log(
             $"source={SourceId} poll dataView={_view.DataViewTitle} "
                 + $"from={fromInclusive:O} to={toInclusive:O}"
@@ -190,6 +191,8 @@ internal sealed class ElasticTailer : ILogTailer
                     break;
                 searchAfter = page.Hits[^1].SortValues;
             }
+            if (initialRead && accepted.Count >= _maxInitialLines)
+                initialLimitReached = _maxInitialLines;
             await EmitAcceptedAsync();
         }
         finally
@@ -205,6 +208,7 @@ internal sealed class ElasticTailer : ILogTailer
             {
                 Generation = generation,
                 InstanceId = InstanceId,
+                InitialLimitReached = initialLimitReached,
             }
             : null;
     }

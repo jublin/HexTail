@@ -37,6 +37,7 @@ public sealed class FileTabState : IAsyncDisposable
         Buffer = buffer;
         Parser = parser;
         Tailer = tailer;
+        ElasticLoading = source.Kind == LogSourceKind.Elastic;
         Buffer.Changed += OnBufferChanged;
     }
 
@@ -56,7 +57,8 @@ public sealed class FileTabState : IAsyncDisposable
     public AppTimeZoneMode ElasticInputZone { get; set; } = AppTimeZoneMode.Utc;
     public string ElasticFrom { get; set; } = "now-5m";
     public string ElasticTo { get; set; } = "now";
-    public bool ElasticLoading { get; internal set; } = true;
+    public bool ElasticLoading { get; internal set; }
+    public int? ElasticInitialLimitReached { get; internal set; }
     public DateTimeOffset? ElasticResolvedFrom { get; internal set; }
     public DateTimeOffset? ElasticResolvedTo { get; internal set; }
     public string? Error { get; internal set; }

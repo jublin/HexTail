@@ -39,4 +39,8 @@ public sealed record SourceRangeLoaded(
     DateTimeOffset To,
     bool Initial,
     bool Live
-) : SourceEvent(SourceId);
+) : SourceEvent(SourceId)
+{
+    // Reaching the initial limit does not establish the interval's total row count.
+    public int? InitialLimitReached { get; init; }
+}

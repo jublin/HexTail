@@ -40,6 +40,24 @@ internal sealed class LogViewViewModel : ReactiveObject
     public string Header => Search is null ? "All" : Truncate(Search.Query.Query);
     public string SearchModeLabel => Search?.Query.Mode.ToString() ?? string.Empty;
     public string MatchSummary => Search is null ? string.Empty : $"({Search.Results.Count:N0})";
+    public string ResultCount =>
+        $"{Lines.Count:N0} visible · {File.Buffer.Count:N0} loaded from source";
+    public string ResultMessage =>
+        File.Error is { } error ? error
+        : File.ElasticLoading ? "Loading logs for the applied interval…"
+        : Lines.Count > 0 ? string.Empty
+        : File.Buffer.Count == 0
+            ? File.Source.Kind == LogSourceKind.Elastic
+                    ? "No logs returned for the applied interval."
+                : "No logs in this source yet."
+        : Search is not null && Search.Results.Count == 0 ? "No logs match this search."
+        : "All matching logs are hidden by global exclusions.";
+    public bool HasResultMessage => ResultMessage.Length > 0;
+    public string InitialLimitMessage =>
+        File.ElasticInitialLimitReached is { } limit
+            ? $"Initial limit reached ({limit:N0} newest logs). The applied interval may contain more logs; narrow the interval to inspect earlier history."
+            : string.Empty;
+    public bool HasInitialLimitMessage => InitialLimitMessage.Length > 0;
 
     public override string ToString() => Header;
 
@@ -119,7 +137,10 @@ internal sealed class LogViewViewModel : ReactiveObject
             ContextSplitterHeight,
             ContextEmpty,
             ContextEmptyVisible,
-            IsFollowing
+            IsFollowing,
+            ResultCount,
+            ResultMessage,
+            InitialLimitMessage
         );
         var previous = _lastSnapshot;
         _lastSnapshot = snapshot;
@@ -142,6 +163,18 @@ internal sealed class LogViewViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(ContextEmptyVisible));
         if (previous is null || previous.Value.IsFollowing != snapshot.IsFollowing)
             this.RaisePropertyChanged(nameof(IsFollowing));
+        if (previous is null || previous.Value.ResultCount != snapshot.ResultCount)
+            this.RaisePropertyChanged(nameof(ResultCount));
+        if (previous is null || previous.Value.ResultMessage != snapshot.ResultMessage)
+        {
+            this.RaisePropertyChanged(nameof(ResultMessage));
+            this.RaisePropertyChanged(nameof(HasResultMessage));
+        }
+        if (previous is null || previous.Value.InitialLimitMessage != snapshot.InitialLimitMessage)
+        {
+            this.RaisePropertyChanged(nameof(InitialLimitMessage));
+            this.RaisePropertyChanged(nameof(HasInitialLimitMessage));
+        }
     }
 
     private static void InvalidateRows(AvaloniaList<LogLineViewModel> rows)
@@ -365,6 +398,9 @@ internal sealed class LogViewViewModel : ReactiveObject
         GridLength ContextSplitterHeight,
         bool ContextEmpty,
         bool ContextEmptyVisible,
-        bool IsFollowing
+        bool IsFollowing,
+        string ResultCount,
+        string ResultMessage,
+        string InitialLimitMessage
     );
 }

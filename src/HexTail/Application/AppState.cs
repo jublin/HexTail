@@ -159,6 +159,7 @@ public sealed class AppState : IAsyncDisposable
                     tab.Buffer.Clear();
                     tab.Error = null;
                     tab.ElasticLoading = true;
+                    tab.ElasticInitialLimitReached = null;
                     tab.ElasticResolvedTo = null;
                     replacement.Start();
                 }
@@ -483,6 +484,7 @@ public sealed class AppState : IAsyncDisposable
         tab.ElasticFrom = from.Trim();
         tab.ElasticTo = to.Trim();
         tab.ElasticLoading = true;
+        tab.ElasticInitialLimitReached = null;
         tab.ElasticResolvedFrom = null;
         tab.ElasticResolvedTo = null;
         NotifyChanged();
@@ -765,6 +767,8 @@ public sealed class AppState : IAsyncDisposable
                         tab.Error = null;
                         if (loaded.Initial || tab.ElasticResolvedFrom is null)
                             tab.ElasticResolvedFrom = loaded.From;
+                        if (loaded.Initial)
+                            tab.ElasticInitialLimitReached = loaded.InitialLimitReached;
                         tab.ElasticResolvedTo = loaded.To;
                         break;
                     case SourceError error:

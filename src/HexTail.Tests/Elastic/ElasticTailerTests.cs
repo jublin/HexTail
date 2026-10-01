@@ -73,8 +73,10 @@ public sealed class ElasticTailerTests
             () => new DateTimeOffset(2026, 8, 20, 10, 5, 0, TimeSpan.Zero)
         );
 
-        await tailer.PollOnceAsync(CancellationToken.None);
+        var loaded = await tailer.PollOnceAsync(CancellationToken.None);
 
+        Assert.NotNull(loaded);
+        Assert.Equal(10_000, loaded.InitialLimitReached);
         var lines = Assert.IsType<SourceLines>(await channel.Reader.ReadAsync());
         Assert.Equal(10_000, lines.Lines.Count);
         Assert.Equal("line-2", lines.Lines[0].Raw);
