@@ -307,6 +307,7 @@
                             Classes="icon"
                             ToolTip.Tip="Save server"
                             Command="{Binding SaveCommand}"
+                            IsEnabled="{Binding CanSave}"
                           >
                             <ic:Icon Value="mdi-content-save-outline" />
                           </Button>
@@ -322,6 +323,11 @@
                         </Grid>
                       </Expander.Header>
                       <StackPanel Spacing="12" Margin="0,12,0,0">
+                        <TextBlock
+                          Text="Enter endpoints and login details → Test connection → Choose a data view → Set filter and display fields → Save server. Then open the source from Elastic."
+                          TextWrapping="Wrap"
+                          Foreground="{DynamicResource MutedBrush}"
+                        />
                         <Grid
                           ColumnDefinitions="*,*"
                           RowDefinitions="Auto,Auto,Auto"
@@ -346,6 +352,7 @@
                               Text="{Binding KibanaUrl, Mode=TwoWay}"
                               PlaceholderText="https://kibana.example.com"
                             />
+                            <TextBlock Text="{Binding KibanaUrlError}" Classes="error" TextWrapping="Wrap" />
                           </StackPanel>
                           <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
                             <TextBlock Text="Elasticsearch URL" Classes="elastic-form-label" />
@@ -353,6 +360,7 @@
                               Text="{Binding ElasticsearchUrl, Mode=TwoWay}"
                               PlaceholderText="https://elastic.example.com"
                             />
+                            <TextBlock Text="{Binding ElasticsearchUrlError}" Classes="error" TextWrapping="Wrap" />
                           </StackPanel>
                           <StackPanel
                             Grid.Row="2"
@@ -448,6 +456,7 @@
                                         Text="{Binding Name, Mode=TwoWay}"
                                         PlaceholderText="View name"
                                       />
+                                      <TextBlock Text="{Binding NameError}" Classes="error" TextWrapping="Wrap" />
                                       <TextBlock
                                         Text="{Binding Error}"
                                         Classes="error"
@@ -461,12 +470,16 @@
                                           />
                                           <ComboBox
                                             ItemsSource="{Binding DataViews}"
-                                            SelectedValue="{Binding SelectedDataViewId, Mode=TwoWay}"
-                                            SelectedValueBinding="{Binding Id}"
-                                            DisplayMemberBinding="{Binding Title}"
+                                            SelectedItem="{Binding SelectedDataView, Mode=TwoWay}"
                                             PlaceholderText="Select a data view"
                                             HorizontalContentAlignment="Left"
-                                          />
+                                          >
+                                            <ComboBox.ItemTemplate>
+                                              <DataTemplate x:DataType="vm:ElasticDataViewChoiceViewModel">
+                                                <TextBlock Text="{Binding Title}" />
+                                              </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                          </ComboBox>
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Spacing="4">
                                           <TextBlock Text="Filter field" Classes="elastic-form-label" />
@@ -476,9 +489,14 @@
                                             PlaceholderText="Filter field"
                                             FilterMode="Contains"
                                             MinimumPrefixLength="0"
+                                            IsEnabled="{Binding IsSelectionResolved}"
                                           />
+                                          <TextBlock Text="{Binding FilterFieldError}" Classes="error" TextWrapping="Wrap" />
                                         </StackPanel>
                                       </Grid>
+                                      <TextBlock Text="{Binding MetadataStatus}" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" />
+                                      <TextBlock Text="{Binding TimestampStatus}" TextWrapping="Wrap" />
+                                      <TextBlock Text="{Binding TimestampError}" Classes="error" TextWrapping="Wrap" />
                                       <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
                                         <StackPanel Spacing="4">
                                           <TextBlock Text="Value" Classes="elastic-form-label" />
@@ -486,12 +504,14 @@
                                             Text="{Binding FilterValue, Mode=TwoWay}"
                                             PlaceholderText="Filter value"
                                           />
+                                          <TextBlock Text="{Binding FilterValueError}" Classes="error" TextWrapping="Wrap" />
                                         </StackPanel>
                                       </Grid>
                                       <TextBlock
                                         Text="Fields to display"
                                         Classes="elastic-form-label"
                                       />
+                                      <TextBlock Text="{Binding OutputFieldsError}" Classes="error" TextWrapping="Wrap" />
                                       <ItemsControl ItemsSource="{Binding VisibleFields}">
                                         <ItemsControl.ItemsPanel>
                                           <ItemsPanelTemplate>

@@ -104,6 +104,16 @@ public sealed class ElasticSettingsViewModelTests
         Assert.False(view.IsSelectionResolved);
         Assert.Equal("metadata unavailable", view.Error);
         Assert.Throws<InvalidOperationException>(() => view.ToSettings());
+
+        client.DataViewHandler = id =>
+            Task.FromResult(
+                new ElasticDataView(id, "logs-*", "@timestamp", [new("message", "text", true)])
+            );
+        client.DataViews = [new("pending", "logs-*")];
+        await editor.TestConnectionCommand.Execute().FirstAsync();
+        Assert.True(view.IsSelectionResolved);
+        Assert.Null(view.Error);
+        Assert.Equal("@timestamp", view.TimeFieldName);
     }
 
     [Theory]
@@ -158,6 +168,55 @@ public sealed class ElasticSettingsViewModelTests
         Assert.Equal("prod", edited.Sources[0].NamespaceValue);
         Assert.Equal(original.Sources[1], edited.Sources[1]);
         Assert.Equal(original.NamespaceField, edited.NamespaceField);
+    }
+
+    [Fact]
+    public async Task SaveCommand_RequiresCompleteViewMappings()
+    {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
+        var state = new AppState(new LogSourceService(), new TestPersistence());
+        await using var owner = new MainWindowViewModel(
+            state,
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        var editor = Assert.Single(owner.Settings.ElasticConnections);
+        editor.KibanaUrl = "https://kibana/";
+        editor.ElasticsearchUrl = "https://elastic/";
+        editor.AddViewCommand.Execute().Subscribe();
+        var view = Assert.Single(editor.Views);
+        view.Sync(
+            new ElasticViewSettings
+            {
+                Id = view.Id,
+                Name = "Logs",
+                DataViewId = "logs",
+                DataViewTitle = "logs-*",
+                TimeFieldName = "@timestamp",
+                ServerField = "server",
+                OutputFields = ["message"],
+                Sources = [new ElasticSourceSettings { Id = "source", ServerValue = "api" }],
+            }
+        );
+        bool CanSave() => ((System.Windows.Input.ICommand)editor.SaveCommand).CanExecute(null);
+
+        Assert.True(CanSave());
+        view.ServerField = null;
+        Assert.False(CanSave());
+        view.ServerField = "server";
+        view.FilterValue = string.Empty;
+        Assert.False(CanSave());
+        view.FilterValue = "api";
+        view.Fields[0].IsOutput = false;
+        Assert.False(CanSave());
+        view.Fields[0].IsOutput = true;
+        view.TimeFieldName = null;
+        Assert.False(CanSave());
+        view.TimeFieldName = "@timestamp";
+        Assert.True(CanSave());
+        view.SelectedDataViewId = null;
+        Assert.False(CanSave());
     }
 
     [Fact]
@@ -281,7 +340,7 @@ public sealed class ElasticSettingsViewModelTests
     }
 
     [Fact]
-    public async Task TestConnection_DoesNotRefreshViewsWhenServerUrlsAreUnchanged()
+    public async Task TestConnection_RefreshesNewAndRenamedViewsWhenServerUrlsAreUnchanged()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
         var connection = new ElasticConnectionSettings
@@ -304,7 +363,10 @@ public sealed class ElasticSettingsViewModelTests
                 },
             ],
         };
-        var client = new FakeElasticApiClient { DataViews = [new("view-2", "other-*")] };
+        var client = new FakeElasticApiClient
+        {
+            DataViews = [new("view-1", "renamed-*"), new("view-2", "other-*")],
+        };
         var state = new AppState(
             new LogSourceService(),
             new TestPersistence(),
@@ -326,8 +388,10 @@ public sealed class ElasticSettingsViewModelTests
         editor.Secret = "typed-api-key";
         await editor.TestConnectionCommand.Execute().FirstAsync();
 
-        Assert.Equal(["view-1"], editor.DataViews.Select(dataView => dataView.Id));
+        Assert.Equal(["view-1", "view-2"], editor.DataViews.Select(dataView => dataView.Id));
+        Assert.Equal("renamed-*", editor.DataViews[0].Title);
         Assert.Equal("view-1", view.SelectedDataViewId);
+        Assert.Equal("renamed-*", view.DataViewTitle);
         Assert.Equal("ident", view.ServerField);
         Assert.Equal(["message"], view.ToSettings().OutputFields);
     }

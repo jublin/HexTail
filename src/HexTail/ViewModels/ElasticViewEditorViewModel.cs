@@ -21,11 +21,23 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     private int _metadataVersion;
     private bool _isLoading;
     private bool _isSelectionResolved;
+    private string? _timeFieldName;
+    private string? _serverField;
 
     public ElasticViewEditorViewModel(ElasticConnectionEditorViewModel owner, string id)
     {
         _owner = owner;
         Id = id;
+        Sources.CollectionChanged += (_, args) =>
+        {
+            if (args.OldItems is not null)
+                foreach (ElasticSourceSettingViewModel source in args.OldItems)
+                    source.PropertyChanged -= SourceChanged;
+            if (args.NewItems is not null)
+                foreach (ElasticSourceSettingViewModel source in args.NewItems)
+                    source.PropertyChanged += SourceChanged;
+            NotifyPrerequisitesChanged();
+        };
         AddSource();
         _fieldFilterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
         _fieldFilterTimer.Tick += (_, _) => ApplyQueuedFieldFilter();
@@ -35,7 +47,11 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     public string Name
     {
         get => _name;
-        set => this.RaiseAndSetIfChanged(ref _name, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _name, value);
+            NotifyPrerequisitesChanged();
+        }
     }
     public string? DataViewId { get; set; }
     public string? SelectedDataViewId
@@ -46,6 +62,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             if (string.Equals(_selectedDataViewId, value, StringComparison.Ordinal))
                 return;
             this.RaiseAndSetIfChanged(ref _selectedDataViewId, value);
+            this.RaisePropertyChanged(nameof(SelectedDataView));
             var version = ++_metadataVersion;
             IsSelectionResolved = false;
             Error = null;
@@ -59,10 +76,36 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         }
     }
     public string? DataViewTitle { get; set; }
-    public string? TimeFieldName { get; set; }
-    public string? ServerField { get; set; }
+    public ElasticDataViewChoiceViewModel? SelectedDataView
+    {
+        get => DataViews.FirstOrDefault(choice => choice.Id == SelectedDataViewId);
+        set
+        {
+            // Native selection briefly clears while items are bound or refreshed.
+            if (value is not null)
+                SelectedDataViewId = value.Id;
+        }
+    }
+    public string? TimeFieldName
+    {
+        get => _timeFieldName;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _timeFieldName, value);
+            NotifyPrerequisitesChanged();
+        }
+    }
+    public string? ServerField
+    {
+        get => _serverField;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _serverField, value);
+            NotifyPrerequisitesChanged();
+        }
+    }
     public string? NamespaceField { get; set; }
-    public ObservableCollection<ElasticDataViewSummary> DataViews => _owner.DataViews;
+    public ObservableCollection<ElasticDataViewChoiceViewModel> DataViews => _owner.DataViews;
     public ObservableCollection<ElasticFieldOptionViewModel> Fields { get; } = [];
     public ObservableCollection<ElasticSourceSettingViewModel> Sources { get; } = [];
     public IEnumerable<string> FieldNames => Fields.Select(option => option.Name);
@@ -101,12 +144,118 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     public bool IsLoading
     {
         get => _isLoading;
-        private set => this.RaiseAndSetIfChanged(ref _isLoading, value);
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isLoading, value);
+            NotifyPrerequisitesChanged();
+        }
     }
     public bool IsSelectionResolved
     {
         get => _isSelectionResolved;
-        private set => this.RaiseAndSetIfChanged(ref _isSelectionResolved, value);
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isSelectionResolved, value);
+            NotifyPrerequisitesChanged();
+        }
+    }
+
+    public string MetadataStatus =>
+        IsLoading ? "Loading data-view metadata…"
+        : string.IsNullOrWhiteSpace(SelectedDataViewId)
+            ? "Test connection, then choose a data view."
+        : !IsSelectionResolved ? "Metadata is unavailable. Test connection to retry."
+        : Fields.Count == 0 ? "No fields returned. Check the data view in Kibana."
+        : "Data-view metadata loaded.";
+    public string TimestampStatus =>
+        IsLoading ? "Timestamp field: loading…"
+        : !IsSelectionResolved ? "Timestamp field: not loaded"
+        : string.IsNullOrWhiteSpace(TimeFieldName) ? "Timestamp field: not detected"
+        : $"Timestamp field: {TimeFieldName}";
+    public string? NameError => string.IsNullOrWhiteSpace(Name) ? "Enter a view name." : null;
+    public string? TimestampError =>
+        IsSelectionResolved && string.IsNullOrWhiteSpace(TimeFieldName)
+            ? "Choose a data view with a timestamp field configured in Kibana."
+            : null;
+    public string? FilterFieldError =>
+        string.IsNullOrWhiteSpace(ServerField)
+            ? "Choose the field used to filter this source."
+            : null;
+    public string? FilterValueError =>
+        Sources.Count == 0 || Sources.Any(source => string.IsNullOrWhiteSpace(source.ServerValue))
+            ? "Enter a filter value for every source."
+        : Sources
+            .Select(source => source.ServerValue.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .Count() != Sources.Count
+            ? "Each source needs a unique filter value."
+        : null;
+    public string? OutputFieldsError =>
+        Fields.Any(option => option.IsOutput) ? null : "Select at least one field to display.";
+    public bool CanSave =>
+        !IsLoading
+        && IsSelectionResolved
+        && !string.IsNullOrWhiteSpace(SelectedDataViewId)
+        && string.Equals(SelectedDataViewId, DataViewId, StringComparison.Ordinal)
+        && !string.IsNullOrWhiteSpace(DataViewTitle)
+        && NameError is null
+        && TimestampError is null
+        && FilterFieldError is null
+        && FilterValueError is null
+        && OutputFieldsError is null;
+
+    private void SourceChanged(
+        object? sender,
+        System.ComponentModel.PropertyChangedEventArgs args
+    ) => NotifyPrerequisitesChanged();
+
+    private void NotifyPrerequisitesChanged()
+    {
+        foreach (
+            var property in new[]
+            {
+                nameof(MetadataStatus),
+                nameof(TimestampStatus),
+                nameof(NameError),
+                nameof(TimestampError),
+                nameof(FilterFieldError),
+                nameof(FilterValueError),
+                nameof(OutputFieldsError),
+                nameof(CanSave),
+            }
+        )
+            this.RaisePropertyChanged(property);
+        _owner.NotifySavePrerequisitesChanged();
+    }
+
+    internal Task RefreshDataViewAsync(ElasticDataViewSummary? summary)
+    {
+        if (string.IsNullOrWhiteSpace(SelectedDataViewId))
+            return Task.CompletedTask;
+        if (summary is null)
+        {
+            ++_metadataVersion;
+            IsLoading = false;
+            IsSelectionResolved = false;
+            Error = "The selected data view is no longer available. Choose another data view.";
+            return Task.CompletedTask;
+        }
+        if (IsSelectionResolved)
+        {
+            DataViewTitle = summary.Title;
+            this.RaisePropertyChanged(nameof(DataViewTitle));
+            NotifyPrerequisitesChanged();
+            return Task.CompletedTask;
+        }
+        Error = null;
+        IsLoading = true;
+        return LoadDataViewAsync(SelectedDataViewId, ++_metadataVersion);
+    }
+
+    internal void NotifyDataViewSelectionChanged()
+    {
+        this.RaisePropertyChanged(nameof(SelectedDataViewId));
+        this.RaisePropertyChanged(nameof(SelectedDataView));
     }
 
     internal void Sync(ElasticViewSettings settings)
@@ -140,6 +289,8 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         if (Sources.Count == 0)
             AddSource();
         this.RaisePropertyChanged(nameof(FilterValue));
+        NotifyDataViewSelectionChanged();
+        NotifyPrerequisitesChanged();
     }
 
     internal ElasticViewSettings ToSettings()
@@ -196,6 +347,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(FieldNames));
             RefreshVisibleFields();
             IsSelectionResolved = true;
+            Error = null;
         }
         catch (Exception exception)
         {
@@ -222,6 +374,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
                 _fieldFilterVersion++;
                 _fieldFilterTimer.Stop();
                 RefreshVisibleFields();
+                NotifyPrerequisitesChanged();
             }
         };
         Fields.Add(field);
