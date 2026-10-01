@@ -1,5 +1,7 @@
 using Avalonia;
 using Avalonia.Media;
+using Avalonia.Styling;
+using Avalonia.Themes.Fluent;
 using HexTail.Persistence;
 
 namespace HexTail;
@@ -24,7 +26,7 @@ internal static class ThemeManager
         ["AccentBrush"] = "#28D7FE",
         ["AccentMutedBrush"] = "#157B94",
         ["AccentStrongBrush"] = "#7AEAFF",
-        ["SelectedTabBrush"] = "#4822FE",
+        ["SelectedTabBrush"] = "#28D7FE",
         ["SuccessBrush"] = "#39E58C",
         ["ErrorBrush"] = "#FF667A",
         ["ErrorBackgroundBrush"] = "#2A1118",
@@ -49,7 +51,7 @@ internal static class ThemeManager
         ["AccentBrush"] = "#CBA6F7",
         ["AccentMutedBrush"] = "#8F6DB4",
         ["AccentStrongBrush"] = "#E7C6FF",
-        ["SelectedTabBrush"] = "#3552E7",
+        ["SelectedTabBrush"] = "#CBA6F7",
         ["SuccessBrush"] = "#A6E3A1",
         ["ErrorBrush"] = "#F38BA8",
         ["ErrorBackgroundBrush"] = "#33202A",
@@ -74,7 +76,7 @@ internal static class ThemeManager
         ["AccentBrush"] = "#14D760",
         ["AccentMutedBrush"] = "#0B873D",
         ["AccentStrongBrush"] = "#62F18F",
-        ["SelectedTabBrush"] = "#269750",
+        ["SelectedTabBrush"] = "#14D760",
         ["SuccessBrush"] = "#1ED760",
         ["ErrorBrush"] = "#F3727F",
         ["ErrorBackgroundBrush"] = "#2A171A",
@@ -93,6 +95,8 @@ internal static class ThemeManager
         };
         foreach (var (key, value) in palette)
             Avalonia.Application.Current.Resources[key] = new SolidColorBrush(Color.Parse(value));
+        foreach (var fluent in Avalonia.Application.Current.Styles.OfType<FluentTheme>())
+            fluent.Palettes[ThemeVariant.Dark].Accent = Color.Parse(palette["AccentBrush"]);
     }
 
     internal static IBrush Brush(string key) =>

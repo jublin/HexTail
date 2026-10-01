@@ -755,9 +755,9 @@ public sealed class MainWindowInteractionTests
             Assert.Contains("selected", tabs[first].Classes);
             Assert.DoesNotContain("selected", tabs[second].Classes);
             Assert.NotNull(tabs[first].Background);
-            Assert.Equal(new Thickness(2, 0, 2, 2), tabs[first].BorderThickness);
+            Assert.Equal(new Thickness(2), tabs[first].BorderThickness);
             Assert.Equal(
-                "#FF4822FE",
+                "#FF28D7FE",
                 Assert
                     .IsType<SolidColorBrush>(tabs[first].BorderBrush)
                     .Color.ToString()

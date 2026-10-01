@@ -138,7 +138,7 @@
   <Style Selector="Border.file-tab.selected">
     <Setter Property="Background" Value="{DynamicResource BorderBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource SelectedTabBrush}" />
-    <Setter Property="BorderThickness" Value="2,0,2,2" />
+    <Setter Property="BorderThickness" Value="2" />
   </Style>
   <Style Selector="TextBlock.status-live">
     <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
