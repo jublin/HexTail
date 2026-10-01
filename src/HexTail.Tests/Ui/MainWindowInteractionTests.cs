@@ -423,7 +423,7 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
-    public void SettingsContentCanScrollHorizontally()
+    public void SettingsContentUsesVerticalScrollingWithoutHorizontalPan()
     {
         var window = TestWindow.Create(out var viewModel);
         viewModel.SettingsOpen = true;
@@ -432,8 +432,10 @@ public sealed class MainWindowInteractionTests
         var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
         var labels = panel.FindControl<ScrollViewer>("LabelsSettingsScrollViewer");
         var elastic = panel.FindControl<ScrollViewer>("ElasticSettingsScrollViewer");
-        Assert.Equal(ScrollBarVisibility.Auto, labels!.HorizontalScrollBarVisibility);
-        Assert.Equal(ScrollBarVisibility.Auto, elastic!.HorizontalScrollBarVisibility);
+        Assert.Equal(ScrollBarVisibility.Disabled, labels!.HorizontalScrollBarVisibility);
+        Assert.Equal(ScrollBarVisibility.Auto, labels.VerticalScrollBarVisibility);
+        Assert.Equal(ScrollBarVisibility.Disabled, elastic!.HorizontalScrollBarVisibility);
+        Assert.Equal(ScrollBarVisibility.Auto, elastic.VerticalScrollBarVisibility);
 
         window.Close();
     }

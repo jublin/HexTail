@@ -48,10 +48,10 @@
           </TabItem.Header>
           <ScrollViewer
             x:Name="LabelsSettingsScrollViewer"
-            HorizontalScrollBarVisibility="Auto"
+            HorizontalScrollBarVisibility="Disabled"
             VerticalScrollBarVisibility="Auto"
           >
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="16" Margin="0,16,0,0">
+            <Grid Classes="responsive-columns" ColumnDefinitions="*,*" ColumnSpacing="16" Margin="0,16,0,0">
               <Border Classes="settings-section">
                 <StackPanel Spacing="10">
                   <TextBlock Text="Global Labels" FontSize="18" FontWeight="SemiBold" />
@@ -120,7 +120,7 @@
             </StackPanel>
           </TabItem.Header>
           <Border Classes="settings-section" Margin="0,16,0,0">
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="15">
+            <Grid Classes="responsive-columns" ColumnDefinitions="*,*" ColumnSpacing="15">
               <StackPanel Spacing="6">
                 <TextBlock Text="Density" />
                 <ComboBox
@@ -169,7 +169,7 @@
           </TabItem.Header>
           <ScrollViewer
             x:Name="ElasticSettingsScrollViewer"
-            HorizontalScrollBarVisibility="Auto"
+            HorizontalScrollBarVisibility="Disabled"
             VerticalScrollBarVisibility="Auto"
           >
             <StackPanel Spacing="10" Margin="0,16,0,0">
@@ -246,7 +246,7 @@
                           Foreground="{DynamicResource MutedBrush}"
                         />
                         <Grid
-                          ColumnDefinitions="*,*"
+                          Classes="responsive-columns" ColumnDefinitions="*,*"
                           RowDefinitions="Auto,Auto,Auto"
                           ColumnSpacing="10"
                           RowSpacing="8"
@@ -379,7 +379,7 @@
                                         Classes="error"
                                         TextWrapping="Wrap"
                                       />
-                                      <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                                      <Grid Classes="responsive-columns" ColumnDefinitions="*,*" ColumnSpacing="12">
                                         <StackPanel Spacing="4">
                                           <TextBlock
                                             Text="Data view"
