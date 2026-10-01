@@ -32,6 +32,8 @@ internal sealed class SettingsViewModel : ReactiveObject
     private AppTimeZoneMode _timeZoneMode;
     private ElasticConnectionEditorViewModel? _selectedElasticConnection;
     private readonly HashSet<string> _syncedElasticConnectionIds = new(StringComparer.Ordinal);
+    private bool _closeConfirmationVisible;
+    private ElasticConnectionEditorViewModel? _pendingDelete;
 
     internal SettingsViewModel(MainWindowViewModel owner, IScheduler scheduler)
     {
@@ -49,12 +51,101 @@ internal sealed class SettingsViewModel : ReactiveObject
                 RemoveElasticConnectionAsync,
                 scheduler
             );
+        SaveDraftsAndCloseCommand = ReactiveCommand.CreateFromTask(
+            SaveDraftsAndCloseAsync,
+            scheduler
+        );
+        DiscardDraftsAndCloseCommand = ReactiveCommand.Create(DiscardDraftsAndClose, scheduler);
+        KeepEditingCommand = ReactiveCommand.Create(
+            () =>
+            {
+                CloseConfirmationVisible = false;
+            },
+            scheduler
+        );
+        ConfirmDeleteCommand = ReactiveCommand.CreateFromTask(ConfirmDeleteAsync, scheduler);
+        CancelDeleteCommand = ReactiveCommand.Create(CancelDelete, scheduler);
+        ElasticConnections.CollectionChanged += (_, _) => NotifyElasticDraftsChanged();
         _selectedTheme = ThemeOptions[0];
     }
 
     public ObservableCollection<LabelSettingViewModel> Labels { get; } = [];
     public ObservableCollection<ExclusionSettingViewModel> Exclusions { get; } = [];
     public ObservableCollection<ElasticConnectionEditorViewModel> ElasticConnections { get; } = [];
+    public ReactiveCommand<Unit, Unit> SaveDraftsAndCloseCommand { get; }
+    public ReactiveCommand<Unit, Unit> DiscardDraftsAndCloseCommand { get; }
+    public ReactiveCommand<Unit, Unit> KeepEditingCommand { get; }
+    public ReactiveCommand<Unit, Unit> ConfirmDeleteCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelDeleteCommand { get; }
+    public bool HasElasticDrafts => ElasticConnections.Any(editor => editor.IsDirty);
+    public bool CanDiscardDrafts => ElasticConnections.All(editor => !editor.IsSaving);
+    public bool CanSaveDrafts =>
+        CanDiscardDrafts && ElasticConnections.All(editor => !editor.IsDirty || editor.CanSave);
+    public bool CloseConfirmationVisible
+    {
+        get => _closeConfirmationVisible;
+        private set => this.RaiseAndSetIfChanged(ref _closeConfirmationVisible, value);
+    }
+    public bool DeleteConfirmationVisible => _pendingDelete is not null;
+    public string DeleteConfirmationMessage
+    {
+        get
+        {
+            if (_pendingDelete is not { } editor)
+                return string.Empty;
+            var saved = _owner.State.Settings.ElasticConnections.FirstOrDefault(connection =>
+                connection.Id == editor.Id
+            );
+            var sources = saved?.Views.SelectMany(view =>
+                view.Sources.Select(source =>
+                    $"{view.Name}: {source.ServerValue}{(string.IsNullOrWhiteSpace(source.NamespaceValue) ? string.Empty : $" / {source.NamespaceValue}")}"
+                )
+            );
+            return $"Delete {saved?.Name ?? editor.Name}? Its source tabs will close. Sources: {string.Join(", ", sources ?? [])}";
+        }
+    }
+
+    internal void NotifyElasticDraftsChanged()
+    {
+        this.RaisePropertyChanged(nameof(HasElasticDrafts));
+        this.RaisePropertyChanged(nameof(CanSaveDrafts));
+        this.RaisePropertyChanged(nameof(CanDiscardDrafts));
+    }
+
+    internal bool TryClose()
+    {
+        if (!HasElasticDrafts && CanDiscardDrafts)
+            return true;
+        CancelDelete();
+        CloseConfirmationVisible = true;
+        return false;
+    }
+
+    private async Task SaveDraftsAndCloseAsync()
+    {
+        if (!CanSaveDrafts)
+            return;
+        foreach (var editor in ElasticConnections.Where(editor => editor.IsDirty).ToArray())
+            if (!await editor.SaveDraftAsync())
+                return;
+        if (HasElasticDrafts)
+            return;
+        CloseConfirmationVisible = false;
+        _owner.CloseSettingsAfterDraftChoice();
+    }
+
+    private void DiscardDraftsAndClose()
+    {
+        if (!CanDiscardDrafts)
+            return;
+        ElasticConnections.Clear();
+        _syncedElasticConnectionIds.Clear();
+        SelectedElasticConnection = null;
+        Sync(_owner.State.Settings);
+        CloseConfirmationVisible = false;
+        _owner.CloseSettingsAfterDraftChoice();
+    }
+
     public IReadOnlyList<UiDensity> DensityOptions { get; } =
     [UiDensity.Comfortable, UiDensity.Cozy, UiDensity.Compact];
     public IReadOnlyList<LogFontSize> FontSizeOptions { get; } =
@@ -591,11 +682,38 @@ internal sealed class SettingsViewModel : ReactiveObject
         SelectedElasticConnection = editor;
     }
 
-    private async Task RemoveElasticConnectionAsync(ElasticConnectionEditorViewModel editor)
+    private Task RemoveElasticConnectionAsync(ElasticConnectionEditorViewModel editor)
     {
-        await _owner.State.RemoveElasticConnectionAsync(editor.Id);
-        ElasticConnections.Remove(editor);
-        SelectedElasticConnection = ElasticConnections.FirstOrDefault();
+        CloseConfirmationVisible = false;
+        _pendingDelete = editor;
+        this.RaisePropertyChanged(nameof(DeleteConfirmationVisible));
+        this.RaisePropertyChanged(nameof(DeleteConfirmationMessage));
+        return Task.CompletedTask;
+    }
+
+    private void CancelDelete()
+    {
+        _pendingDelete = null;
+        this.RaisePropertyChanged(nameof(DeleteConfirmationVisible));
+        this.RaisePropertyChanged(nameof(DeleteConfirmationMessage));
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_pendingDelete is not { } editor || editor.IsSaving)
+            return;
+        try
+        {
+            await _owner.State.RemoveElasticConnectionAsync(editor.Id);
+            ElasticConnections.Remove(editor);
+            SelectedElasticConnection = ElasticConnections.FirstOrDefault();
+            SaveError = null;
+            CancelDelete();
+        }
+        catch (Exception exception)
+        {
+            SaveError = exception.Message;
+        }
     }
 
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";

@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using DialogHostAvalonia;
 using HexTail.Application;
 using HexTail.Elastic;
 using HexTail.Persistence;
@@ -58,6 +59,15 @@ public partial class MainWindow : Window
     }
 
     internal MainWindowViewModel ViewModel { get; }
+
+    private void OnSettingsDialogClosing(object? sender, DialogClosingEventArgs args)
+    {
+        if (!ViewModel.SettingsOpen)
+            return;
+        ViewModel.SettingsOpen = false;
+        if (ViewModel.SettingsOpen && args.CanBeCancelled)
+            args.Cancel();
+    }
 
     private async Task HandlePickFilesAsync(
         IInteractionContext<System.Reactive.Unit, IReadOnlyList<string>> context

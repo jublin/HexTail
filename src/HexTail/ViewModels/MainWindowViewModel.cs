@@ -445,8 +445,19 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public bool SettingsOpen
     {
         get => _settingsOpen;
-        set => this.RaiseAndSetIfChanged(ref _settingsOpen, value);
+        set
+        {
+            if (!value && _settingsOpen && !Settings.TryClose())
+            {
+                this.RaisePropertyChanged(nameof(SettingsOpen));
+                return;
+            }
+            this.RaiseAndSetIfChanged(ref _settingsOpen, value);
+        }
     }
+
+    internal void CloseSettingsAfterDraftChoice() =>
+        this.RaiseAndSetIfChanged(ref _settingsOpen, false, nameof(SettingsOpen));
 
     public int SelectedViewIndex
     {

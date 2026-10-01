@@ -19,6 +19,7 @@
     x:Name="SettingsDialogHost"
     IsOpen="{Binding SettingsOpen, Mode=TwoWay}"
     CloseOnClickAway="True"
+    DialogClosing="OnSettingsDialogClosing"
   >
     <dialogHost:DialogHost.DialogContent>
       <views:SettingsPanel />

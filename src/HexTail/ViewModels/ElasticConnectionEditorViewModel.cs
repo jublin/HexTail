@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Text.Json;
 using HexTail.Elastic;
 using HexTail.Persistence;
 using ReactiveUI;
@@ -17,6 +18,11 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     private string? _status = "Not tested";
     private string _kibanaUrl = string.Empty;
     private string _elasticsearchUrl = string.Empty;
+    private string _username = string.Empty;
+    private string _secret = string.Empty;
+    private string? _savedSnapshot;
+    private bool _isSaving;
+    private bool _saveFailed;
 
     public ElasticConnectionEditorViewModel(SettingsViewModel owner, string id)
     {
@@ -36,7 +42,11 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     public string Name
     {
         get => _name;
-        set => this.RaiseAndSetIfChanged(ref _name, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _name, value);
+            NotifySavePrerequisitesChanged();
+        }
     }
     public string KibanaUrl
     {
@@ -78,13 +88,30 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(IsBasic));
             Status = "Not tested";
             Error = null;
+            NotifySavePrerequisitesChanged();
         }
     }
     public IReadOnlyList<ElasticAuthMode> AuthModes { get; } = Enum.GetValues<ElasticAuthMode>();
     public bool IsAuthenticated => AuthMode != ElasticAuthMode.Anonymous;
     public bool IsBasic => AuthMode == ElasticAuthMode.Basic;
-    public string Username { get; set; } = string.Empty;
-    public string Secret { get; set; } = string.Empty;
+    public string Username
+    {
+        get => _username;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _username, value);
+            NotifySavePrerequisitesChanged();
+        }
+    }
+    public string Secret
+    {
+        get => _secret;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _secret, value);
+            NotifySavePrerequisitesChanged();
+        }
+    }
     public ReactiveCommand<Unit, Unit> AddViewCommand { get; }
     public ReactiveCommand<ElasticViewEditorViewModel, Unit> RemoveViewCommand { get; }
     public ReactiveCommand<Unit, Unit> TestConnectionCommand { get; }
@@ -93,9 +120,25 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     public ObservableCollection<ElasticDataViewChoiceViewModel> DataViews { get; } = [];
     public bool CanSave =>
         !IsTesting
+        && !IsSaving
         && KibanaUrlError is null
         && ElasticsearchUrlError is null
         && Views.All(view => view.CanSave);
+    public bool IsDirty => !string.IsNullOrEmpty(Secret) || _savedSnapshot != DraftSnapshot();
+    public bool IsSaving
+    {
+        get => _isSaving;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isSaving, value);
+            NotifySavePrerequisitesChanged();
+        }
+    }
+    public string SaveStatus =>
+        IsSaving ? "Saving…"
+        : _saveFailed ? "Save failed"
+        : IsDirty ? "Unsaved"
+        : "Saved";
     public string? KibanaUrlError =>
         IsHttpUrl(KibanaUrl) ? null : "Enter an absolute HTTP or HTTPS Kibana URL.";
     public string? ElasticsearchUrlError =>
@@ -158,6 +201,8 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             Views.Add(view);
             view.Sync(settings.Views[index]);
         }
+        _savedSnapshot = DraftSnapshot();
+        NotifySavePrerequisitesChanged();
     }
 
     internal ElasticConnectionSettings ToSettings(bool includeViews = true) =>
@@ -238,22 +283,69 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
                 DataViews.Add(new ElasticDataViewChoiceViewModel(view.Id, view.Title));
     }
 
-    internal void NotifySavePrerequisitesChanged() => this.RaisePropertyChanged(nameof(CanSave));
+    internal void NotifySavePrerequisitesChanged()
+    {
+        this.RaisePropertyChanged(nameof(CanSave));
+        this.RaisePropertyChanged(nameof(IsDirty));
+        this.RaisePropertyChanged(nameof(SaveStatus));
+        _owner.NotifyElasticDraftsChanged();
+    }
+
+    private string DraftSnapshot() =>
+        JsonSerializer.Serialize(
+            new
+            {
+                Name,
+                KibanaUrl,
+                ElasticsearchUrl,
+                AuthMode,
+                Username,
+                Views = Views.Select(view => new
+                {
+                    view.Id,
+                    view.Name,
+                    view.SelectedDataViewId,
+                    view.DataViewTitle,
+                    view.TimeFieldName,
+                    view.ServerField,
+                    view.NamespaceField,
+                    OutputFields = view.OutputFieldNames,
+                    Sources = view.Sources.Select(source => source.ToSettings()),
+                }),
+            }
+        );
 
     private static bool IsHttpUrl(string value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https";
 
-    private async Task SaveAsync()
+    private async Task SaveAsync() => await SaveDraftAsync();
+
+    internal async Task<bool> SaveDraftAsync()
     {
+        if (!CanSave)
+            return false;
+        var snapshot = DraftSnapshot();
+        var secret = Secret;
+        _saveFailed = false;
+        IsSaving = true;
         try
         {
-            await _owner.SaveElasticConnectionAsync(ToSettings(), Secret);
-            Secret = string.Empty;
+            await _owner.SaveElasticConnectionAsync(ToSettings(), secret);
+            if (Secret == secret)
+                Secret = string.Empty;
+            _savedSnapshot = snapshot;
             Error = null;
+            return true;
         }
         catch (Exception exception)
         {
+            _saveFailed = true;
             Error = exception.Message;
+            return false;
+        }
+        finally
+        {
+            IsSaving = false;
         }
     }
 }

@@ -19,7 +19,7 @@
     MaxHeight="{Binding Bounds.Height, RelativeSource={RelativeSource AncestorType=Window}}"
     Margin="24"
   >
-    <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="16">
+    <Grid RowDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="16">
       <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
         <TextBlock Text="Settings" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
         <Button
@@ -223,11 +223,10 @@
                             Grid.Column="2"
                             Classes="icon"
                             ToolTip.Tip="Save server"
+                            Content="Save"
                             Command="{Binding SaveCommand}"
                             IsEnabled="{Binding CanSave}"
-                          >
-                            <ic:Icon Value="mdi-content-save-outline" />
-                          </Button>
+                          />
                           <Button
                             Grid.Column="3"
                             Classes="icon destructive"
@@ -240,6 +239,7 @@
                         </Grid>
                       </Expander.Header>
                       <StackPanel Spacing="12" Margin="0,12,0,0">
+                        <TextBlock Text="{Binding SaveStatus}" FontWeight="SemiBold" />
                         <TextBlock
                           Text="Enter endpoints and login details → Test connection → Choose a data view → Set filter and display fields → Save server. Then open the source from Elastic."
                           TextWrapping="Wrap"
@@ -483,6 +483,26 @@
         IsVisible="{Binding Settings.IsSaving}"
         Text="Saving…"
       />
+      <Border Grid.Row="4" Classes="settings-section" Margin="0,12,0,0" IsVisible="{Binding Settings.CloseConfirmationVisible}">
+        <StackPanel Spacing="8">
+          <TextBlock Text="Unsaved Elastic changes" FontWeight="SemiBold" />
+          <TextBlock Text="Save your changes, discard them, or keep editing. Incomplete setups must be completed before saving." TextWrapping="Wrap" />
+          <WrapPanel>
+            <Button Content="Save changes" Command="{Binding Settings.SaveDraftsAndCloseCommand}" IsEnabled="{Binding Settings.CanSaveDrafts}" Classes="primary" />
+            <Button Content="Discard changes" Command="{Binding Settings.DiscardDraftsAndCloseCommand}" IsEnabled="{Binding Settings.CanDiscardDrafts}" Classes="destructive" />
+            <Button Content="Keep editing" Command="{Binding Settings.KeepEditingCommand}" />
+          </WrapPanel>
+        </StackPanel>
+      </Border>
+      <Border Grid.Row="5" Classes="settings-section" Margin="0,12,0,0" IsVisible="{Binding Settings.DeleteConfirmationVisible}">
+        <StackPanel Spacing="8">
+          <TextBlock Text="{Binding Settings.DeleteConfirmationMessage}" TextWrapping="Wrap" />
+          <WrapPanel>
+            <Button Content="Delete server" Command="{Binding Settings.ConfirmDeleteCommand}" Classes="destructive" />
+            <Button Content="Cancel deletion" Command="{Binding Settings.CancelDeleteCommand}" />
+          </WrapPanel>
+        </StackPanel>
+      </Border>
     </Grid>
   </Border>
 </UserControl>

@@ -176,7 +176,27 @@ public sealed class AppState : IAsyncDisposable
     )
     {
         var previous = _settings;
+        var sourceIds = previous
+            .ElasticConnections.Where(connection => connection.Id == connectionId)
+            .SelectMany(connection => connection.Views)
+            .SelectMany(view => view.Sources)
+            .Select(source => source.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        (FileTabState Tab, int Index)[] removed;
+        FileTabState? previousSelection;
         lock (_gate)
+        {
+            previousSelection = SelectedFile;
+            removed = _files
+                .Select((tab, index) => (Tab: tab, Index: index))
+                .Where(item =>
+                    item.Tab.Source.Kind == LogSourceKind.Elastic && sourceIds.Contains(item.Tab.Id)
+                )
+                .ToArray();
+            foreach (var item in removed)
+                _files.Remove(item.Tab);
+            if (removed.Any(item => item.Tab == SelectedFile))
+                SelectedFile = _files.FirstOrDefault();
             _settings = NormalizeSettings(
                 previous with
                 {
@@ -185,6 +205,7 @@ public sealed class AppState : IAsyncDisposable
                         .ToList(),
                 }
             );
+        }
         try
         {
             await SaveAsync(cancellationToken).ConfigureAwait(false);
@@ -192,9 +213,16 @@ public sealed class AppState : IAsyncDisposable
         catch
         {
             lock (_gate)
+            {
                 _settings = previous;
+                foreach (var item in removed)
+                    _files.Insert(Math.Min(item.Index, _files.Count), item.Tab);
+                SelectedFile = previousSelection;
+            }
             throw;
         }
+        foreach (var item in removed)
+            await item.Tab.DisposeAsync().ConfigureAwait(false);
         try
         {
             _credentials.Delete(connectionId);

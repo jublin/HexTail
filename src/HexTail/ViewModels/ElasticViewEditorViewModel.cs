@@ -24,6 +24,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     private bool _isSelectionResolved;
     private string? _timeFieldName;
     private string? _serverField;
+    private string? _namespaceField;
 
     public ElasticViewEditorViewModel(ElasticConnectionEditorViewModel owner, string id)
     {
@@ -106,7 +107,16 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             NotifyPrerequisitesChanged();
         }
     }
-    public string? NamespaceField { get; set; }
+    public string? NamespaceField
+    {
+        get => _namespaceField;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _namespaceField, value);
+            NotifyPrerequisitesChanged();
+        }
+    }
+    internal IReadOnlyList<string> OutputFieldNames => _outputFieldOrder;
     public ObservableCollection<ElasticDataViewChoiceViewModel> DataViews => _owner.DataViews;
     public ObservableCollection<ElasticFieldOptionViewModel> Fields { get; } = [];
     public ObservableCollection<ElasticSourceSettingViewModel> Sources { get; } = [];
