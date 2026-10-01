@@ -106,7 +106,11 @@ public sealed class MainWindowInteractionTests
 
         Assert.True(viewModel.IsElasticSelected);
         Assert.True(window.FindControl<StackPanel>("ElasticTimeRangePanel")!.IsVisible);
+        window.Width = 720;
+        window.UpdateLayout();
         var rangeButton = window.FindControl<Button>("ElasticTimeRangeButton")!;
+        var rangePosition = rangeButton.TranslatePoint(default, window)!.Value;
+        Assert.True(rangePosition.X + rangeButton.Bounds.Width <= window.Bounds.Width);
         var flyout = Assert.IsType<Flyout>(rangeButton.Flyout);
         flyout.ShowAt(rangeButton);
         Dispatcher.UIThread.RunJobs();
@@ -133,6 +137,71 @@ public sealed class MainWindowInteractionTests
         Assert.Equal("now", state.SelectedFile.ElasticTo);
         flyout.Hide();
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task SearchPlaceholderAndTextFitAtMinimumWidthInEveryDensity()
+    {
+        var window = TestWindow.Create(out var vm);
+        await vm.InitializeAsync();
+        var path = Path.Combine(Path.GetTempPath(), $"hextail-search-{Guid.NewGuid():N}.log");
+        await File.WriteAllTextAsync(path, "ready", TestContext.Current.CancellationToken);
+        try
+        {
+            await vm.State.OpenFileAsync(path, save: false);
+            window.Width = 720;
+            window.Height = 720;
+            window.Show();
+            foreach (var density in vm.Settings.DensityOptions)
+            {
+                vm.Settings.Density = density;
+                vm.Query = string.Empty;
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                var query = FindVisual<TextBox>(window, "QueryBox");
+                Assert.Equal(VerticalAlignment.Center, query.VerticalContentAlignment);
+                Assert.False(query.UseFloatingPlaceholder);
+                var placeholder = query
+                    .GetVisualDescendants()
+                    .OfType<TextBlock>()
+                    .Single(text => text.Text == "Search this file" && text.IsVisible);
+                Assert.True(placeholder.IsVisible);
+                var hintPosition = placeholder.TranslatePoint(default, query)!.Value;
+                Assert.True(hintPosition.Y >= 0);
+                Assert.True(hintPosition.Y + placeholder.Bounds.Height <= query.Bounds.Height);
+                var queryPosition = query.TranslatePoint(default, window)!.Value;
+                Assert.True(
+                    queryPosition.X >= 0
+                        && queryPosition.X + query.Bounds.Width <= window.Bounds.Width
+                );
+                var add = FindVisual<Button>(window, "AddSearchButton");
+                var addPosition = add.TranslatePoint(default, window)!.Value;
+                Assert.True(addPosition.X + add.Bounds.Width <= window.Bounds.Width);
+                query.Text = "visible search input";
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                var presenter = query
+                    .GetVisualDescendants()
+                    .OfType<Avalonia.Controls.Presenters.TextPresenter>()
+                    .Single();
+                var textPosition = presenter.TranslatePoint(default, query)!.Value;
+                Assert.True(
+                    textPosition.Y >= 0
+                        && textPosition.Y + presenter.Bounds.Height <= query.Bounds.Height
+                );
+                Assert.Equal("visible search input", vm.Query);
+                var toggle = FindVisual<ToggleButton>(window, "CaseToggle");
+                Assert.True(
+                    toggle.TranslatePoint(default, window)!.Value.X
+                        >= queryPosition.X + query.Bounds.Width
+                );
+            }
+        }
+        finally
+        {
+            window.Close();
+            File.Delete(path);
+        }
     }
 
     [AvaloniaFact]

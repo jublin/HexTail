@@ -29,7 +29,7 @@
       Background="{DynamicResource SurfaceBrush}"
       HorizontalAlignment="Stretch"
     >
-      <Grid Grid.Row="0" ColumnDefinitions=".3*,.7*" HorizontalAlignment="Stretch">
+      <Grid Grid.Row="0" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" HorizontalAlignment="Stretch">
         <CommandBar
           Grid.Column="0"
           HorizontalAlignment="Left"
@@ -124,45 +124,6 @@
         </CommandBar>
 
         <DockPanel Grid.Column="1" HorizontalAlignment="Right" Margin="0,0,5,0">
-          <views:SearchBar DataContext="{Binding }" DockPanel.Dock="Left" />
-
-          <StackPanel x:Name="ElasticTimeRangePanel" VerticalAlignment="Center"
-                      Margin="6,0,0,0" IsVisible="{Binding IsElasticSelected}">
-            <Button x:Name="ElasticTimeRangeButton" Content="Time range…"
-                    AutomationProperties.Name="Elastic log time range">
-              <Button.Flyout>
-                <Flyout>
-                  <StackPanel Spacing="8" Width="390">
-                    <TextBlock Text="Log time range (UTC)" FontWeight="SemiBold" />
-                    <TextBlock Text="From (inclusive)" />
-                    <Grid ColumnDefinitions="*,Auto">
-                      <DatePicker x:Name="ElasticFromDatePicker" SelectedDate="{Binding ElasticFromDate, Mode=TwoWay}"
-                                  MonthFormat="MM" DayFormat="dd" YearFormat="yyyy"
-                                  AutomationProperties.Name="From date UTC" />
-                      <TimePicker x:Name="ElasticFromTimePicker" Grid.Column="1" Margin="8,0,0,0"
-                                  SelectedTime="{Binding ElasticFromTime, Mode=TwoWay}"
-                                  ClockIdentifier="24HourClock" UseSeconds="True"
-                                  AutomationProperties.Name="From time UTC" />
-                    </Grid>
-                    <CheckBox x:Name="ElasticToNowCheckBox" Content="To now (live logs)" IsChecked="{Binding ElasticToNow, Mode=TwoWay}" />
-                    <TextBlock Text="To (inclusive)" />
-                    <Grid ColumnDefinitions="*,Auto" IsEnabled="{Binding !ElasticToNow}">
-                      <DatePicker x:Name="ElasticToDatePicker" SelectedDate="{Binding ElasticToDate, Mode=TwoWay}"
-                                  MonthFormat="MM" DayFormat="dd" YearFormat="yyyy"
-                                  AutomationProperties.Name="To date UTC" />
-                      <TimePicker x:Name="ElasticToTimePicker" Grid.Column="1" Margin="8,0,0,0"
-                                  SelectedTime="{Binding ElasticToTime, Mode=TwoWay}"
-                                  ClockIdentifier="24HourClock" UseSeconds="True"
-                                  AutomationProperties.Name="To time UTC" />
-                    </Grid>
-                    <Button x:Name="ApplyElasticTimeRangeButton" Content="Apply"
-                            Command="{Binding ApplyElasticTimeRangeCommand}" Classes="primary" />
-                  </StackPanel>
-                </Flyout>
-              </Button.Flyout>
-            </Button>
-          </StackPanel>
-
           <ToggleSwitch
             OnContent="Following"
             OffContent="Not Following"
@@ -184,6 +145,49 @@
             IsChecked="{Binding ShowContext, Mode=TwoWay}"
           />
         </DockPanel>
+        <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto" Margin="0,0,5,0">
+          <views:SearchBar DataContext="{Binding }" />
+
+          <StackPanel Grid.Column="1" x:Name="ElasticTimeRangePanel" VerticalAlignment="Center"
+                      Margin="6,0,0,0" IsVisible="{Binding IsElasticSelected}">
+            <Button x:Name="ElasticTimeRangeButton" Content="Time range…"
+                    AutomationProperties.Name="Elastic log time range">
+              <Button.Flyout>
+                <Flyout>
+                  <StackPanel Spacing="8" Width="390">
+                    <TextBlock Text="Log time range (UTC)" FontWeight="SemiBold" />
+                    <TextBlock Text="From (inclusive)" />
+                    <StackPanel Spacing="4">
+                      <DatePicker x:Name="ElasticFromDatePicker" SelectedDate="{Binding ElasticFromDate, Mode=TwoWay}"
+                                  MonthFormat="MM" DayFormat="dd" YearFormat="yyyy"
+                                  HorizontalAlignment="Stretch" AutomationProperties.Name="From date UTC" />
+                      <TimePicker x:Name="ElasticFromTimePicker" HorizontalAlignment="Stretch"
+                                  SelectedTime="{Binding ElasticFromTime, Mode=TwoWay}"
+                                  ClockIdentifier="24HourClock" UseSeconds="True"
+                                  AutomationProperties.Name="From time UTC" />
+                    </StackPanel>
+                    <CheckBox x:Name="ElasticToNowCheckBox" Content="To now (live logs)" IsChecked="{Binding ElasticToNow, Mode=TwoWay}" />
+                    <TextBlock Text="To (inclusive)" />
+                    <StackPanel Spacing="4" IsEnabled="{Binding !ElasticToNow}">
+                      <DatePicker x:Name="ElasticToDatePicker" SelectedDate="{Binding ElasticToDate, Mode=TwoWay}"
+                                  MonthFormat="MM" DayFormat="dd" YearFormat="yyyy"
+                                  HorizontalAlignment="Stretch" AutomationProperties.Name="To date UTC" />
+                      <TimePicker x:Name="ElasticToTimePicker" HorizontalAlignment="Stretch"
+                                  SelectedTime="{Binding ElasticToTime, Mode=TwoWay}"
+                                  ClockIdentifier="24HourClock" UseSeconds="True"
+                                  AutomationProperties.Name="To time UTC" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding FileError}" IsVisible="{Binding HasFileError}"
+                               TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" />
+                    <Button x:Name="ApplyElasticTimeRangeButton" Content="Apply"
+                            Command="{Binding ApplyElasticTimeRangeCommand}" Classes="primary" />
+                  </StackPanel>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+          </StackPanel>
+
+        </Grid>
       </Grid>
       <views:FileStrip Grid.Column="0" Grid.Row="1" />
       <views:WorkspaceError Grid.Column="0" Grid.Row="2" />

@@ -130,7 +130,6 @@ internal sealed class SettingsViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(TabCloseSize));
             this.RaisePropertyChanged(nameof(TabHeight));
             this.RaisePropertyChanged(nameof(SecondaryPadding));
-            this.RaisePropertyChanged(nameof(SearchInputPadding));
             this.RaisePropertyChanged(nameof(SecondaryControlHeight));
             this.RaisePropertyChanged(nameof(SecondaryCloseSize));
             this.RaisePropertyChanged(nameof(SecondaryFontSize));
@@ -189,14 +188,6 @@ internal sealed class SettingsViewModel : ReactiveObject
         };
 
     public Thickness SecondaryPadding => new(TabPadding.Left * 0.6, TabPadding.Top * 0.6);
-
-    public Thickness SearchInputPadding =>
-        new(
-            SecondaryPadding.Left,
-            SecondaryPadding.Top,
-            SecondaryCloseSize + 5,
-            SecondaryPadding.Bottom
-        );
 
     public double SecondaryControlHeight =>
         Density switch

@@ -9,17 +9,19 @@
   x:DataType="vm:MainWindowViewModel"
 >
   <Grid ColumnDefinitions="*,Auto,Auto" Margin="4,4,4,4" IsVisible="{Binding HasFile}">
-    <Grid ColumnDefinitions="*" MinWidth="250">
+    <Grid ColumnDefinitions="*,Auto" MinWidth="250">
       <TextBox
         x:Name="QueryBox"
         Name="QueryBox"
-        VerticalContentAlignment="Bottom"
+        VerticalContentAlignment="Center"
         Height="{Binding Settings.SecondaryControlHeight}"
+        MinHeight="{Binding Settings.SecondaryControlHeight}"
+        FontSize="{Binding Settings.SecondaryFontSize}"
         Text="{Binding Query, Mode=TwoWay}"
         PlaceholderText="Search this file"
-        UseFloatingPlaceholder="True"
+        UseFloatingPlaceholder="False"
         TextAlignment="Left"
-        Padding="{Binding Settings.SearchInputPadding}"
+        Padding="{Binding Settings.SecondaryPadding}"
       >
         <i:Interaction.Behaviors>
           <events:KeyDownEventTrigger>
@@ -33,8 +35,11 @@
       <ToggleButton
         x:Name="CaseToggle"
         Name="CaseToggle"
-        HorizontalAlignment="Right"
-        Margin="0,2,4,2"
+        Grid.Column="1"
+        VerticalAlignment="Center"
+        Margin="2,0,4,0"
+        MinHeight="{Binding Settings.SecondaryControlHeight}"
+        FontSize="{Binding Settings.SecondaryFontSize}"
         Padding="{Binding Settings.SecondaryPadding}"
         Height="{Binding Settings.SecondaryControlHeight}"
         Content="Aa"
