@@ -1,0 +1,23 @@
+Metadata refresh: API reports 2 views; selector contains 1; status=Connected (2 data views).
+Out-of-order metadata: selected=B, saved=A, index=logs-A-*, timestamp=time-A.
+Metadata recovery: successful selection=good, error remains=Metadata unavailable.
+Placeholder in cyber-tail: foreground=#99ffffff; opacity=1.
+Placeholder in cyber-tail: foreground=#99ffffff; opacity=0.5.
+Placeholder in catppuccin-mocha: foreground=#99ffffff; opacity=1.
+Placeholder in catppuccin-mocha: foreground=#99ffffff; opacity=0.5.
+Placeholder in spotify: foreground=#99ffffff; opacity=1.
+Placeholder in spotify: foreground=#99ffffff; opacity=0.5.
+Rendered workspace at 720, 1280, 1920; search placeholder; Elastic failed-test forms at 720/1280; label form at 720; range draft.
+Global exclusion [ERROR] hides READY because the supposedly text rule is inferred as regex. Invalid [ is silently ignored.
+Save while source is open: saved filter=changed-api, active request filter=api.
+Close/reopen: an undrained generation-0 row from the closed tailer appears in the new tab, despite the changed source filter.
+Session restore: saved historical range 2026-08-20 10:00–11:00Z becomes now-5m to now (live).
+Two distinct filters produce identical tab names: Production logs-API service.
+
+Palette contrast (sRGB tokens; selected border vs surface / border):
+CyberTail: 2.72:1 / 1.76:1; text=16.53:1, muted=7.33:1
+CatppuccinMocha: 2.74:1 / 1.53:1; text=11.34:1, muted=7.37:1
+Spotify: 5.02:1 / 3.84:1; text=18.73:1, muted=8.93:1
+
+Audit-only probes: 4 passed. Synthetic metadata and channel events; no real cluster. Temporary source and headless Skia changes removed before baseline test run.
+Theme workspace captures were excluded because closing the settings overlay had not finished its animation when captured. Theme settings screenshots were retained. Placeholder observations include both template text blocks, not only the visible one; no numeric placeholder contrast claim is made.
