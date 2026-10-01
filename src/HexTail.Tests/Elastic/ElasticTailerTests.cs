@@ -286,6 +286,41 @@ public sealed class ElasticTailerTests
         Assert.Equal(3, client.ClosedPitIds.Count);
     }
 
+    [Fact]
+    public async Task RangeChange_DiscardsInFlightRowsAndOldCursor()
+    {
+        var response = new TaskCompletionSource<ElasticSearchPage>();
+        var client = new FakeElasticApiClient { SearchHandler = _ => response.Task };
+        var connection = Connection();
+        var channel = Channel.CreateUnbounded<SourceEvent>();
+        var now = new DateTimeOffset(2026, 8, 20, 10, 5, 0, TimeSpan.Zero);
+        await using var tailer = new ElasticTailer(
+            connection,
+            connection.Views[0],
+            connection.Views[0].Sources[0],
+            "secret",
+            client,
+            channel.Writer,
+            () => now
+        );
+        var oldPoll = tailer.PollOnceAsync(TestContext.Current.CancellationToken);
+        tailer.SetTimeRange("now-2m", "now");
+        response.SetResult(
+            new ElasticSearchPage(
+                "pit-old",
+                [new ElasticHit("old", now.AddMinutes(-4), new Line("old"), [])]
+            )
+        );
+        await oldPoll;
+        Assert.False(channel.Reader.TryRead(out _));
+        client.SearchHandler = null;
+        client.Pages.Enqueue(new ElasticSearchPage("pit-new", []));
+        await tailer.PollOnceAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(now.AddMinutes(-2), client.Searches[^1].FromInclusive);
+        Assert.True(client.Searches[^1].SortDescending);
+        Assert.Contains("pit-old", client.ClosedPitIds);
+    }
+
     private static ElasticHit Hit(string id, string timestamp, IReadOnlyList<JsonElement> sort) =>
         new(id, DateTimeOffset.Parse(timestamp), new Line("ready"), sort);
 

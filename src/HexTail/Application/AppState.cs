@@ -403,8 +403,11 @@ public sealed class AppState : IAsyncDisposable
         if (tab.Source.Kind != LogSourceKind.Elastic || tab.Tailer is not ElasticTailer tailer)
             throw new ArgumentException("The selected tab is not an Elastic tab.", nameof(tab));
         tailer.SetTimeRange(from, to);
+        tab.Buffer.Clear();
+        tab.Error = null;
         tab.ElasticFrom = from.Trim();
         tab.ElasticTo = to.Trim();
+        NotifyChanged();
     }
 
     public IReadOnlyDictionary<string, ElasticSourceHealth> ElasticSourceStatuses =>
@@ -632,7 +635,13 @@ public sealed class AppState : IAsyncDisposable
             FileTabState? tab;
             lock (_gate)
                 tab = _files.FirstOrDefault(file => file.Id == sourceEvent.SourceId);
-            if (tab is null)
+            if (
+                tab is null
+                || (
+                    tab.Tailer is ElasticTailer elastic
+                    && sourceEvent.Generation != elastic.Generation
+                )
+            )
             {
                 _pendingBatch = null;
                 _pendingBatchOffset = 0;

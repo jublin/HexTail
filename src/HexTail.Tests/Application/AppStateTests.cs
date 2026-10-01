@@ -372,6 +372,62 @@ public sealed class AppStateTests
         Assert.Equal("42", fields["count"]);
     }
 
+    [Fact]
+    public async Task ElasticRangeChange_ClearsRowsAndRejectsQueuedAndPartialOldBatches()
+    {
+        var client = new HexTail.Tests.Support.FakeElasticApiClient
+        {
+            SearchHandler = _ => Task.FromResult(new HexTail.Elastic.ElasticSearchPage("pit", [])),
+        };
+        await using var tailers = NewTailers();
+        await using var state = new AppState(tailers, new MemoryPersistence(), elastic: client);
+        var connection = ElasticConnection("ops") with
+        {
+            Views =
+            [
+                new ElasticViewSettings
+                {
+                    Id = "v1",
+                    DataViewTitle = "logs-*",
+                    TimeFieldName = "@timestamp",
+                    ServerField = "server",
+                    Sources = [new ElasticSourceSettings { Id = "s1", ServerValue = "api" }],
+                },
+            ],
+        };
+        await state.UpdateSettingsAsync(new AppSettings { ElasticConnections = [connection] });
+        var tab = await state.OpenElasticSourceAsync("s1", save: false);
+        tab.AddSearch(
+            new Search(
+                new CompiledQuery("old", CompiledQuery.DetectMode("old"), false),
+                "#ff0000",
+                tab.Buffer
+            )
+        );
+        var oldBatch = new SourceLines(
+            tab.Id,
+            Enumerable.Range(0, 20_000).Select(_ => new Line("old")).ToArray()
+        )
+        {
+            Generation = 0,
+        };
+        Assert.True(tailers.Publish(oldBatch));
+        state.DrainTailerEvents();
+        Assert.NotEmpty(tab.Buffer.Lines);
+        tab.SelectedLine = 0;
+        tab.ExpandedLine = 0;
+        state.SetElasticTimeRange(tab, "now-2m", "now");
+        Assert.Empty(tab.Buffer.Lines);
+        Assert.Single(tab.Searches);
+        Assert.Null(tab.SelectedLine);
+        Assert.Null(tab.ExpandedLine);
+        Assert.True(tailers.Publish(new SourceError(tab.Id, "old failure") { Generation = 0 }));
+        Assert.True(tailers.Publish(new SourceLines(tab.Id, [new Line("new")]) { Generation = 1 }));
+        while (state.DrainTailerEvents()) { }
+        Assert.Equal("new", Assert.Single(tab.Buffer.Lines).Raw);
+        Assert.Null(tab.Error);
+    }
+
     private static LogSourceService NewTailers() =>
         new(
             new TailerOptions

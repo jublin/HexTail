@@ -6,6 +6,7 @@ namespace HexTail.Tests.Support;
 
 internal sealed class FakeElasticApiClient : IElasticApiClient
 {
+    public Func<ElasticSearchRequest, Task<ElasticSearchPage>>? SearchHandler { get; set; }
     public Queue<ElasticSearchPage> Pages { get; } = [];
     public List<ElasticSearchRequest> Searches { get; } = [];
     public List<string> ClosedPitIds { get; } = [];
@@ -74,7 +75,7 @@ internal sealed class FakeElasticApiClient : IElasticApiClient
     )
     {
         Searches.Add(request);
-        return Task.FromResult(Pages.Dequeue());
+        return SearchHandler?.Invoke(request) ?? Task.FromResult(Pages.Dequeue());
     }
 
     public Task ClosePitAsync(

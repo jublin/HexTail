@@ -5,7 +5,10 @@ namespace HexTail.Tailing;
 /// via <see cref="TailerService.Events"/>. Tailers never touch UI state directly.
 /// </summary>
 /// <param name="FileId">Identifier of the tailed file, as assigned by the caller of <see cref="TailerService.StartTailer"/>.</param>
-public abstract record SourceEvent(string SourceId);
+public abstract record SourceEvent(string SourceId)
+{
+    public long? Generation { get; init; }
+}
 
 /// <summary>
 /// One or more complete lines were read from the file. Lines are emitted in file order;
