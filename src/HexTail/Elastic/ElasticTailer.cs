@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Threading.Channels;
 using HexTail.Persistence;
 using HexTail.Security;
@@ -73,8 +74,9 @@ internal sealed class ElasticTailer : ILogTailer
         lock (_rangeGate)
         {
             generation = Generation;
-            toInclusive = ParseTime(_toExpression, _utcNow());
-            fromInclusive = _cursorTimestamp ?? ParseTime(_fromExpression, toInclusive);
+            var now = _utcNow();
+            toInclusive = ParseTime(_toExpression, now);
+            fromInclusive = _cursorTimestamp ?? ParseTime(_fromExpression, now);
             nextCursorTimestamp = _cursorTimestamp;
             nextIdsAtCursor = new HashSet<string>(_idsAtCursor, StringComparer.Ordinal);
         }
@@ -197,8 +199,8 @@ internal sealed class ElasticTailer : ILogTailer
     internal void SetTimeRange(string from, string to)
     {
         var now = _utcNow();
-        _ = ParseTime(from, now);
-        _ = ParseTime(to, now);
+        if (ParseTime(from, now) > ParseTime(to, now))
+            throw new ArgumentException("From must be at or before To.");
         lock (_rangeGate)
         {
             Interlocked.Increment(ref _generation);
@@ -299,7 +301,7 @@ internal sealed class ElasticTailer : ILogTailer
     private static void Log(string message) =>
         Console.Error.WriteLine($"[Elastic] {DateTimeOffset.UtcNow:O} {message}");
 
-    private static DateTimeOffset ParseTime(string expression, DateTimeOffset now)
+    internal static DateTimeOffset ParseTime(string expression, DateTimeOffset now)
     {
         var value = expression.Trim();
         if (string.Equals(value, "now", StringComparison.OrdinalIgnoreCase))
@@ -307,21 +309,51 @@ internal sealed class ElasticTailer : ILogTailer
         if (value.StartsWith("now-", StringComparison.OrdinalIgnoreCase))
         {
             var relative = value[4..];
-            if (relative.Length > 1 && double.TryParse(relative[..^1], out var amount))
+            if (
+                relative.Length > 1
+                && double.TryParse(
+                    relative[..^1],
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out var amount
+                )
+                && double.IsFinite(amount)
+                && amount >= 0
+            )
             {
-                var duration = relative[^1] switch
+                var seconds =
+                    amount
+                    * (
+                        relative[^1] switch
+                        {
+                            's' => 1d,
+                            'm' => 60d,
+                            'h' => 3600d,
+                            'd' => 86400d,
+                            _ => double.NaN,
+                        }
+                    );
+                if (
+                    double.IsFinite(seconds)
+                    && seconds <= (now - DateTimeOffset.MinValue).TotalSeconds
+                )
                 {
-                    's' => TimeSpan.FromSeconds(amount),
-                    'm' => TimeSpan.FromMinutes(amount),
-                    'h' => TimeSpan.FromHours(amount),
-                    'd' => TimeSpan.FromDays(amount),
-                    _ => TimeSpan.MinValue,
-                };
-                if (duration != TimeSpan.MinValue)
-                    return now - duration;
+                    try
+                    {
+                        return now.AddSeconds(-seconds);
+                    }
+                    catch (ArgumentOutOfRangeException) { }
+                }
             }
         }
-        if (DateTimeOffset.TryParse(value, out var timestamp))
+        else if (
+            DateTimeOffset.TryParse(
+                value,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out var timestamp
+            )
+        )
             return timestamp;
         throw new ArgumentException(
             $"Invalid Elastic time expression '{expression}'. Use now, now-5m, or an ISO timestamp."

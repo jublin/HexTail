@@ -321,6 +321,54 @@ public sealed class ElasticTailerTests
         Assert.Contains("pit-old", client.ClosedPitIds);
     }
 
+    [Fact]
+    public async Task RelativeRange_UsesOneClockReadingForBothEndpoints()
+    {
+        var client = new FakeElasticApiClient();
+        client.Pages.Enqueue(new ElasticSearchPage("pit", []));
+        var connection = Connection();
+        var now = new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero);
+        await using var tailer = new ElasticTailer(
+            connection,
+            connection.Views[0],
+            connection.Views[0].Sources[0],
+            "",
+            client,
+            Channel.CreateUnbounded<SourceEvent>().Writer,
+            () => now
+        );
+        tailer.SetTimeRange("now-5m", "now-1m");
+        await tailer.PollOnceAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(now.AddMinutes(-5), client.Searches[0].FromInclusive);
+        Assert.Equal(now.AddMinutes(-1), client.Searches[0].ToInclusive);
+    }
+
+    [Theory]
+    [InlineData("now", "now-1m")]
+    [InlineData("now-1e100d", "now")]
+    [InlineData("now-NaNd", "now")]
+    [InlineData("now--5m", "now")]
+    [InlineData("invalid", "now")]
+    public async Task InvalidRange_IsRejectedWithoutChangingCurrentRange(string from, string to)
+    {
+        var client = new FakeElasticApiClient();
+        client.Pages.Enqueue(new ElasticSearchPage("pit", []));
+        var connection = Connection();
+        var now = new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero);
+        await using var tailer = new ElasticTailer(
+            connection,
+            connection.Views[0],
+            connection.Views[0].Sources[0],
+            "",
+            client,
+            Channel.CreateUnbounded<SourceEvent>().Writer,
+            () => now
+        );
+        Assert.Throws<ArgumentException>(() => tailer.SetTimeRange(from, to));
+        await tailer.PollOnceAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(now.AddMinutes(-5), client.Searches[0].FromInclusive);
+    }
+
     private static ElasticHit Hit(string id, string timestamp, IReadOnlyList<JsonElement> sort) =>
         new(id, DateTimeOffset.Parse(timestamp), new Line("ready"), sort);
 

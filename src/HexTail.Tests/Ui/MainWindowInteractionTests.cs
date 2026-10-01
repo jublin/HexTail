@@ -106,6 +106,32 @@ public sealed class MainWindowInteractionTests
 
         Assert.True(viewModel.IsElasticSelected);
         Assert.True(window.FindControl<StackPanel>("ElasticTimeRangePanel")!.IsVisible);
+        var rangeButton = window.FindControl<Button>("ElasticTimeRangeButton")!;
+        var flyout = Assert.IsType<Flyout>(rangeButton.Flyout);
+        flyout.ShowAt(rangeButton);
+        Dispatcher.UIThread.RunJobs();
+        var content = Assert.IsType<StackPanel>(flyout.Content);
+        var pickers = content.GetVisualDescendants().OfType<DatePicker>().ToArray();
+        var times = content.GetVisualDescendants().OfType<TimePicker>().ToArray();
+        Assert.Equal(2, pickers.Length);
+        Assert.Equal(2, times.Length);
+        Assert.Empty(content.GetVisualDescendants().OfType<TextBox>());
+        pickers[0].SelectedDate = new DateTimeOffset(2026, 8, 20, 0, 0, 0, TimeSpan.Zero);
+        times[0].SelectedTime = new TimeSpan(10, 15, 30);
+        pickers[1].SelectedDate = pickers[0].SelectedDate;
+        times[1].SelectedTime = new TimeSpan(10, 16, 45);
+        viewModel.ElasticToNow = false;
+        await viewModel.ApplyElasticTimeRangeCommand.Execute().FirstAsync();
+        Assert.Equal("2026-08-20T10:15:30.0000000+00:00", state.SelectedFile!.ElasticFrom);
+        Assert.Equal("2026-08-20T10:16:45.0000000+00:00", state.SelectedFile.ElasticTo);
+        times[1].SelectedTime = new TimeSpan(10, 14, 0);
+        await viewModel.ApplyElasticTimeRangeCommand.Execute().FirstAsync();
+        Assert.Contains("From must be at or before To", viewModel.FileError);
+        Assert.Equal("2026-08-20T10:16:45.0000000+00:00", state.SelectedFile.ElasticTo);
+        viewModel.ElasticToNow = true;
+        await viewModel.ApplyElasticTimeRangeCommand.Execute().FirstAsync();
+        Assert.Equal("now", state.SelectedFile.ElasticTo);
+        flyout.Hide();
         window.Close();
     }
 

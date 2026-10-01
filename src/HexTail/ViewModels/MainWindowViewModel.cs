@@ -9,6 +9,7 @@ using Avalonia.Threading;
 using HexTail;
 using HexTail.Application;
 using HexTail.Domain;
+using HexTail.Elastic;
 using HexTail.Persistence;
 using ReactiveUI;
 using ReactiveUI.Reactive;
@@ -46,8 +47,11 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private bool _closed;
     private bool _restoring;
     private int _syncQueued;
-    private string _elasticFrom = "now-5m";
-    private string _elasticTo = "now";
+    private DateTimeOffset? _elasticFromDate;
+    private DateTimeOffset? _elasticToDate;
+    private TimeSpan? _elasticFromTime;
+    private TimeSpan? _elasticToTime;
+    private bool _elasticToNow = true;
 
     public MainWindowViewModel(
         AppState state,
@@ -160,8 +164,18 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             previous?.RaiseSelectionChanged();
             if (value is not null)
             {
-                ElasticFrom = value.Model.ElasticFrom;
-                ElasticTo = value.Model.ElasticTo;
+                var now = DateTimeOffset.UtcNow;
+                var from = ElasticTailer.ParseTime(value.Model.ElasticFrom, now).ToUniversalTime();
+                var to = ElasticTailer.ParseTime(value.Model.ElasticTo, now).ToUniversalTime();
+                ElasticFromDate = from;
+                ElasticFromTime = from.TimeOfDay;
+                ElasticToDate = to;
+                ElasticToTime = to.TimeOfDay;
+                ElasticToNow = string.Equals(
+                    value.Model.ElasticTo,
+                    "now",
+                    StringComparison.OrdinalIgnoreCase
+                );
             }
             value?.RaiseSelectionChanged();
         }
@@ -169,15 +183,30 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
     public bool HasFile => SelectedFile is not null;
     public bool IsElasticSelected => SelectedFile?.Model.Source.Kind == LogSourceKind.Elastic;
-    public string ElasticFrom
+    public DateTimeOffset? ElasticFromDate
     {
-        get => _elasticFrom;
-        set => this.RaiseAndSetIfChanged(ref _elasticFrom, value);
+        get => _elasticFromDate;
+        set => this.RaiseAndSetIfChanged(ref _elasticFromDate, value);
     }
-    public string ElasticTo
+    public TimeSpan? ElasticFromTime
     {
-        get => _elasticTo;
-        set => this.RaiseAndSetIfChanged(ref _elasticTo, value);
+        get => _elasticFromTime;
+        set => this.RaiseAndSetIfChanged(ref _elasticFromTime, value);
+    }
+    public DateTimeOffset? ElasticToDate
+    {
+        get => _elasticToDate;
+        set => this.RaiseAndSetIfChanged(ref _elasticToDate, value);
+    }
+    public TimeSpan? ElasticToTime
+    {
+        get => _elasticToTime;
+        set => this.RaiseAndSetIfChanged(ref _elasticToTime, value);
+    }
+    public bool ElasticToNow
+    {
+        get => _elasticToNow;
+        set => this.RaiseAndSetIfChanged(ref _elasticToNow, value);
     }
     public bool ShowEmpty => !HasFile;
     public int FileCount => Files.Count;
@@ -581,13 +610,22 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             return;
         try
         {
-            _state.SetElasticTimeRange(SelectedFile.Model, ElasticFrom, ElasticTo);
+            var from = PickerTimestamp(ElasticFromDate, ElasticFromTime);
+            var to = ElasticToNow ? "now" : PickerTimestamp(ElasticToDate, ElasticToTime);
+            _state.SetElasticTimeRange(SelectedFile.Model, from, to);
             SetFileError(null);
         }
         catch (ArgumentException exception)
         {
             SetFileError(exception.Message);
         }
+    }
+
+    private static string PickerTimestamp(DateTimeOffset? date, TimeSpan? time)
+    {
+        if (date is null || time is null || time < TimeSpan.Zero || time >= TimeSpan.FromDays(1))
+            throw new ArgumentException("Select both a date and a time (UTC).");
+        return new DateTimeOffset(date.Value.Date + time.Value, TimeSpan.Zero).ToString("O");
     }
 
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
