@@ -5,6 +5,8 @@
   xmlns:ic="https://github.com/projektanker/icons.avalonia"
   x:Class="HexTail.Views.SettingsPanel"
   x:DataType="vm:MainWindowViewModel"
+  KeyboardNavigation.TabNavigation="Cycle"
+  AutomationProperties.Name="Settings"
 >
   <UserControl.Styles>
     <Style Selector="Ellipse.server-status"><Setter Property="Fill" Value="{DynamicResource MutedBrush}" /></Style>
@@ -64,8 +66,8 @@
                           <WrapPanel>
                             <ComboBox ItemsSource="{Binding MatchModes}" SelectedItem="{Binding Mode, Mode=TwoWay}" Width="110" AutomationProperties.Name="Label match mode" />
                             <ColorPicker Color="{Binding Color, Mode=TwoWay}" Width="48" IsAlphaEnabled="False" AutomationProperties.Name="Label color" />
-                            <ToggleSwitch IsChecked="{Binding ShowInOpenFile, Mode=TwoWay}" Content="Search tab" ToolTip.Tip="Show matching search tab in open files and Elastic views" />
-                            <Button Classes="icon destructive" ToolTip.Tip="Remove label" Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveLabelCommand}" CommandParameter="{Binding}"><ic:Icon Value="mdi-delete-outline" /></Button>
+                            <ToggleSwitch IsChecked="{Binding ShowInOpenFile, Mode=TwoWay}" Content="Search tab" AutomationProperties.Name="Show label as a search tab" ToolTip.Tip="Show matching search tab in open files and Elastic views" />
+                            <Button Classes="icon destructive" ToolTip.Tip="Remove label" AutomationProperties.Name="{Binding Text, StringFormat='Remove label {0}'}" Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveLabelCommand}" CommandParameter="{Binding}"><ic:Icon Value="mdi-delete-outline" /></Button>
                           </WrapPanel>
                           <TextBlock Text="{Binding ValidationError}" IsVisible="{Binding HasValidationError}" Classes="error" TextWrapping="Wrap" />
                         </StackPanel>
@@ -77,7 +79,7 @@
                   <WrapPanel>
                     <ComboBox ItemsSource="{Binding Settings.MatchModes}" SelectedItem="{Binding Settings.NewLabelMode, Mode=TwoWay}" Width="110" AutomationProperties.Name="New label match mode" />
                     <ColorPicker Color="{Binding Settings.NewLabelColor, Mode=TwoWay}" Width="48" IsAlphaEnabled="False" AutomationProperties.Name="New label color" />
-                    <Button x:Name="AddLabelButton" Classes="icon" ToolTip.Tip="Add label" Command="{Binding Settings.AddLabelCommand}" IsEnabled="{Binding Settings.CanAddLabel}"><ic:Icon Value="mdi-plus" /></Button>
+                    <Button x:Name="AddLabelButton" Classes="icon" ToolTip.Tip="Add label" AutomationProperties.Name="Add label" Command="{Binding Settings.AddLabelCommand}" IsEnabled="{Binding Settings.CanAddLabel}"><ic:Icon Value="mdi-plus" /></Button>
                   </WrapPanel>
                   <TextBlock Text="{Binding Settings.NewLabelError}" IsVisible="{Binding Settings.HasNewLabelError}" Classes="error" TextWrapping="Wrap" />
                 </StackPanel>
@@ -93,7 +95,7 @@
                           <TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to hide" AutomationProperties.Name="Exclusion text" />
                           <WrapPanel>
                             <ComboBox ItemsSource="{Binding MatchModes}" SelectedItem="{Binding Mode, Mode=TwoWay}" Width="110" AutomationProperties.Name="Exclusion match mode" />
-                            <Button Classes="icon destructive" ToolTip.Tip="Remove exclusion" Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveExclusionCommand}" CommandParameter="{Binding}"><ic:Icon Value="mdi-delete-outline" /></Button>
+                            <Button Classes="icon destructive" ToolTip.Tip="Remove exclusion" AutomationProperties.Name="{Binding Text, StringFormat='Remove exclusion {0}'}" Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveExclusionCommand}" CommandParameter="{Binding}"><ic:Icon Value="mdi-delete-outline" /></Button>
                           </WrapPanel>
                           <TextBlock Text="{Binding ValidationError}" IsVisible="{Binding HasValidationError}" Classes="error" TextWrapping="Wrap" />
                         </StackPanel>
@@ -104,7 +106,7 @@
                   <TextBox Text="{Binding Settings.NewExclusionText, Mode=TwoWay}" PlaceholderText="Text to hide" AutomationProperties.Name="New exclusion text" />
                   <WrapPanel>
                     <ComboBox ItemsSource="{Binding Settings.MatchModes}" SelectedItem="{Binding Settings.NewExclusionMode, Mode=TwoWay}" Width="110" AutomationProperties.Name="New exclusion match mode" />
-                    <Button x:Name="AddExclusionButton" Classes="icon" ToolTip.Tip="Add exclusion" Command="{Binding Settings.AddExclusionCommand}" IsEnabled="{Binding Settings.CanAddExclusion}"><ic:Icon Value="mdi-plus" /></Button>
+                    <Button x:Name="AddExclusionButton" Classes="icon" ToolTip.Tip="Add exclusion" AutomationProperties.Name="Add exclusion" Command="{Binding Settings.AddExclusionCommand}" IsEnabled="{Binding Settings.CanAddExclusion}"><ic:Icon Value="mdi-plus" /></Button>
                   </WrapPanel>
                   <TextBlock Text="{Binding Settings.NewExclusionError}" IsVisible="{Binding Settings.HasNewExclusionError}" Classes="error" TextWrapping="Wrap" />
                 </StackPanel>
@@ -125,6 +127,7 @@
                 <TextBlock Text="Density" />
                 <ComboBox
                   x:Name="DensityBox"
+                  AutomationProperties.Name="Density"
                   HorizontalContentAlignment="Right"
                   HorizontalAlignment="Stretch"
                   ItemsSource="{Binding Settings.DensityOptions}"
@@ -133,6 +136,7 @@
                 <TextBlock Text="Log font size" />
                 <ComboBox
                   x:Name="FontSizeBox"
+                  AutomationProperties.Name="Log font size"
                   HorizontalContentAlignment="Right"
                   HorizontalAlignment="Stretch"
                   ItemsSource="{Binding Settings.FontSizeOptions}"
@@ -143,6 +147,7 @@
                 <TextBlock Text="Theme" />
                 <ComboBox
                   x:Name="ThemeBox"
+                  AutomationProperties.Name="Theme"
                   HorizontalContentAlignment="Right"
                   HorizontalAlignment="Stretch"
                   ItemsSource="{Binding Settings.ThemeOptions}"
@@ -152,6 +157,7 @@
                 <TextBlock Text="Time zone" />
                 <ComboBox
                   ItemsSource="{Binding Settings.TimeZoneModes}"
+                  AutomationProperties.Name="Time zone"
                   SelectedItem="{Binding Settings.TimeZoneMode, Mode=TwoWay}"
                   HorizontalContentAlignment="Right"
                   HorizontalAlignment="Stretch"
@@ -223,6 +229,7 @@
                             Grid.Column="2"
                             Classes="icon"
                             ToolTip.Tip="Save server"
+                            AutomationProperties.Name="{Binding Name, StringFormat='Save server {0}'}"
                             Content="Save"
                             Command="{Binding SaveCommand}"
                             IsEnabled="{Binding CanSave}"
@@ -231,6 +238,7 @@
                             Grid.Column="3"
                             Classes="icon destructive"
                             ToolTip.Tip="Remove server"
+                            AutomationProperties.Name="{Binding Name, StringFormat='Remove server {0}'}"
                             Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveElasticConnectionCommand}"
                             CommandParameter="{Binding}"
                           >
@@ -239,7 +247,7 @@
                         </Grid>
                       </Expander.Header>
                       <StackPanel Spacing="12" Margin="0,12,0,0">
-                        <TextBlock Text="{Binding SaveStatus}" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding SaveStatus}" FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite" />
                         <TextBlock
                           Text="Enter endpoints and login details → Test connection → Choose a data view → Set filter and display fields → Save server. Then open the source from Elastic."
                           TextWrapping="Wrap"
@@ -253,12 +261,13 @@
                         >
                           <StackPanel Spacing="4">
                             <TextBlock Text="Server name" Classes="elastic-form-label" />
-                            <TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="Elastic server" />
+                            <TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="Elastic server" AutomationProperties.Name="Server name" />
                           </StackPanel>
                           <StackPanel Grid.Column="1" Spacing="4">
                             <TextBlock Text="Login method" Classes="elastic-form-label" />
                             <ComboBox
                               ItemsSource="{Binding AuthModes}"
+                              AutomationProperties.Name="Login method"
                               SelectedItem="{Binding AuthMode, Mode=TwoWay}"
                               HorizontalContentAlignment="Left"
                             />
@@ -268,6 +277,8 @@
                             <TextBox
                               Text="{Binding KibanaUrl, Mode=TwoWay}"
                               PlaceholderText="https://kibana.example.com"
+                              AutomationProperties.Name="Kibana URL"
+                              AutomationProperties.HelpText="{Binding KibanaUrlError}"
                             />
                             <TextBlock Text="{Binding KibanaUrlError}" Classes="error" TextWrapping="Wrap" />
                           </StackPanel>
@@ -276,6 +287,8 @@
                             <TextBox
                               Text="{Binding ElasticsearchUrl, Mode=TwoWay}"
                               PlaceholderText="https://elastic.example.com"
+                              AutomationProperties.Name="Elasticsearch URL"
+                              AutomationProperties.HelpText="{Binding ElasticsearchUrlError}"
                             />
                             <TextBlock Text="{Binding ElasticsearchUrlError}" Classes="error" TextWrapping="Wrap" />
                           </StackPanel>
@@ -285,7 +298,7 @@
                             IsVisible="{Binding IsBasic}"
                           >
                             <TextBlock Text="Username" Classes="elastic-form-label" />
-                            <TextBox Text="{Binding Username, Mode=TwoWay}" PlaceholderText="Username" />
+                            <TextBox Text="{Binding Username, Mode=TwoWay}" PlaceholderText="Username" AutomationProperties.Name="Username" />
                           </StackPanel>
                           <StackPanel
                             Grid.Row="2"
@@ -298,12 +311,14 @@
                               Text="{Binding Secret, Mode=TwoWay}"
                               PasswordChar="•"
                               PlaceholderText="Password or API key"
+                              AutomationProperties.Name="Password or API key"
                             />
                           </StackPanel>
                         </Grid>
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                           <TextBlock
-                            Text="{Binding Status}"
+                          Text="{Binding Status}"
+                          AutomationProperties.LiveSetting="Polite"
                             VerticalAlignment="Center"
                             Foreground="{DynamicResource MutedBrush}"
                           />
@@ -314,7 +329,7 @@
                             Classes="primary"
                           />
                         </Grid>
-                        <TextBlock Text="{Binding Error}" Classes="error" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Error}" Classes="error" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
                         <Border Classes="elastic-views">
                           <Grid RowDefinitions="Auto,*">
                             <Grid ColumnDefinitions="*,Auto">
@@ -361,6 +376,7 @@
                                           Grid.Column="1"
                                           Classes="icon destructive"
                                           ToolTip.Tip="Remove view"
+                                          AutomationProperties.Name="{Binding Name, StringFormat='Remove view {0}'}"
                                           Command="{Binding $parent[ListBox].DataContext.RemoveViewCommand}"
                                           CommandParameter="{Binding}"
                                         >
@@ -369,9 +385,12 @@
                                       </Grid>
                                     </Expander.Header>
                                     <StackPanel Spacing="10" Margin="0,10,0,0">
+                                      <TextBlock Text="View name" Classes="elastic-form-label" />
                                       <TextBox
                                         Text="{Binding Name, Mode=TwoWay}"
                                         PlaceholderText="View name"
+                                        AutomationProperties.Name="View name"
+                                        AutomationProperties.HelpText="{Binding NameError}"
                                       />
                                       <TextBlock Text="{Binding NameError}" Classes="error" TextWrapping="Wrap" />
                                       <TextBlock
@@ -389,6 +408,7 @@
                                             ItemsSource="{Binding DataViews}"
                                             SelectedItem="{Binding SelectedDataView, Mode=TwoWay}"
                                             PlaceholderText="Select a data view"
+                                            AutomationProperties.Name="Data view"
                                             HorizontalContentAlignment="Left"
                                           >
                                             <ComboBox.ItemTemplate>
@@ -404,6 +424,8 @@
                                             ItemsSource="{Binding FieldNames}"
                                             SelectedItem="{Binding ServerField, Mode=TwoWay}"
                                             PlaceholderText="Filter field"
+                                            AutomationProperties.Name="Filter field"
+                                            AutomationProperties.HelpText="{Binding FilterFieldError}"
                                             FilterMode="Contains"
                                             MinimumPrefixLength="0"
                                             IsEnabled="{Binding IsSelectionResolved}"
@@ -412,7 +434,7 @@
                                           <TextBlock Text="{Binding FilterFieldStatus}" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" />
                                         </StackPanel>
                                       </Grid>
-                                      <TextBlock Text="{Binding MetadataStatus}" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" />
+                                      <TextBlock Text="{Binding MetadataStatus}" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" AutomationProperties.LiveSetting="Polite" />
                                       <TextBlock Text="{Binding TimestampStatus}" TextWrapping="Wrap" />
                                       <TextBlock Text="{Binding TimestampError}" Classes="error" TextWrapping="Wrap" />
                                       <TextBlock Text="Source filter values" Classes="elastic-form-label" />
@@ -469,6 +491,7 @@
       </TabControl>
       <TextBlock
         x:Name="SettingsSaveError"
+        AutomationProperties.LiveSetting="Assertive"
         Grid.Row="2"
         Classes="error"
         Margin="0,12,0,0"

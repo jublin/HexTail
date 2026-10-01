@@ -19,6 +19,7 @@
         FontSize="{Binding Settings.SecondaryFontSize}"
         Text="{Binding Query, Mode=TwoWay}"
         PlaceholderText="Search this file"
+        AutomationProperties.Name="Search text"
         UseFloatingPlaceholder="False"
         TextAlignment="Left"
         Padding="{Binding Settings.SecondaryPadding}"
@@ -62,6 +63,7 @@
       Height="{Binding Settings.SecondaryControlHeight}"
       IsAlphaEnabled="False"
       ToolTip.Tip="Search highlight color"
+      AutomationProperties.Name="Search highlight color"
     />
     <Button
       x:Name="AddSearchButton"

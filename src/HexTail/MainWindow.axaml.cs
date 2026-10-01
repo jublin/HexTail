@@ -20,6 +20,7 @@ namespace HexTail;
 public partial class MainWindow : Window
 {
     private WindowNotificationManager _notificationManager;
+    private Control? _settingsOpener;
 
     public MainWindow()
         : this((string[]?)null) { }
@@ -45,6 +46,11 @@ public partial class MainWindow : Window
         InitializeComponent();
         ViewModel = viewModel;
         DataContext = ViewModel;
+        this.FindControl<DialogHost>("SettingsDialogHost")!.PropertyChanged += (_, args) =>
+        {
+            if (args.Property == DialogHost.IsOpenProperty)
+                UpdateSettingsFocus();
+        };
         _notificationManager = new WindowNotificationManager(this)
         {
             Position = NotificationPosition.BottomRight,
@@ -59,6 +65,30 @@ public partial class MainWindow : Window
     }
 
     internal MainWindowViewModel ViewModel { get; }
+
+    private void UpdateSettingsFocus()
+    {
+        if (
+            ViewModel.SettingsOpen
+            && FocusManager?.GetFocusedElement() is Control focused
+            && !focused.GetVisualAncestors().OfType<SettingsPanel>().Any()
+        )
+            _settingsOpener = focused;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (ViewModel.SettingsOpen)
+                this.GetVisualDescendants()
+                    .OfType<SettingsPanel>()
+                    .FirstOrDefault()
+                    ?.FindControl<Button>("SettingsCloseButton")
+                    ?.Focus();
+            else if (_settingsOpener is { IsEffectivelyVisible: true } opener)
+            {
+                opener.Focus();
+                _settingsOpener = null;
+            }
+        });
+    }
 
     private void OnSettingsDialogClosing(object? sender, DialogClosingEventArgs args)
     {
@@ -100,7 +130,12 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnOpened(object? sender, EventArgs e) => await InitializeOnUiThreadAsync();
+    private async void OnOpened(object? sender, EventArgs e)
+    {
+        await InitializeOnUiThreadAsync();
+        if (ViewModel.SettingsOpen)
+            UpdateSettingsFocus();
+    }
 
     private async Task InitializeOnUiThreadAsync()
     {
@@ -175,6 +210,9 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
+
+        if (ViewModel.SettingsOpen)
+            return;
 
         if ((e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) == 0)
             return;
