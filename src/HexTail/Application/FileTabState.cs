@@ -106,7 +106,11 @@ public sealed class FileTabState : IAsyncDisposable
             {
                 AddSearch(
                     new Search(
-                        new CompiledQuery(label.Text, CompiledQuery.DetectMode(label.Text), false),
+                        new CompiledQuery(
+                            label.Text,
+                            label.Mode ?? CompiledQuery.DetectMode(label.Text),
+                            false
+                        ),
                         label.Color,
                         Buffer,
                         true

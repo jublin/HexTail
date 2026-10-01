@@ -936,6 +936,7 @@ public sealed class AppState : IAsyncDisposable
                 Text = label.Text.Trim(),
                 Color = NormalizeColor(label.Color),
                 ShowInOpenFile = label.ShowInOpenFile,
+                Mode = label.Mode ?? CompiledQuery.DetectMode(label.Text),
             })
             .DistinctBy(label => label.Text, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -952,6 +953,14 @@ public sealed class AppState : IAsyncDisposable
             ContextBelow = settings.ContextBelow,
             GlobalLabels = labels,
             GlobalExcludeLabels = exclusions,
+            GlobalExcludeModes = (settings.GlobalExcludeLabels ?? [])
+                .Where(label => !string.IsNullOrWhiteSpace(label))
+                .GroupBy(label => label.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => settings.GetExcludeMode(group.First()),
+                    StringComparer.OrdinalIgnoreCase
+                ),
             Theme = ThemeCatalog.Normalize(settings.Theme),
             Density = Enum.IsDefined(settings.Density) ? settings.Density : UiDensity.Comfortable,
             LogFontSize = Enum.IsDefined(settings.LogFontSize)

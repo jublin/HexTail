@@ -6,6 +6,56 @@ namespace HexTail.Tests.Persistence;
 public sealed class JsonFileAppPersistenceTests
 {
     [Fact]
+    public void ExplicitLiteralGlobalRules_DoNotInterpretRegexCharacters()
+    {
+        var config = AppConfigJson.Deserialize(
+            """
+            { "settings": {
+              "globalLabels": [{ "text": "[ERROR]", "color": "#ff0000", "mode": "Literal" }],
+              "globalExcludeLabels": ["[ERROR]"],
+              "globalExcludeModes": { "[ERROR]": "Literal" }
+            } }
+            """
+        );
+        Assert.False(config.Settings.Excludes("READY"));
+        Assert.Empty(config.Settings.GetLabelHighlights("READY"));
+        Assert.True(config.Settings.Excludes("[ERROR] failed"));
+        Assert.Single(config.Settings.GetLabelHighlights("[ERROR] failed"));
+        var restored = AppConfigJson.Deserialize(AppConfigJson.Serialize(config));
+        Assert.False(restored.Settings.Excludes("READY"));
+    }
+
+    [Fact]
+    public void GlobalModes_PreserveLegacyRegexIntentAndSeparateEqualTextCaches()
+    {
+        var legacy = AppConfigJson.Deserialize(
+            """
+            { "settings": {
+              "globalLabels": [{ "text": "ERROR|WARN" }],
+              "globalExcludeLabels": ["ERROR|WARN"]
+            } }
+            """
+        );
+        var text = Assert.Single(legacy.Settings.GlobalExcludeLabels);
+        Assert.True(legacy.Settings.Excludes("WARN"));
+        Assert.Single(legacy.Settings.GetLabelHighlights("WARN"));
+        var literal = legacy.Settings with
+        {
+            GlobalExcludeModes = new() { [text] = MatchMode.Literal },
+            GlobalLabels = [new GlobalLabel { Text = text, Mode = MatchMode.Literal }],
+        };
+        Assert.False(literal.Excludes("WARN"));
+        Assert.Empty(literal.GetLabelHighlights("WARN"));
+        Assert.True(literal.Excludes(text));
+        Assert.True(legacy.Settings.Excludes("WARN"));
+        var restored = AppConfigJson.Deserialize(
+            AppConfigJson.Serialize(new AppConfig { Settings = literal })
+        );
+        Assert.Equal(MatchMode.Literal, Assert.Single(restored.Settings.GlobalLabels).Mode);
+        Assert.Equal(MatchMode.Literal, restored.Settings.GetExcludeMode(text));
+    }
+
+    [Fact]
     public void GlobalExclusions_ReuseCompiledQueriesDuringRefresh()
     {
         var settings = new AppSettings { GlobalExcludeLabels = [@"health\s+check"] };

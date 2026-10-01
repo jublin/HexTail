@@ -55,144 +55,58 @@
               <Border Classes="settings-section">
                 <StackPanel Spacing="10">
                   <TextBlock Text="Global Labels" FontSize="18" FontWeight="SemiBold" />
-                  <TextBlock
-                    Text="Highlight case-insensitive text across every log view."
-                    Foreground="{DynamicResource MutedBrush}"
-                    TextWrapping="Wrap"
-                  />
-                  <Grid ColumnDefinitions="*,64,144,48" ColumnSpacing="8">
-                    <TextBlock Text="LABEL TEXT" Classes="elastic-form-label" />
-                    <TextBlock
-                      Grid.Column="1"
-                      Text="COLOR"
-                      Classes="elastic-form-label"
-                      HorizontalAlignment="Center"
-                    />
-                    <TextBlock
-                      Grid.Column="2"
-                      Text="SHOW IN OPEN FILE"
-                      Classes="elastic-form-label"
-                      HorizontalAlignment="Center"
-                      TextTrimming="CharacterEllipsis"
-                    />
-                    <TextBlock
-                      Grid.Column="3"
-                      Text="ACTIONS"
-                      Classes="elastic-form-label"
-                      HorizontalAlignment="Center"
-                      TextTrimming="CharacterEllipsis"
-                    />
-                  </Grid>
+                  <TextBlock Text="Highlight case-insensitive matches. Literal treats punctuation as text; Regex uses a pattern. Existing rules retain their saved mode." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
                   <ItemsControl ItemsSource="{Binding Settings.Labels}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:LabelSettingViewModel">
-                        <Grid ColumnDefinitions="*,64,144,48" ColumnSpacing="8" Margin="0,2">
-                          <TextBox
-                            Text="{Binding Text, Mode=TwoWay}"
-                            PlaceholderText="Text to highlight"
-                          />
-                          <ColorPicker
-                            Grid.Column="1"
-                            Color="{Binding Color, Mode=TwoWay}"
-                            Width="48"
-                            HorizontalAlignment="Center"
-                            IsAlphaEnabled="False"
-                          />
-                          <ToggleSwitch
-                            Grid.Column="2"
-                            IsChecked="{Binding ShowInOpenFile, Mode=TwoWay}"
-                            HorizontalAlignment="Center"
-                            ToolTip.Tip="Show matching search tab in open files and Elastic views"
-                          />
-                          <Button
-                            Grid.Column="3"
-                            Classes="icon destructive"
-                            HorizontalAlignment="Center"
-                            ToolTip.Tip="Remove label"
-                            Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveLabelCommand}"
-                            CommandParameter="{Binding}"
-                          >
-                            <ic:Icon Value="mdi-delete-outline" />
-                          </Button>
-                        </Grid>
+                        <StackPanel Spacing="4" Margin="0,6">
+                          <TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to highlight" AutomationProperties.Name="Label text" />
+                          <WrapPanel>
+                            <ComboBox ItemsSource="{Binding MatchModes}" SelectedItem="{Binding Mode, Mode=TwoWay}" Width="110" AutomationProperties.Name="Label match mode" />
+                            <ColorPicker Color="{Binding Color, Mode=TwoWay}" Width="48" IsAlphaEnabled="False" AutomationProperties.Name="Label color" />
+                            <ToggleSwitch IsChecked="{Binding ShowInOpenFile, Mode=TwoWay}" Content="Search tab" ToolTip.Tip="Show matching search tab in open files and Elastic views" />
+                            <Button Classes="icon destructive" ToolTip.Tip="Remove label" Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveLabelCommand}" CommandParameter="{Binding}"><ic:Icon Value="mdi-delete-outline" /></Button>
+                          </WrapPanel>
+                          <TextBlock Text="{Binding ValidationError}" IsVisible="{Binding HasValidationError}" Classes="error" TextWrapping="Wrap" />
+                        </StackPanel>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                  <Grid ColumnDefinitions="*,64,144,48" ColumnSpacing="8">
-                    <TextBox
-                      Text="{Binding Settings.NewLabelText, Mode=TwoWay}"
-                      PlaceholderText="Text to highlight"
-                    />
-                    <ColorPicker
-                      Grid.Column="1"
-                      Color="{Binding Settings.NewLabelColor, Mode=TwoWay}"
-                      Width="48"
-                      HorizontalAlignment="Center"
-                      IsAlphaEnabled="False"
-                    />
-                    <ToggleSwitch
-                      Grid.Column="2"
-                      IsEnabled="False"
-                      IsChecked="True"
-                      HorizontalAlignment="Center"
-                    />
-                    <Button
-                      x:Name="AddLabelButton"
-                      Grid.Column="3"
-                      Classes="icon"
-                      HorizontalAlignment="Center"
-                      ToolTip.Tip="Add label"
-                      Command="{Binding Settings.AddLabelCommand}"
-                    >
-                      <ic:Icon Value="mdi-plus" />
-                    </Button>
-                  </Grid>
+                  <TextBlock Text="New label" Classes="elastic-form-label" />
+                  <TextBox Text="{Binding Settings.NewLabelText, Mode=TwoWay}" PlaceholderText="Text to highlight" AutomationProperties.Name="New label text" />
+                  <WrapPanel>
+                    <ComboBox ItemsSource="{Binding Settings.MatchModes}" SelectedItem="{Binding Settings.NewLabelMode, Mode=TwoWay}" Width="110" AutomationProperties.Name="New label match mode" />
+                    <ColorPicker Color="{Binding Settings.NewLabelColor, Mode=TwoWay}" Width="48" IsAlphaEnabled="False" AutomationProperties.Name="New label color" />
+                    <Button x:Name="AddLabelButton" Classes="icon" ToolTip.Tip="Add label" Command="{Binding Settings.AddLabelCommand}" IsEnabled="{Binding Settings.CanAddLabel}"><ic:Icon Value="mdi-plus" /></Button>
+                  </WrapPanel>
+                  <TextBlock Text="{Binding Settings.NewLabelError}" IsVisible="{Binding Settings.HasNewLabelError}" Classes="error" TextWrapping="Wrap" />
                 </StackPanel>
               </Border>
               <Border Grid.Column="1" Classes="settings-section">
                 <StackPanel Spacing="10">
                   <TextBlock Text="Exclusions" FontSize="18" FontWeight="SemiBold" />
-                  <TextBlock
-                    Text="Matching lines remain buffered but stay hidden from log and context views."
-                    Foreground="{DynamicResource MutedBrush}"
-                    TextWrapping="Wrap"
-                  />
+                  <TextBlock Text="Matches stay buffered but hidden from log and context views. Choose Literal text or an explicit Regex pattern." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
                   <ItemsControl ItemsSource="{Binding Settings.Exclusions}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:ExclusionSettingViewModel">
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,2">
-                          <TextBox
-                            Text="{Binding Text, Mode=TwoWay}"
-                            PlaceholderText="Text to hide"
-                          />
-                          <Button
-                            Grid.Column="1"
-                            Classes="icon destructive"
-                            ToolTip.Tip="Remove exclusion"
-                            Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveExclusionCommand}"
-                            CommandParameter="{Binding}"
-                          >
-                            <ic:Icon Value="mdi-delete-outline" />
-                          </Button>
-                        </Grid>
+                        <StackPanel Spacing="4" Margin="0,6">
+                          <TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="Text to hide" AutomationProperties.Name="Exclusion text" />
+                          <WrapPanel>
+                            <ComboBox ItemsSource="{Binding MatchModes}" SelectedItem="{Binding Mode, Mode=TwoWay}" Width="110" AutomationProperties.Name="Exclusion match mode" />
+                            <Button Classes="icon destructive" ToolTip.Tip="Remove exclusion" Command="{Binding $parent[ItemsControl].DataContext.Settings.RemoveExclusionCommand}" CommandParameter="{Binding}"><ic:Icon Value="mdi-delete-outline" /></Button>
+                          </WrapPanel>
+                          <TextBlock Text="{Binding ValidationError}" IsVisible="{Binding HasValidationError}" Classes="error" TextWrapping="Wrap" />
+                        </StackPanel>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                    <TextBox
-                      Text="{Binding Settings.NewExclusionText, Mode=TwoWay}"
-                      PlaceholderText="Text to hide"
-                    />
-                    <Button
-                      x:Name="AddExclusionButton"
-                      Grid.Column="1"
-                      Classes="icon"
-                      ToolTip.Tip="Add exclusion"
-                      Command="{Binding Settings.AddExclusionCommand}"
-                    >
-                      <ic:Icon Value="mdi-plus" />
-                    </Button>
-                  </Grid>
+                  <TextBlock Text="New exclusion" Classes="elastic-form-label" />
+                  <TextBox Text="{Binding Settings.NewExclusionText, Mode=TwoWay}" PlaceholderText="Text to hide" AutomationProperties.Name="New exclusion text" />
+                  <WrapPanel>
+                    <ComboBox ItemsSource="{Binding Settings.MatchModes}" SelectedItem="{Binding Settings.NewExclusionMode, Mode=TwoWay}" Width="110" AutomationProperties.Name="New exclusion match mode" />
+                    <Button x:Name="AddExclusionButton" Classes="icon" ToolTip.Tip="Add exclusion" Command="{Binding Settings.AddExclusionCommand}" IsEnabled="{Binding Settings.CanAddExclusion}"><ic:Icon Value="mdi-plus" /></Button>
+                  </WrapPanel>
+                  <TextBlock Text="{Binding Settings.NewExclusionError}" IsVisible="{Binding Settings.HasNewExclusionError}" Classes="error" TextWrapping="Wrap" />
                 </StackPanel>
               </Border>
             </Grid>

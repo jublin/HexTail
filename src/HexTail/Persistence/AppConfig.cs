@@ -67,6 +67,8 @@ public sealed record AppSettings
     public int ContextBelow { get; init; } = 10;
     public List<GlobalLabel> GlobalLabels { get; init; } = [];
     public List<string> GlobalExcludeLabels { get; init; } = [];
+    public Dictionary<string, MatchMode> GlobalExcludeModes { get; init; } =
+        new(StringComparer.Ordinal);
     public string Theme { get; init; } = "cyber-tail";
     public UiDensity Density { get; init; } = UiDensity.Comfortable;
     public LogFontSize LogFontSize { get; init; } = LogFontSize.Medium;
@@ -75,7 +77,14 @@ public sealed record AppSettings
     public List<ElasticConnectionSettings> ElasticConnections { get; init; } = [];
 
     public bool Excludes(string text) =>
-        GlobalExcludeLabels.Any(label => CreateGlobalQuery(label)?.IsMatch(text) is true);
+        GlobalExcludeLabels.Any(label =>
+            CreateGlobalQuery(label, GetExcludeMode(label))?.IsMatch(text) is true
+        );
+
+    public MatchMode GetExcludeMode(string label) =>
+        GlobalExcludeModes is not null && GlobalExcludeModes.TryGetValue(label, out var mode)
+            ? mode
+            : CompiledQuery.DetectMode(label);
 
     public IEnumerable<LabelHighlight> GetLabelHighlights(
         string text,
@@ -86,7 +95,10 @@ public sealed record AppSettings
         {
             if (!includeSearchTabs && label.ShowInOpenFile)
                 continue;
-            var query = CreateGlobalQuery(label.Text);
+            var query = CreateGlobalQuery(
+                label.Text,
+                label.Mode ?? CompiledQuery.DetectMode(label.Text)
+            );
             if (query is null)
                 continue;
 
@@ -97,20 +109,25 @@ public sealed record AppSettings
 
     // Keys are immutable rule strings. Weak keys release compiled regexes when rules
     // are removed, and keep record copies/serialization independent of cache state.
-    private static readonly ConditionalWeakTable<string, CachedGlobalQuery> GlobalQueries = new();
+    private static readonly ConditionalWeakTable<string, CachedGlobalQuery> LiteralQueries = new();
+    private static readonly ConditionalWeakTable<string, CachedGlobalQuery> RegexQueries = new();
 
-    private static CompiledQuery? CreateGlobalQuery(string query) =>
-        GlobalQueries
-            .GetValue(query, static text => new CachedGlobalQuery(CompileGlobalQuery(text)))
-            .Query;
+    private static CompiledQuery? CreateGlobalQuery(string query, MatchMode mode) =>
+        mode is MatchMode.Regex
+            ? RegexQueries
+                .GetValue(query, static text => new(CompileGlobalQuery(text, MatchMode.Regex)))
+                .Query
+            : LiteralQueries
+                .GetValue(query, static text => new(CompileGlobalQuery(text, MatchMode.Literal)))
+                .Query;
 
     private sealed record CachedGlobalQuery(CompiledQuery? Query);
 
-    private static CompiledQuery? CompileGlobalQuery(string query)
+    private static CompiledQuery? CompileGlobalQuery(string query, MatchMode mode)
     {
         try
         {
-            return new CompiledQuery(query, CompiledQuery.DetectMode(query), caseSensitive: false);
+            return new CompiledQuery(query, mode, caseSensitive: false);
         }
         catch (ArgumentException)
         {
@@ -144,6 +161,7 @@ public sealed record ThemeOption(string Id, string DisplayName);
 public sealed class GlobalLabel
 {
     public string Text { get; init; } = string.Empty;
+    public MatchMode? Mode { get; init; }
     public string Color { get; init; } = "#f59e0b";
     public bool ShowInOpenFile { get; init; } = true;
 }

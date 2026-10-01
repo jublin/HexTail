@@ -519,7 +519,13 @@ public sealed class MainWindowInteractionTests
             .Single(textBox => textBox.PlaceholderText == "Text to highlight")
             .Text = "WARN";
         await WaitFor(() => viewModel.State.Settings.GlobalLabels[0].Text == "WARN");
-        Click(labelControls.OfType<Button>().Single(button => button.Content is Icon));
+        Click(
+            labelControls
+                .OfType<Button>()
+                .Single(button =>
+                    ReferenceEquals(button.Command, viewModel.Settings.RemoveLabelCommand)
+                )
+        );
         await WaitFor(() => viewModel.Settings.Labels.Count == 0);
 
         viewModel.Settings.NewExclusionText = "healthcheck";
@@ -531,9 +537,18 @@ public sealed class MainWindowInteractionTests
             .GetVisualDescendants()
             .Where(control => ReferenceEquals(control.DataContext, exclusion))
             .ToArray();
-        exclusionControls.OfType<TextBox>().Single().Text = "probe";
+        exclusionControls
+            .OfType<TextBox>()
+            .Single(textBox => textBox.PlaceholderText == "Text to hide")
+            .Text = "probe";
         await WaitFor(() => viewModel.State.Settings.GlobalExcludeLabels[0] == "probe");
-        Click(exclusionControls.OfType<Button>().Single());
+        Click(
+            exclusionControls
+                .OfType<Button>()
+                .Single(button =>
+                    ReferenceEquals(button.Command, viewModel.Settings.RemoveExclusionCommand)
+                )
+        );
         await WaitFor(() => viewModel.Settings.Exclusions.Count == 0);
 
         Assert.True(persistence.SaveCount >= 6);
