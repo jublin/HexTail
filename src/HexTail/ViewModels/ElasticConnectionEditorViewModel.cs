@@ -14,6 +14,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     private ElasticAuthMode _authMode;
     private string? _error;
     private bool _isTesting;
+    private int _connectionVersion;
     private string _name = string.Empty;
     private string? _status = "Not tested";
     private string _kibanaUrl = string.Empty;
@@ -56,8 +57,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             if (_kibanaUrl == value)
                 return;
             this.RaiseAndSetIfChanged(ref _kibanaUrl, value);
-            Status = "Not tested";
-            Error = null;
+            InvalidateConnectionTest();
             this.RaisePropertyChanged(nameof(KibanaUrlError));
             NotifySavePrerequisitesChanged();
         }
@@ -70,8 +70,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             if (_elasticsearchUrl == value)
                 return;
             this.RaiseAndSetIfChanged(ref _elasticsearchUrl, value);
-            Status = "Not tested";
-            Error = null;
+            InvalidateConnectionTest();
             this.RaisePropertyChanged(nameof(ElasticsearchUrlError));
             NotifySavePrerequisitesChanged();
         }
@@ -86,8 +85,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             this.RaiseAndSetIfChanged(ref _authMode, value);
             this.RaisePropertyChanged(nameof(IsAuthenticated));
             this.RaisePropertyChanged(nameof(IsBasic));
-            Status = "Not tested";
-            Error = null;
+            InvalidateConnectionTest();
             NotifySavePrerequisitesChanged();
         }
     }
@@ -99,7 +97,10 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         get => _username;
         set
         {
+            if (_username == value)
+                return;
             this.RaiseAndSetIfChanged(ref _username, value);
+            InvalidateConnectionTest();
             NotifySavePrerequisitesChanged();
         }
     }
@@ -108,7 +109,10 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         get => _secret;
         set
         {
+            if (_secret == value)
+                return;
             this.RaiseAndSetIfChanged(ref _secret, value);
+            InvalidateConnectionTest();
             NotifySavePrerequisitesChanged();
         }
     }
@@ -232,8 +236,16 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
 
     private void RemoveView(ElasticViewEditorViewModel view) => Views.Remove(view);
 
+    private void InvalidateConnectionTest()
+    {
+        _connectionVersion++;
+        Status = "Not tested";
+        Error = null;
+    }
+
     private async Task TestConnectionAsync()
     {
+        var version = _connectionVersion;
         IsTesting = true;
         Error = null;
         Status = "Checking…";
@@ -245,6 +257,8 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
                 Secret
             );
             await Task.WhenAll(viewsTask, elasticsearchTask);
+            if (version != _connectionVersion)
+                return;
             var views = await viewsTask;
             UpdateDataViews(views);
             foreach (var editor in Views)
@@ -253,11 +267,15 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
                 await editor.RefreshDataViewAsync(
                     views.FirstOrDefault(view => view.Id == editor.SelectedDataViewId)
                 );
+            if (version != _connectionVersion)
+                return;
             Status =
                 $"Connected ({views.Count} data view{(views.Count == 1 ? string.Empty : "s")})";
         }
         catch (Exception exception)
         {
+            if (version != _connectionVersion)
+                return;
             Error = exception.Message;
             Status = "Connection failed";
         }

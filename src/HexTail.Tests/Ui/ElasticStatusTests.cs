@@ -1,7 +1,9 @@
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
 using Avalonia.Headless.XUnit;
 using HexTail.Application;
+using HexTail.Elastic;
 using HexTail.Persistence;
 using HexTail.Tailing;
 using HexTail.Tests.Support;
@@ -11,6 +13,34 @@ namespace HexTail.Tests.Ui;
 
 public sealed class ElasticStatusTests
 {
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ChangedConnectionInputsRejectLateTestResults(bool failure)
+    {
+        var response = new TaskCompletionSource<IReadOnlyList<ElasticDataViewSummary>>();
+        var client = new FakeElasticApiClient { DataViewsHandler = () => response.Task };
+        await using var owner = new MainWindowViewModel(
+            new AppState(new LogSourceService(), new TestPersistence(), elastic: client),
+            startPolling: false
+        );
+        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        var editor = Assert.Single(owner.Settings.ElasticConnections);
+        editor.Name = "Ops";
+        editor.KibanaUrl = "https://old-kibana.example/";
+        editor.ElasticsearchUrl = "https://old-elastic.example/";
+        var testing = editor.TestConnectionCommand.Execute().FirstAsync().ToTask();
+        editor.ElasticsearchUrl = "https://new-elastic.example/";
+        if (failure)
+            response.SetException(new IOException("old endpoint unavailable"));
+        else
+            response.SetResult([new("old-view", "old-logs-*")]);
+        await testing;
+        Assert.Equal("Not tested", editor.Status);
+        Assert.Null(editor.Error);
+        Assert.Empty(editor.DataViews);
+    }
+
     [AvaloniaFact]
     public async Task UntestedAndFailedServers_HaveNoSuccessState()
     {
