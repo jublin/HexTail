@@ -733,7 +733,15 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             var status =
                 _state.ElasticSourceStatuses.GetValueOrDefault(option.SourceId)?.Status.ToString()
                 ?? "Checking";
-            option.Sync(_state.IsElasticSourceOpen(option.SourceId), status);
+            var health = _state.ElasticSourceStatuses.GetValueOrDefault(option.SourceId);
+            var tab = _state.Files.FirstOrDefault(tab => tab.Id == option.SourceId);
+            var load =
+                tab is null ? "Logs: closed"
+                : tab.Error is not null ? $"Logs: {tab.Error}"
+                : tab.ElasticLoading ? "Logs: loading…"
+                : tab.ElasticTo == "now" ? "Logs: live"
+                : "Logs: historical";
+            option.Sync(tab is not null, status, health?.Message, load);
         }
         this.RaisePropertyChanged(nameof(ElasticAppliedRange));
         this.RaisePropertyChanged(nameof(ElasticRangeStatus));

@@ -72,14 +72,19 @@
                   <ItemsControl ItemsSource="{Binding ElasticSources}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:ElasticSourceOptionViewModel">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
+                        <StackPanel Spacing="4" MaxWidth="520">
+                         <StackPanel Orientation="Horizontal" Spacing="6">
                           <i:Icon Value="{Binding StatusGlyph}" />
                           <CheckBox
                             Content="{Binding DisplayName}"
                             ToolTip.Tip="{Binding ToolTip}"
                             AutomationProperties.Name="{Binding ToolTip}"
-                            IsChecked="{Binding IsOpen, Mode=TwoWay}"
+                            IsChecked="{Binding IsOpen, Mode=TwoWay}" IsEnabled="{Binding CanToggle}"
                           />
+                         </StackPanel>
+                         <TextBlock Text="{Binding HealthMessage}" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" />
+                         <TextBlock Text="{Binding LoadStatus}" TextWrapping="Wrap" />
+                         <TextBlock Text="{Binding OpenError}" TextWrapping="Wrap" Classes="error" />
                         </StackPanel>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>

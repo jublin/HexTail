@@ -6,6 +6,11 @@
   x:Class="HexTail.Views.SettingsPanel"
   x:DataType="vm:MainWindowViewModel"
 >
+  <UserControl.Styles>
+    <Style Selector="Ellipse.server-status"><Setter Property="Fill" Value="{DynamicResource MutedBrush}" /></Style>
+    <Style Selector="Ellipse.server-status.connected"><Setter Property="Fill" Value="{DynamicResource SuccessBrush}" /></Style>
+    <Style Selector="Ellipse.server-status.failed"><Setter Property="Fill" Value="{DynamicResource ErrorBrush}" /></Style>
+  </UserControl.Styles>
   <Border
     Classes="settings-modal"
     Width="1600"
@@ -290,11 +295,9 @@
                     >
                       <Expander.Header>
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10">
-                          <ic:Icon
-                            Value="mdi-circle"
-                            Foreground="{DynamicResource SuccessBrush}"
-                            VerticalAlignment="Center"
-                          />
+                          <Ellipse Width="10" Height="10" VerticalAlignment="Center"
+                              Classes="server-status" Classes.connected="{Binding IsConnected}"
+                              Classes.failed="{Binding IsFailed}" />
                           <TextBlock
                             Grid.Column="1"
                             Text="{Binding Name}"

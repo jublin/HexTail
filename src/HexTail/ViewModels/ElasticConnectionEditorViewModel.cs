@@ -14,7 +14,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     private string? _error;
     private bool _isTesting;
     private string _name = string.Empty;
-    private string? _status;
+    private string? _status = "Not tested";
     private string _kibanaUrl = string.Empty;
     private string _elasticsearchUrl = string.Empty;
 
@@ -43,7 +43,11 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         get => _kibanaUrl;
         set
         {
+            if (_kibanaUrl == value)
+                return;
             this.RaiseAndSetIfChanged(ref _kibanaUrl, value);
+            Status = "Not tested";
+            Error = null;
             this.RaisePropertyChanged(nameof(KibanaUrlError));
             NotifySavePrerequisitesChanged();
         }
@@ -53,7 +57,11 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         get => _elasticsearchUrl;
         set
         {
+            if (_elasticsearchUrl == value)
+                return;
             this.RaiseAndSetIfChanged(ref _elasticsearchUrl, value);
+            Status = "Not tested";
+            Error = null;
             this.RaisePropertyChanged(nameof(ElasticsearchUrlError));
             NotifySavePrerequisitesChanged();
         }
@@ -68,6 +76,8 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             this.RaiseAndSetIfChanged(ref _authMode, value);
             this.RaisePropertyChanged(nameof(IsAuthenticated));
             this.RaisePropertyChanged(nameof(IsBasic));
+            Status = "Not tested";
+            Error = null;
         }
     }
     public IReadOnlyList<ElasticAuthMode> AuthModes { get; } = Enum.GetValues<ElasticAuthMode>();
@@ -93,13 +103,23 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     public string? Error
     {
         get => _error;
-        private set => this.RaiseAndSetIfChanged(ref _error, value);
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _error, value);
+            this.RaisePropertyChanged(nameof(IsFailed));
+        }
     }
     public string? Status
     {
         get => _status;
-        private set => this.RaiseAndSetIfChanged(ref _status, value);
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _status, value);
+            this.RaisePropertyChanged(nameof(IsConnected));
+        }
     }
+    public bool IsConnected => Status?.StartsWith("Connected", StringComparison.Ordinal) is true;
+    public bool IsFailed => Error is not null;
     public bool IsTesting
     {
         get => _isTesting;

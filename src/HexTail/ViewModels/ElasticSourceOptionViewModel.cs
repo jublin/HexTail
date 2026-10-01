@@ -8,7 +8,11 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
 {
     private readonly MainWindowViewModel _owner;
     private bool _isOpen;
-    private string _status = "Checking";
+    private string _status = "Not tested";
+    private string? _openError;
+    private bool _isOpening;
+    private string _healthMessage = "Server reachability: not tested";
+    private string _loadStatus = "Logs: closed";
 
     internal ElasticSourceOptionViewModel(
         MainWindowViewModel owner,
@@ -38,12 +42,37 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
             "Checking" => "mdi-cloud-sync",
             _ => "mdi-cloud-alert",
         };
+    public string? OpenError
+    {
+        get => _openError;
+        private set => this.RaiseAndSetIfChanged(ref _openError, value);
+    }
+    public string HealthMessage
+    {
+        get => _healthMessage;
+        private set => this.RaiseAndSetIfChanged(ref _healthMessage, value);
+    }
+    public string LoadStatus
+    {
+        get => _loadStatus;
+        private set => this.RaiseAndSetIfChanged(ref _loadStatus, value);
+    }
+    public bool IsOpening
+    {
+        get => _isOpening;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isOpening, value);
+            this.RaisePropertyChanged(nameof(CanToggle));
+        }
+    }
+    public bool CanToggle => !IsOpening;
     public bool IsOpen
     {
         get => _isOpen;
         set
         {
-            if (!this.RaiseAndSetIfChanged(ref _isOpen, value))
+            if (IsOpening || !this.RaiseAndSetIfChanged(ref _isOpen, value))
                 return;
             _ = ToggleAsync(value);
         }
@@ -60,6 +89,8 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
 
     private async Task ToggleAsync(bool open)
     {
+        IsOpening = true;
+        OpenError = null;
         try
         {
             if (open)
@@ -67,15 +98,27 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
             else
                 await CloseAsync();
         }
-        catch
+        catch (Exception exception)
         {
+            OpenError = exception.Message;
             _isOpen = !open;
             this.RaisePropertyChanged(nameof(IsOpen));
         }
+        finally
+        {
+            IsOpening = false;
+        }
     }
 
-    internal void Sync(bool isOpen, string status)
+    internal void Sync(
+        bool isOpen,
+        string status,
+        string? healthMessage = null,
+        string loadStatus = "Logs: closed"
+    )
     {
+        HealthMessage = $"Server reachability: {healthMessage ?? status}";
+        LoadStatus = loadStatus;
         if (_isOpen != isOpen)
         {
             _isOpen = isOpen;
