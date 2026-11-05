@@ -62,18 +62,30 @@ public static partial class TimeExpression
         var relative = RelativePattern().Match(value);
         if (relative.Success)
         {
-            var amount = relative.Groups[1].Value;
-            var unit = char.ToLowerInvariant(relative.Groups[2].Value[0]);
-            if (unit == 'w')
+            try
             {
-                amount = (double.Parse(amount, CultureInfo.InvariantCulture) * 7).ToString(
+                var amount = decimal.Parse(
+                    relative.Groups[1].Value,
+                    NumberStyles.AllowDecimalPoint,
                     CultureInfo.InvariantCulture
                 );
-                unit = 'd';
+                var unit = char.ToLowerInvariant(relative.Groups[2].Value[0]);
+                if (unit == 'w')
+                {
+                    amount *= 7;
+                    unit = 'd';
+                }
+                var expression =
+                    $"now-{amount.ToString("0.###", CultureInfo.InvariantCulture)}{unit}";
+                result = new(expression, ElasticTailer.ParseTime(expression, now));
+                return true;
             }
-            var expression = $"now-{amount}{unit}";
-            result = new(expression, ElasticTailer.ParseTime(expression, now));
-            return true;
+            catch (Exception ex)
+                when (ex is ArgumentException or FormatException or OverflowException)
+            {
+                error = $"“{value}” is out of range.";
+                return false;
+            }
         }
 
         if (

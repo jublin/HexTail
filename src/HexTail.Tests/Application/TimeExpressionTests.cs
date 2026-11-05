@@ -16,6 +16,9 @@ public sealed class TimeExpressionTests
     [InlineData(" -2h ", "now-2h")]
     [InlineData("-30s", "now-30s")]
     [InlineData("now-1w", "now-7d")]
+    [InlineData("-01h", "now-1h")]
+    [InlineData("-1.0h", "now-1h")]
+    [InlineData("now-0.1w", "now-0.7d")]
     public void RelativeInputNormalizesToTailerExpression(string input, string expected)
     {
         Assert.True(
@@ -69,6 +72,8 @@ public sealed class TimeExpressionTests
     [InlineData("", "Enter a time")]
     [InlineData("   ", "Enter a time")]
     [InlineData("now-15x", "not a recognized time")]
+    [InlineData("-1000000d", "out of range")]
+    [InlineData("-99999999999w", "out of range")]
     [InlineData("2026-13-40", "not a recognized time")]
     [InlineData("25:00", "not a recognized time")]
     [InlineData("yesterday 99:00", "not a recognized time")]
