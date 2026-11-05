@@ -143,6 +143,33 @@ public sealed class StatusBarTests
     }
 
     [AvaloniaFact]
+    public async Task ShortElasticStatusAndPausedIndicatorLeaveRoomForStatusRangeAtNormalWidth()
+    {
+        var (state, viewModel, window) = await OpenElasticWindowAsync();
+        await using var _ = state;
+
+        window.Width = 1280;
+        viewModel.IsPaused = true;
+        viewModel.RaisePropertyChanged(nameof(MainWindowViewModel.ElasticRangeStatus));
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
+        var statusBar = window.GetVisualDescendants().OfType<StatusBar>().Single();
+        var range = statusBar.FindControl<TextBlock>("StatusRange")!;
+        var picker = statusBar.FindControl<ComboBox>("DisplayZonePicker")!;
+        var paused = statusBar.FindControl<TextBlock>("PausedIndicator")!;
+        Assert.True(viewModel.IsElasticSelected);
+        Assert.True(paused.IsEffectivelyVisible && paused.Bounds.Width > 0);
+        Assert.True(range.IsEffectivelyVisible);
+        Assert.False(string.IsNullOrEmpty(range.Text));
+        Assert.True(range.Bounds.Width > 0, $"StatusRange width {range.Bounds.Width}");
+        Assert.False(IsTrimmed(paused));
+        var left = picker.TranslatePoint(default, statusBar)!.Value.X;
+        Assert.True(left >= 0 && left + picker.Bounds.Width <= statusBar.Bounds.Width);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task StatusTextsAreNotTrimmedAtNormalWidths()
     {
         var path = Path.GetTempFileName();

@@ -119,6 +119,46 @@ public sealed class FollowAndPauseTests
     }
 
     [AvaloniaFact]
+    public async Task SettingsChangedWhilePausedWithBufferedLinesRefreshAllRowsOnResume()
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllLinesAsync(path, Enumerable.Range(0, 5).Select(i => $"line {i}"));
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            window.Show();
+            await viewModel.OpenPathsCommand.Execute([path]);
+            var view = await LoadedView(viewModel, 5);
+
+            await viewModel.TogglePauseCommand.Execute();
+            await viewModel.State.UpdateSettingsAsync(
+                viewModel.State.Settings with
+                {
+                    LogFontSize = LogFontSize.ExtraLarge,
+                }
+            );
+            await File.AppendAllLinesAsync(path, ["late 1", "late 2"]);
+            await UiWait.Until(() =>
+            {
+                viewModel.State.DrainTailerEvents();
+                return viewModel.SelectedFile!.Model.Buffer.Count == 7;
+            });
+            view.Sync();
+            Assert.Equal(5, view.Lines.Count);
+
+            await viewModel.TogglePauseCommand.Execute();
+            view.Sync();
+            Assert.Equal(7, view.Lines.Count);
+            Assert.All(view.Lines, row => Assert.Equal(17, row.FontSize));
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task MissingSeenAnchorResetsUnseenCountInsteadOfCountingEverything()
     {
         var path = Path.GetTempFileName();

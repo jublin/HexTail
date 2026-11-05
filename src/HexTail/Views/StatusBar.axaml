@@ -14,7 +14,8 @@
   >
     <!-- DockPanel hands each child only the width left after the earlier ones, so the picker
          (declared first) always keeps its slot, texts show in full while there is room, and
-         later texts ellipsize only when the bar is tight. -->
+         later texts ellipsize only when the bar is tight. StatusRange (the fill child, last) is
+         intentionally the first text to shrink and be sacrificed; the picker is protected. -->
     <DockPanel x:Name="StatusGrid" LastChildFill="True">
       <ComboBox
         x:Name="DisplayZonePicker"

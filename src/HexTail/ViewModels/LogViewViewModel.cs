@@ -148,6 +148,7 @@ internal sealed class LogViewViewModel : ReactiveObject
                 count++;
             }
             // The anchor left the list (exclusion change, eviction, elastic re-apply): restart from the tail.
+            // Trade-off: lines that arrived after the anchor was removed are not counted; the count restarts from the current tail.
             if (!anchorSeen && index < 0)
             {
                 _seenAnchor = lines.Count > 0 ? lines[^1] : null;
@@ -290,6 +291,9 @@ internal sealed class LogViewViewModel : ReactiveObject
 
             if (lastIndex >= 0 && lastIndex < desired.Count - 1)
             {
+                if (refreshRows)
+                    foreach (var row in current)
+                        row.Refresh();
                 current.AddRange(
                     desired
                         .Skip(lastIndex + 1)
