@@ -19,56 +19,75 @@ internal sealed class SampleLogWriter : IAsyncDisposable
         ("ERROR", "payment gateway timeout after 5000ms order_id={0}"),
     ];
 
+    internal const string FileName = "hextail-sample.log";
+
     private readonly Random _random = new(1337);
     private readonly CancellationTokenSource _stop = new();
-    private readonly bool _deleteOnDispose;
+    private readonly DirectoryInfo _directory;
+    private readonly FileStream _stream;
     private Task _loop = Task.CompletedTask;
     private int _disposed;
 
-    private SampleLogWriter(string path, bool deleteOnDispose)
+    private SampleLogWriter(DirectoryInfo directory, FileStream stream)
     {
-        Path = path;
-        _deleteOnDispose = deleteOnDispose;
+        _directory = directory;
+        _stream = stream;
+        Path = stream.Name;
     }
 
     public string Path { get; }
 
-    /// <param name="deleteOnDispose">Remove the file, and its directory once empty, on dispose.</param>
-    public static SampleLogWriter Start(
-        string path,
-        TimeSpan interval,
-        int backlog = 200,
-        bool deleteOnDispose = false
-    )
-    {
-        // The writer only ever touches this one file; refuse to follow a link planted at the path
-        // or at its directory.
-        var directory = System.IO.Path.GetDirectoryName(path);
-        if (!string.IsNullOrEmpty(directory))
-        {
-            if (new DirectoryInfo(directory).LinkTarget is not null)
-                throw new IOException($"The sample log directory is a link: {directory}");
-            Directory.CreateDirectory(directory);
-        }
-        if (new FileInfo(path).LinkTarget is not null)
-            throw new IOException($"The sample log path is a link: {path}");
+    /// <summary>
+    /// Creates a private, randomly named directory under the temp folder (0700 on Unix) and starts a
+    /// sample log in it. The directory and file are removed on dispose.
+    /// </summary>
+    public static SampleLogWriter Start(TimeSpan interval, int backlog = 200) =>
+        Start(Directory.CreateTempSubdirectory("hextail-"), interval, backlog);
 
-        var writer = new SampleLogWriter(path, deleteOnDispose);
+    /// <summary>
+    /// Starts a sample log in <paramref name="directory"/>, which the writer takes ownership of: the
+    /// file is created exclusively (an existing file or link at the path is refused) and held open
+    /// through one handle for the backlog and every append, so the path is never reopened. On dispose
+    /// only the file the writer created and then the (by then empty) directory are removed.
+    /// </summary>
+    internal static SampleLogWriter Start(DirectoryInfo directory, TimeSpan interval, int backlog)
+    {
+        FileStream? stream = null;
+        SampleLogWriter? writer = null;
         try
         {
+            stream = new FileStream(
+                System.IO.Path.Combine(directory.FullName, FileName),
+                new FileStreamOptions
+                {
+                    Mode = FileMode.CreateNew,
+                    Access = FileAccess.Write,
+                    Share = FileShare.ReadWrite | FileShare.Delete,
+                }
+            );
+            writer = new SampleLogWriter(directory, stream);
             var start = DateTimeOffset.UtcNow - interval * backlog;
-            File.WriteAllLines(
-                path,
+            var text = string.Concat(
                 Enumerable
                     .Range(0, backlog)
-                    .Select(index => writer.NextLine(start + interval * index))
+                    .Select(index =>
+                        writer.NextLine(start + interval * index) + Environment.NewLine
+                    )
             );
+            stream.Write(System.Text.Encoding.UTF8.GetBytes(text));
+            stream.Flush();
             writer._loop = writer.RunAsync(interval);
             return writer;
         }
         catch
         {
-            writer._stop.Dispose();
+            writer?._stop.Dispose();
+            stream?.Dispose();
+            // Only remove what this call created: the file exists only if CreateNew succeeded, and a
+            // non-empty directory is never deleted.
+            if (stream is not null)
+                TryDelete(stream.Name);
+            TryDeleteDirectory(directory);
             throw;
         }
     }
@@ -86,12 +105,14 @@ internal sealed class SampleLogWriter : IAsyncDisposable
         try
         {
             while (await timer.WaitForNextTickAsync(_stop.Token).ConfigureAwait(false))
-                await File.AppendAllTextAsync(
-                        Path,
-                        NextLine(DateTimeOffset.UtcNow) + Environment.NewLine,
-                        _stop.Token
-                    )
-                    .ConfigureAwait(false);
+            {
+                // No token on the write itself: a cancelled write must not leave half a line behind.
+                var bytes = System.Text.Encoding.UTF8.GetBytes(
+                    NextLine(DateTimeOffset.UtcNow) + Environment.NewLine
+                );
+                await _stream.WriteAsync(bytes, CancellationToken.None).ConfigureAwait(false);
+                await _stream.FlushAsync(CancellationToken.None).ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
@@ -101,24 +122,35 @@ internal sealed class SampleLogWriter : IAsyncDisposable
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
-        await _stop.CancelAsync().ConfigureAwait(false);
-        await _loop.ConfigureAwait(false);
-        _stop.Dispose();
-        if (_deleteOnDispose)
-            Cleanup();
+        try
+        {
+            await _stop.CancelAsync().ConfigureAwait(false);
+            await _loop.ConfigureAwait(false);
+        }
+        finally
+        {
+            _stop.Dispose();
+            await _stream.DisposeAsync().ConfigureAwait(false);
+            TryDelete(Path);
+            TryDeleteDirectory(_directory);
+        }
     }
 
-    private void Cleanup()
+    private static void TryDelete(string path)
     {
         try
         {
-            File.Delete(Path);
-            var directory = System.IO.Path.GetDirectoryName(Path);
-            if (
-                !string.IsNullOrEmpty(directory)
-                && !Directory.EnumerateFileSystemEntries(directory).Any()
-            )
-                Directory.Delete(directory);
+            File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
+    private static void TryDeleteDirectory(DirectoryInfo directory)
+    {
+        try
+        {
+            // Not recursive: only an empty directory goes, so nothing foreign is ever removed.
+            directory.Delete(recursive: false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }

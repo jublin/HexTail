@@ -593,11 +593,31 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             return;
 
         _closed = true;
-        _subscriptions.Dispose();
-        if (_sample is not null)
-            await _sample.DisposeAsync();
-        await _sampleStopping.ConfigureAwait(false);
-        await _state.DisposeAsync();
+        try
+        {
+            _subscriptions.Dispose();
+        }
+        finally
+        {
+            try
+            {
+                // Close the tabs (and the tailer's handle on the sample file) first, so the writer's
+                // cleanup can delete the file on Windows.
+                await _state.DisposeAsync();
+            }
+            finally
+            {
+                try
+                {
+                    if (_sample is not null)
+                        await _sample.DisposeAsync();
+                }
+                finally
+                {
+                    await _sampleStopping.ConfigureAwait(false);
+                }
+            }
+        }
     }
 
     internal async Task UpdateSettingsAsync(AppSettings settings)
@@ -683,17 +703,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private async Task OpenSampleAsync()
     {
         await _sampleStopping.ConfigureAwait(true);
-        var sample =
-            _sample
-            ?? SampleLogWriter.Start(
-                System.IO.Path.Combine(
-                    System.IO.Path.GetTempPath(),
-                    $"hextail-{Environment.ProcessId}",
-                    "hextail-sample.log"
-                ),
-                TimeSpan.FromMilliseconds(500),
-                deleteOnDispose: true
-            );
+        var sample = _sample ?? SampleLogWriter.Start(TimeSpan.FromMilliseconds(500));
         try
         {
             await _state.OpenFileAsync(sample.Path, remember: false, ephemeral: true);

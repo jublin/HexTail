@@ -114,13 +114,33 @@ public sealed class OnboardingTests
         await viewModel.OpenSampleCommand.Execute();
         await UiWait.Until(() => viewModel.SelectedFile?.DisplayName == "hextail-sample.log");
         var path = viewModel.SelectedFile!.Path;
-        Assert.Contains($"hextail-{Environment.ProcessId}", path);
+        Assert.StartsWith(
+            "hextail-",
+            System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(path)!)
+        );
         await viewModel.CloseFileCommand.Execute(viewModel.SelectedFile!);
         await UiWait.Until(() => viewModel.Files.Count == 0);
-        // The writer is stopped and awaited, then removes its file and per-process directory.
+        // The writer is stopped and awaited, then removes its file and private directory.
         await UiWait.Until(() => !File.Exists(path));
         await UiWait.Until(() => !Directory.Exists(System.IO.Path.GetDirectoryName(path)!));
         await viewModel.DisposeAsync();
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task DisposingWithTheSampleOpenRemovesItsFileAndDirectory()
+    {
+        var window = TestWindow.Create(new TestPersistence(), out var viewModel);
+        window.Show();
+        await viewModel.OpenSampleCommand.Execute();
+        await UiWait.Until(() => viewModel.SelectedFile?.DisplayName == "hextail-sample.log");
+        var path = viewModel.SelectedFile!.Path;
+        var directory = System.IO.Path.GetDirectoryName(path)!;
+        Assert.True(File.Exists(path));
+        await viewModel.DisposeAsync();
+        await viewModel.DisposeAsync();
+        Assert.False(File.Exists(path));
+        Assert.False(Directory.Exists(directory));
         window.Close();
     }
 
