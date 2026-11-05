@@ -110,6 +110,13 @@
   <Style Selector="Button.primary:pointerover">
     <Setter Property="Background" Value="{DynamicResource AccentStrongBrush}" />
   </Style>
+  <Style Selector="Button.range-pill">
+    <Setter Property="CornerRadius" Value="999" />
+    <Setter Property="Padding" Value="10,4" />
+    <Setter Property="Background" Value="{DynamicResource RaisedBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
   <Style Selector="Button.icon">
     <Setter Property="Width" Value="34" />
     <Setter Property="Height" Value="34" />

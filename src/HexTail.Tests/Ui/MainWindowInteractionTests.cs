@@ -131,71 +131,110 @@ public sealed class MainWindowInteractionTests
         window.Width = 720;
         window.UpdateLayout();
         var rangeButton = window.FindControl<Button>("ElasticTimeRangeButton")!;
-        var rangePosition = rangeButton.TranslatePoint(default, window)!.Value;
-        Assert.True(rangePosition.X + rangeButton.Bounds.Width <= window.Bounds.Width);
+        Assert.True(
+            rangeButton.TranslatePoint(default, window)!.Value.X + rangeButton.Bounds.Width
+                <= window.Bounds.Width
+        );
         var flyout = Assert.IsType<Flyout>(rangeButton.Flyout);
         flyout.ShowAt(rangeButton);
         Dispatcher.UIThread.RunJobs();
-        var content = Assert.IsType<StackPanel>(
-            Assert.IsType<ScrollViewer>(flyout.Content).Content
-        );
-        Assert.Equal(2, content.GetVisualDescendants().OfType<ComboBox>().Count());
-        var pickers = content.GetVisualDescendants().OfType<DatePicker>().ToArray();
-        var times = content.GetVisualDescendants().OfType<TimePicker>().ToArray();
-        Assert.Equal(2, pickers.Length);
-        Assert.Equal(2, times.Length);
-        Assert.Empty(
-            content
-                .GetVisualDescendants()
-                .OfType<TextBox>()
-                .Where(text => text.IsEffectivelyVisible)
-        );
-        pickers[0].SelectedDate = new DateTimeOffset(2026, 8, 20, 0, 0, 0, TimeSpan.Zero);
-        times[0].SelectedTime = new TimeSpan(10, 15, 30);
-        pickers[1].SelectedDate = pickers[0].SelectedDate;
-        times[1].SelectedTime = new TimeSpan(10, 16, 45);
+        var editor = Assert.IsType<StackPanel>(flyout.Content);
+        Assert.Empty(editor.GetVisualDescendants().OfType<DatePicker>());
+        Assert.Empty(editor.GetVisualDescendants().OfType<TimePicker>());
+        Assert.Equal(2, editor.GetVisualDescendants().OfType<TextBox>().Count());
+
+        viewModel.Settings.TimeZoneMode = AppTimeZoneMode.Utc;
+        await WaitFor(() => state.Settings.TimeZoneMode == AppTimeZoneMode.Utc);
+        viewModel.RangeFromText = "2026-08-20 10:15:30";
         viewModel.ElasticToNow = false;
+        viewModel.RangeToText = "2026-08-20 10:16:45";
         Assert.True(viewModel.ElasticRangeDirty);
-        var beforeApply = viewModel.ElasticAppliedRange;
-        Assert.DoesNotContain("10:15:30", beforeApply);
+        Assert.Equal("= 2026-08-20 10:15:30 UTC", viewModel.RangeFromPreview);
         await viewModel.ApplyElasticTimeRangeCommand.Execute().FirstAsync();
         Assert.False(viewModel.ElasticRangeDirty);
-        Assert.Equal("Loading logs…", viewModel.ElasticRangeStatus);
+        Assert.Null(viewModel.RangeError);
         Assert.Equal("2026-08-20T10:15:30.0000000+00:00", state.SelectedFile!.ElasticFrom);
         Assert.Equal("2026-08-20T10:16:45.0000000+00:00", state.SelectedFile.ElasticTo);
-        times[1].SelectedTime = new TimeSpan(10, 14, 0);
+        Assert.Equal(
+            "2026-08-20 10:15:30 → 2026-08-20 10:16:45 · loading…",
+            viewModel.ElasticRangePill
+        );
+
+        viewModel.RangeToText = "2026-08-20 10:14:00";
         await viewModel.ApplyElasticTimeRangeCommand.Execute().FirstAsync();
-        Assert.Contains("From must be at or before To", viewModel.FileError);
+        Assert.Contains("From must be at or before To", viewModel.RangeError);
         Assert.Equal("2026-08-20T10:16:45.0000000+00:00", state.SelectedFile.ElasticTo);
-        viewModel.ElasticToNow = true;
+
+        viewModel.RangeFromText = "tomorrowish";
         await viewModel.ApplyElasticTimeRangeCommand.Execute().FirstAsync();
-        Assert.Equal("now", state.SelectedFile.ElasticTo);
+        Assert.StartsWith("From:", viewModel.RangeError);
+
         foreach (
-            var (index, expression) in new[]
-            {
-                (1, "now-5m"),
-                (2, "now-15m"),
-                (3, "now-1h"),
-                (4, "now-24h"),
-            }
+            var expression in new[] { "now-5m", "now-15m", "now-1h", "now-4h", "now-24h", "now-7d" }
         )
         {
-            viewModel.ElasticPresetIndex = index;
-            Assert.True(viewModel.ElasticRangeDirty);
-            await viewModel.ApplyElasticTimeRangeCommand.Execute().FirstAsync();
+            await viewModel.ApplyRangePresetCommand.Execute(expression).FirstAsync();
             Assert.Equal(expression, state.SelectedFile.ElasticFrom);
             Assert.Equal("now", state.SelectedFile.ElasticTo);
+            Assert.False(viewModel.ElasticRangeDirty);
         }
-        viewModel.ElasticInputZone = AppTimeZoneMode.Local;
-        pickers[0].SelectedDate = new DateTimeOffset(2026, 8, 20, 0, 0, 0, TimeSpan.Zero);
-        times[0].SelectedTime = new TimeSpan(10, 0, 0);
+        Assert.StartsWith("Last 7 days", viewModel.ElasticRangePill);
+
+        viewModel.Settings.TimeZoneMode = AppTimeZoneMode.Local;
+        await WaitFor(() => state.Settings.TimeZoneMode == AppTimeZoneMode.Local);
+        viewModel.RangeFromText = "2026-08-20 10:00";
         await viewModel.ApplyElasticTimeRangeCommand.Execute().FirstAsync();
-        var expectedLocal = new DateTimeOffset(
-            new DateTime(2026, 8, 20, 10, 0, 0),
-            TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 8, 20, 10, 0, 0))
+        var wall = new DateTime(2026, 8, 20, 10, 0, 0);
+        Assert.Equal(
+            new DateTimeOffset(wall, TimeZoneInfo.Local.GetUtcOffset(wall)),
+            DateTimeOffset.Parse(state.SelectedFile.ElasticFrom)
         );
-        Assert.Equal(expectedLocal, DateTimeOffset.Parse(state.SelectedFile.ElasticFrom));
+        Assert.Equal(AppTimeZoneMode.Local, state.SelectedFile.ElasticInputZone);
         flyout.Hide();
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task LongRangePillTrimsInsteadOfPushingPastTheSettingsButtonAtMinimumWidth()
+    {
+        await using var viewModel = ElasticFixtures.Workspace(
+            ElasticFixtures.Connection("c-1", "prod", "app")
+        );
+        await viewModel.InitializeAsync();
+        await viewModel.State.OpenElasticSourceAsync("c-1-app", save: false);
+        var window = new MainWindow(viewModel, registerNativePicker: false);
+        window.Width = 720;
+        window.Height = 720;
+        window.FontSize = 24;
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        viewModel.Settings.TimeZoneMode = AppTimeZoneMode.Utc;
+        await WaitFor(() => viewModel.State.Settings.TimeZoneMode == AppTimeZoneMode.Utc);
+        viewModel.RangeFromText = "2026-08-20 10:15:30";
+        viewModel.ElasticToNow = false;
+        viewModel.RangeToText = "2026-08-21 11:16:45";
+        await viewModel.ApplyElasticTimeRangeCommand.Execute().FirstAsync();
+        Assert.Null(viewModel.RangeError);
+
+        foreach (var density in viewModel.Settings.DensityOptions)
+        {
+            viewModel.Settings.Density = density;
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            var pill = window.FindControl<Button>("ElasticTimeRangeButton")!;
+            var settings = window.FindControl<Button>("SettingsButton")!;
+            var text = window.FindControl<TextBlock>("ElasticRangePillText")!;
+            var pillRight = pill.TranslatePoint(default, window)!.Value.X + pill.Bounds.Width;
+            Assert.True(
+                pillRight <= settings.TranslatePoint(default, window)!.Value.X,
+                density.ToString()
+            );
+            Assert.True(
+                text.TextLayout.TextLines.Any(line => line.HasCollapsed),
+                $"pill text should be trimmed ({density})"
+            );
+        }
         window.Close();
     }
 

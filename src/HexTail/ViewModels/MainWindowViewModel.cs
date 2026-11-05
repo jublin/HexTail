@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
@@ -10,7 +11,6 @@ using Avalonia.Threading;
 using HexTail;
 using HexTail.Application;
 using HexTail.Domain;
-using HexTail.Elastic;
 using HexTail.Persistence;
 using ReactiveUI;
 using ReactiveUI.Reactive;
@@ -52,15 +52,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private bool _closed;
     private bool _restoring;
     private int _syncQueued;
-    private DateTimeOffset? _elasticFromDate;
-    private DateTimeOffset? _elasticToDate;
-    private TimeSpan? _elasticFromTime;
-    private TimeSpan? _elasticToTime;
     private bool _elasticToNow = true;
     private bool _syncingRange;
     private bool _elasticRangeDirty;
-    private int _elasticPresetIndex;
-    private AppTimeZoneMode _elasticInputZone = AppTimeZoneMode.Utc;
+    private string _rangeFromText = "now-5m";
+    private string _rangeToText = "now";
+    private string? _rangeError;
     private bool _sidebarOpen = true;
     private bool _narrowShell;
     private bool _narrowPaneOpen;
@@ -110,6 +107,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         );
         SelectFileCommand = ReactiveCommand.Create<FileTabViewModel>(SelectFile, _scheduler);
         ApplyElasticTimeRangeCommand = ReactiveCommand.Create(ApplyElasticTimeRange, _scheduler);
+        ApplyRangePresetCommand = ReactiveCommand.Create<string>(ApplyRangePreset, _scheduler);
         CloseFileCommand = ReactiveCommand.CreateFromTask<FileTabViewModel>(
             CloseFileAsync,
             _scheduler
@@ -181,6 +179,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<Unit, Unit> SetUpElasticCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> SelectFileCommand { get; }
     public ReactiveCommand<Unit, Unit> ApplyElasticTimeRangeCommand { get; }
+    public ReactiveCommand<string, Unit> ApplyRangePresetCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> CloseFileCommand { get; }
     public ReactiveCommand<LogViewViewModel, Unit> RemoveSearchCommand { get; }
     public ReactiveCommand<Unit, Unit> AddSearchCommand { get; }
@@ -199,28 +198,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             this.RaisePropertyChanged(nameof(IsElasticSelected));
             previous?.RaiseSelectionChanged();
             if (value is not null)
-            {
-                _syncingRange = true;
-                _elasticInputZone = value.Model.ElasticInputZone;
-                this.RaisePropertyChanged(nameof(ElasticInputZone));
-                var now = DateTimeOffset.UtcNow;
-                SetPickerValues(
-                    ElasticTailer.ParseTime(value.Model.ElasticFrom, now),
-                    ElasticTailer.ParseTime(value.Model.ElasticTo, now)
-                );
-                ElasticToNow = value.Model.ElasticTo == "now";
-                _elasticPresetIndex = value.Model.ElasticFrom switch
-                {
-                    "now-5m" => 1,
-                    "now-15m" => 2,
-                    "now-1h" => 3,
-                    "now-24h" => 4,
-                    _ => 0,
-                };
-                this.RaisePropertyChanged(nameof(ElasticPresetIndex));
-                _syncingRange = false;
-                ElasticRangeDirty = false;
-            }
+                LoadRangeInputs(value.Model);
             value?.RaiseSelectionChanged();
         }
     }
@@ -243,70 +221,34 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     }
 
     public bool IsElasticSelected => SelectedFile?.Model.Source.Kind == LogSourceKind.Elastic;
-    public DateTimeOffset? ElasticFromDate
+    public string RangeFromText
     {
-        get => _elasticFromDate;
+        get => _rangeFromText;
         set
         {
-            if (_elasticFromDate == value)
+            if (_rangeFromText == value)
                 return;
-            this.RaiseAndSetIfChanged(ref _elasticFromDate, value);
+            this.RaiseAndSetIfChanged(ref _rangeFromText, value);
+            this.RaisePropertyChanged(nameof(RangeFromPreview));
             if (!_syncingRange)
-            {
-                _elasticPresetIndex = 0;
-                this.RaisePropertyChanged(nameof(ElasticPresetIndex));
                 ElasticRangeDirty = true;
-            }
         }
     }
-    public TimeSpan? ElasticFromTime
+
+    public string RangeToText
     {
-        get => _elasticFromTime;
+        get => _rangeToText;
         set
         {
-            if (_elasticFromTime == value)
+            if (_rangeToText == value)
                 return;
-            this.RaiseAndSetIfChanged(ref _elasticFromTime, value);
+            this.RaiseAndSetIfChanged(ref _rangeToText, value);
+            this.RaisePropertyChanged(nameof(RangeToPreview));
             if (!_syncingRange)
-            {
-                _elasticPresetIndex = 0;
-                this.RaisePropertyChanged(nameof(ElasticPresetIndex));
                 ElasticRangeDirty = true;
-            }
         }
     }
-    public DateTimeOffset? ElasticToDate
-    {
-        get => _elasticToDate;
-        set
-        {
-            if (_elasticToDate == value)
-                return;
-            this.RaiseAndSetIfChanged(ref _elasticToDate, value);
-            if (!_syncingRange)
-            {
-                _elasticPresetIndex = 0;
-                this.RaisePropertyChanged(nameof(ElasticPresetIndex));
-                ElasticRangeDirty = true;
-            }
-        }
-    }
-    public TimeSpan? ElasticToTime
-    {
-        get => _elasticToTime;
-        set
-        {
-            if (_elasticToTime == value)
-                return;
-            this.RaiseAndSetIfChanged(ref _elasticToTime, value);
-            if (!_syncingRange)
-            {
-                _elasticPresetIndex = 0;
-                this.RaisePropertyChanged(nameof(ElasticPresetIndex));
-                ElasticRangeDirty = true;
-            }
-        }
-    }
+
     public bool ElasticToNow
     {
         get => _elasticToNow;
@@ -315,64 +257,27 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             if (_elasticToNow == value)
                 return;
             this.RaiseAndSetIfChanged(ref _elasticToNow, value);
+            this.RaisePropertyChanged(nameof(RangeToPreview));
             if (!_syncingRange)
-            {
-                _elasticPresetIndex = 0;
-                this.RaisePropertyChanged(nameof(ElasticPresetIndex));
                 ElasticRangeDirty = true;
-            }
         }
     }
-    public IReadOnlyList<string> ElasticPresets { get; } =
-    ["Custom interval", "Last 5 minutes", "Last 15 minutes", "Last hour", "Last 24 hours"];
-    public int ElasticPresetIndex
+
+    public string RangeFromPreview => Preview(RangeFromText);
+    public string RangeToPreview =>
+        ElasticToNow ? "Live — new logs keep appending" : Preview(RangeToText);
+    public string RangeZoneHint =>
+        $"Times without an offset are read as {ZoneLabel}. Try now-15m, -2h, 14:00, yesterday 09:00.";
+
+    public string? RangeError
     {
-        get => _elasticPresetIndex;
-        set
-        {
-            if (value < 0 || value >= ElasticPresets.Count || value == _elasticPresetIndex)
-                return;
-            this.RaiseAndSetIfChanged(ref _elasticPresetIndex, value);
-            if (value > 0)
-            {
-                var now = DateTimeOffset.UtcNow;
-                _syncingRange = true;
-                SetPickerValues(ElasticTailer.ParseTime(PresetExpression(value), now), now);
-                ElasticToNow = true;
-                _syncingRange = false;
-            }
-            ElasticRangeDirty = true;
-        }
+        get => _rangeError;
+        private set => this.RaiseAndSetIfChanged(ref _rangeError, value);
     }
-    public IReadOnlyList<AppTimeZoneMode> ElasticInputZones { get; } =
-    [AppTimeZoneMode.Utc, AppTimeZoneMode.Local];
-    public AppTimeZoneMode ElasticInputZone
-    {
-        get => _elasticInputZone;
-        set
-        {
-            if (value == _elasticInputZone)
-                return;
-            DateTimeOffset? from = null,
-                to = null;
-            try
-            {
-                from = DateTimeOffset.Parse(PickerTimestamp(ElasticFromDate, ElasticFromTime));
-                to = DateTimeOffset.Parse(PickerTimestamp(ElasticToDate, ElasticToTime));
-            }
-            catch (ArgumentException) { }
-            this.RaiseAndSetIfChanged(ref _elasticInputZone, value);
-            if (SelectedFile is not null)
-                SelectedFile.Model.ElasticInputZone = value;
-            if (from is not null && to is not null)
-            {
-                _syncingRange = true;
-                SetPickerValues(from.Value, to.Value);
-                _syncingRange = false;
-            }
-            this.RaisePropertyChanged(nameof(ElasticAppliedRange));
-        }
-    }
+
+    private AppTimeZoneMode DisplayZone => _state.Settings.TimeZoneMode;
+    private string ZoneLabel => DisplayZone == AppTimeZoneMode.Utc ? "UTC" : "local";
+
     public bool ElasticRangeDirty
     {
         get => _elasticRangeDirty;
@@ -383,7 +288,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         }
     }
     public string ElasticDraftStatus =>
-        ElasticRangeDirty ? "Unapplied changes" : "Matches applied range";
+        ElasticRangeDirty ? "Unapplied — press Enter or Apply" : string.Empty;
+
+    public string ElasticRangePill =>
+        SelectedFile?.Model is not { } tab || !IsElasticSelected
+            ? string.Empty
+            : $"{TimeRangeLabel.Describe(tab.ElasticFrom, tab.ElasticTo, DisplayZone)} · {RangeState(tab)}";
     public string ElasticAppliedRange
     {
         get
@@ -395,7 +305,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 time is null
                     ? expression
                     : (
-                        ElasticInputZone == AppTimeZoneMode.Utc
+                        DisplayZone == AppTimeZoneMode.Utc
                             ? time.Value.ToUniversalTime()
                             : time.Value.ToLocalTime()
                     ).ToString("yyyy-MM-dd HH:mm:ss zzz");
@@ -409,25 +319,44 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         : tab.ElasticTo == "now" ? "Live — fetching new logs"
         : "Historical — loaded; Apply to refresh";
 
-    private static string PresetExpression(int index) =>
-        index switch
-        {
-            1 => "now-5m",
-            2 => "now-15m",
-            3 => "now-1h",
-            4 => "now-24h",
-            _ => throw new ArgumentException("Select a valid preset."),
-        };
+    private static string RangeState(FileTabState tab) =>
+        tab.Error is not null ? "failed"
+        : tab.ElasticLoading ? "loading…"
+        : tab.ElasticTo == "now" ? "live"
+        : "historical";
 
-    private void SetPickerValues(DateTimeOffset from, DateTimeOffset to)
+    private string Preview(string text) =>
+        TimeExpression.TryParse(
+            text,
+            DateTimeOffset.UtcNow,
+            DisplayZone,
+            out var parsed,
+            out var error
+        )
+            ? $"= {TimeExpression.FormatForInput(parsed.Resolved.ToString("O", CultureInfo.InvariantCulture), DisplayZone)} {ZoneLabel}"
+            : error!;
+
+    private void LoadRangeInputs(FileTabState tab)
     {
-        from =
-            ElasticInputZone == AppTimeZoneMode.Utc ? from.ToUniversalTime() : from.ToLocalTime();
-        to = ElasticInputZone == AppTimeZoneMode.Utc ? to.ToUniversalTime() : to.ToLocalTime();
-        ElasticFromDate = from;
-        ElasticFromTime = from.TimeOfDay;
-        ElasticToDate = to;
-        ElasticToTime = to.TimeOfDay;
+        _syncingRange = true;
+        RangeFromText = TimeExpression.FormatForInput(tab.ElasticFrom, DisplayZone);
+        ElasticToNow = string.Equals(tab.ElasticTo, "now", StringComparison.OrdinalIgnoreCase);
+        RangeToText = ElasticToNow
+            ? "now"
+            : TimeExpression.FormatForInput(tab.ElasticTo, DisplayZone);
+        _syncingRange = false;
+        ElasticRangeDirty = false;
+        RangeError = null;
+    }
+
+    private void ApplyRangePreset(string expression)
+    {
+        _syncingRange = true;
+        RangeFromText = expression;
+        ElasticToNow = true;
+        RangeToText = "now";
+        _syncingRange = false;
+        ApplyElasticTimeRange();
     }
 
     public bool ShowEmpty => !HasFile;
@@ -891,6 +820,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         SyncConnectionGroups();
         this.RaisePropertyChanged(nameof(ElasticAppliedRange));
         this.RaisePropertyChanged(nameof(ElasticRangeStatus));
+        if (SelectedFile is not null && !ElasticRangeDirty)
+            LoadRangeInputs(SelectedFile.Model);
+        this.RaisePropertyChanged(nameof(ElasticRangePill));
+        this.RaisePropertyChanged(nameof(RangeFromPreview));
+        this.RaisePropertyChanged(nameof(RangeToPreview));
+        this.RaisePropertyChanged(nameof(RangeZoneHint));
         var current = Snapshot();
         if (previous.FileCount != current.FileCount)
             this.RaisePropertyChanged(nameof(FileCount));
@@ -956,43 +891,50 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     {
         if (!IsElasticSelected || SelectedFile is null)
             return;
+        var now = DateTimeOffset.UtcNow;
+        if (
+            !TimeExpression.TryParse(
+                RangeFromText,
+                now,
+                DisplayZone,
+                out var from,
+                out var fromError
+            )
+        )
+        {
+            RangeError = $"From: {fromError}";
+            return;
+        }
+        var to = "now";
+        if (!ElasticToNow)
+        {
+            if (
+                !TimeExpression.TryParse(
+                    RangeToText,
+                    now,
+                    DisplayZone,
+                    out var parsedTo,
+                    out var toError
+                )
+            )
+            {
+                RangeError = $"To: {toError}";
+                return;
+            }
+            to = parsedTo.Expression;
+        }
         try
         {
-            var from =
-                ElasticPresetIndex > 0
-                    ? PresetExpression(ElasticPresetIndex)
-                    : PickerTimestamp(ElasticFromDate, ElasticFromTime);
-            var to = ElasticToNow ? "now" : PickerTimestamp(ElasticToDate, ElasticToTime);
-            _state.SetElasticTimeRange(SelectedFile.Model, from, to);
+            _state.SetElasticTimeRange(SelectedFile.Model, from.Expression, to);
+            SelectedFile.Model.ElasticInputZone = DisplayZone;
             ElasticRangeDirty = false;
+            RangeError = null;
             SetFileError(null);
         }
         catch (ArgumentException exception)
         {
-            SetFileError(exception.Message);
+            RangeError = exception.Message;
         }
-    }
-
-    private string PickerTimestamp(DateTimeOffset? date, TimeSpan? time)
-    {
-        if (date is null || time is null || time < TimeSpan.Zero || time >= TimeSpan.FromDays(1))
-            throw new ArgumentException("Select both a date and a time.");
-        var wallTime = DateTime.SpecifyKind(date.Value.Date + time.Value, DateTimeKind.Unspecified);
-        if (
-            ElasticInputZone == AppTimeZoneMode.Local
-            && (
-                TimeZoneInfo.Local.IsInvalidTime(wallTime)
-                || TimeZoneInfo.Local.IsAmbiguousTime(wallTime)
-            )
-        )
-            throw new ArgumentException(
-                "This local time is missing or ambiguous due to daylight saving. Select UTC."
-            );
-        var offset =
-            ElasticInputZone == AppTimeZoneMode.Utc
-                ? TimeSpan.Zero
-                : TimeZoneInfo.Local.GetUtcOffset(wallTime);
-        return new DateTimeOffset(wallTime, offset).ToString("O");
     }
 
     private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
