@@ -5,6 +5,8 @@
   x:Class="HexTail.Views.CommandPalette"
   x:DataType="vm:CommandPaletteViewModel"
   IsVisible="{Binding IsOpen}"
+  KeyboardNavigation.TabNavigation="Cycle"
+  AutomationProperties.Name="Command palette"
 >
   <Panel>
     <Border

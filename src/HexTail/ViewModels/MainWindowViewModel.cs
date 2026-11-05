@@ -77,7 +77,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         _startPolling = startPolling;
         Settings = new SettingsViewModel(this, _scheduler);
         PickFiles = new Interaction<Unit, IReadOnlyList<string>>(_scheduler);
-        Palette = new CommandPaletteViewModel(BuildPaletteItems);
+        Palette = new CommandPaletteViewModel(BuildPaletteItems, SetFileError);
         OpenPaletteCommand = ReactiveCommand.Create(Palette.Open, _scheduler);
 
         OpenCommand = ReactiveCommand.CreateFromTask(OpenFilesAsync, _scheduler);

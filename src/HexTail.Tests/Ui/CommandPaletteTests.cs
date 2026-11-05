@@ -1,4 +1,6 @@
 using System.Reactive.Linq;
+using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -46,7 +48,10 @@ public sealed class CommandPaletteTests
             Assert.False(viewModel.Palette.IsOpen);
 
             window.KeyPress(Key.K, RawInputModifiers.Control, PhysicalKey.K, null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(viewModel.Palette.IsOpen);
             window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+            Dispatcher.UIThread.RunJobs();
             Assert.False(viewModel.Palette.IsOpen);
             window.Close();
         }
@@ -110,6 +115,37 @@ public sealed class CommandPaletteTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.True(viewModel.Palette.IsOpen);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void TabAndShiftTabKeepFocusInsideThePaletteAndEscapeStillCloses()
+    {
+        var window = TestWindow.Create(out var viewModel);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        window.KeyPress(Key.K, RawInputModifiers.Control, PhysicalKey.K, null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(viewModel.Palette.IsOpen);
+        var palette = window.GetVisualDescendants().OfType<CommandPalette>().Single();
+        Assert.Equal("Command palette", AutomationProperties.GetName(palette));
+
+        foreach (var modifier in new[] { RawInputModifiers.None, RawInputModifiers.Shift })
+            for (var step = 0; step < 8; step++)
+            {
+                window.KeyPress(Key.Tab, modifier, PhysicalKey.Tab, null);
+                Dispatcher.UIThread.RunJobs();
+                var focused = TopLevel.GetTopLevel(window)!.FocusManager!.GetFocusedElement();
+                var inside =
+                    focused is Visual visual
+                    && (ReferenceEquals(visual, palette) || palette.IsVisualAncestorOf(visual));
+                Assert.True(inside, $"focus left the palette ({modifier}, step {step})");
+            }
+
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(viewModel.Palette.IsOpen);
         window.Close();
     }
 }

@@ -52,4 +52,55 @@ public sealed class CommandPaletteViewModelTests
         Assert.Equal(["api.log"], executed);
         Assert.False(palette.IsOpen);
     }
+
+    [Fact]
+    public async Task ExecuteSurfacesItemFailureAfterClosingInsteadOfFaulting()
+    {
+        var errors = new List<string>();
+        var palette = new CommandPaletteViewModel(
+            () =>
+                [
+                    new PaletteItem(
+                        "Explode",
+                        "Test",
+                        null,
+                        () => throw new InvalidOperationException("boom")
+                    ),
+                ],
+            errors.Add
+        );
+        palette.Open();
+
+        await palette.ExecuteSelectedAsync();
+
+        Assert.False(palette.IsOpen);
+        Assert.Equal(["boom"], errors);
+    }
+
+    [Fact]
+    public async Task ExecuteSurfacesFaultedTaskFromItem()
+    {
+        var errors = new List<string>();
+        var palette = new CommandPaletteViewModel(
+            () =>
+                [
+                    new PaletteItem(
+                        "Explode later",
+                        "Test",
+                        null,
+                        async () =>
+                        {
+                            await Task.Yield();
+                            throw new InvalidOperationException("late boom");
+                        }
+                    ),
+                ],
+            errors.Add
+        );
+        palette.Open();
+
+        await palette.ExecuteSelectedAsync();
+
+        Assert.Equal(["late boom"], errors);
+    }
 }

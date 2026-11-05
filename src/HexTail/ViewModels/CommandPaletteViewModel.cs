@@ -11,8 +11,10 @@ internal sealed record PaletteItem(
     Func<Task> Execute
 );
 
-internal sealed class CommandPaletteViewModel(Func<IEnumerable<PaletteItem>> source)
-    : ReactiveObject
+internal sealed class CommandPaletteViewModel(
+    Func<IEnumerable<PaletteItem>> source,
+    Action<string>? reportError = null
+) : ReactiveObject
 {
     private static readonly char[] WordSeparators = [' ', '/', '·', ':', '.', '-', '_'];
     private string _query = string.Empty;
@@ -65,7 +67,14 @@ internal sealed class CommandPaletteViewModel(Func<IEnumerable<PaletteItem>> sou
             return;
         var item = Results[SelectedIndex];
         Close();
-        await item.Execute();
+        try
+        {
+            await item.Execute();
+        }
+        catch (Exception ex)
+        {
+            reportError?.Invoke(ex.Message);
+        }
     }
 
     internal static int Score(string title, string query)
