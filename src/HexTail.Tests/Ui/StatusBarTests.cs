@@ -143,6 +143,28 @@ public sealed class StatusBarTests
     }
 
     [AvaloniaFact]
+    public async Task PausedIndicatorKeepsItsWidthInElasticViewAtMinimumWidth()
+    {
+        var (state, viewModel, window) = await OpenElasticWindowAsync();
+        await using var _ = state;
+
+        viewModel.IsPaused = true;
+        viewModel.RaisePropertyChanged(nameof(MainWindowViewModel.ElasticRangeStatus));
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
+        var statusBar = window.GetVisualDescendants().OfType<StatusBar>().Single();
+        var paused = statusBar.FindControl<TextBlock>("PausedIndicator")!;
+        var picker = statusBar.FindControl<ComboBox>("DisplayZonePicker")!;
+        Assert.True(viewModel.IsElasticSelected);
+        Assert.True(paused.IsEffectivelyVisible);
+        Assert.True(paused.Bounds.Width > 0, $"PausedIndicator width {paused.Bounds.Width}");
+        Assert.False(IsTrimmed(paused), "PausedIndicator is ellipsized at 720px");
+        AssertPickerInside(statusBar, picker);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task ShortElasticStatusAndPausedIndicatorLeaveRoomForStatusRangeAtNormalWidth()
     {
         var (state, viewModel, window) = await OpenElasticWindowAsync();
