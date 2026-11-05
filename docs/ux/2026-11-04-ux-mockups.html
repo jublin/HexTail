@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HexTail UX proposal mockups — 2026-11-04</title>
+<style>
+  :root {
+    --surface:#090D12; --surface-alt:#0C1219; --raised:#101722; --raised-alt:#151F2D;
+    --toolbar:#0D141E; --border:#263449; --border-strong:#354761;
+    --text:#E6EDF7; --muted:#91A0B5; --faint:#65758D;
+    --accent:#28D7FE; --accent-muted:#157B94; --success:#39E58C; --error:#FF667A;
+    --warn:#FFC24B; --debug:#8C7CFF;
+    --mono: "Cascadia Mono", Consolas, Menlo, monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#05080b; color:var(--text); font:13px/1.4 "Inter","Segoe UI",system-ui,sans-serif; padding:24px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  h2 { font-size:15px; margin:40px 0 4px; color:var(--accent); }
+  p.note { color:var(--muted); margin:0 0 12px; max-width:980px; }
+  .frame { border:1px solid var(--border-strong); border-radius:8px; overflow:hidden; background:var(--surface); max-width:1280px; box-shadow:0 8px 32px #0008; }
+  .row { display:flex; align-items:center; gap:8px; }
+  .muted { color:var(--muted); } .faint { color:var(--faint); }
+  .pill { display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:999px; border:1px solid var(--border-strong); background:var(--raised); white-space:nowrap; }
+  .btn { padding:5px 12px; border-radius:6px; border:1px solid var(--border-strong); background:var(--raised-alt); color:var(--text); cursor:default; white-space:nowrap; }
+  .btn.primary { background:var(--accent); color:#00141a; border-color:var(--accent); font-weight:600; }
+  .btn.ghost { background:transparent; border-color:transparent; color:var(--muted); }
+  .kbd { font:11px var(--mono); padding:1px 5px; border:1px solid var(--border-strong); border-bottom-width:2px; border-radius:4px; color:var(--muted); }
+  .btn.primary .kbd { color:#00141a; border-color:#00141a55; background:transparent; }
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex:none; }
+  input.field, .field { background:var(--surface); border:1px solid var(--border-strong); border-radius:6px; color:var(--text); padding:6px 10px; font:inherit; }
+
+  /* ---------- Shell ---------- */
+  .shell { display:grid; grid-template-columns:240px 1fr; grid-template-rows:44px 1fr 26px; height:720px; }
+  .topbar { grid-column:1/3; display:flex; align-items:center; gap:10px; padding:0 12px; background:var(--toolbar); border-bottom:1px solid var(--border); }
+  .brand { font-weight:700; letter-spacing:.5px; color:var(--accent); width:216px; }
+  .cmd { flex:1; max-width:520px; display:flex; align-items:center; gap:8px; padding:5px 10px; border:1px solid var(--border); border-radius:6px; color:var(--faint); background:var(--surface); }
+  .sidebar { background:var(--surface-alt); border-right:1px solid var(--border); padding:10px 8px; overflow:hidden; }
+  .side-h { font-size:11px; text-transform:uppercase; letter-spacing:.8px; color:var(--faint); margin:12px 8px 6px; display:flex; justify-content:space-between; }
+  .src { display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:6px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .src.active { background:var(--raised-alt); color:var(--text); box-shadow:inset 2px 0 0 var(--accent); }
+  .src .count { margin-left:auto; font:11px var(--mono); color:var(--faint); }
+  .swatch { width:4px; height:16px; border-radius:2px; flex:none; }
+  .main { display:flex; flex-direction:column; min-width:0; }
+  .viewbar { display:flex; align-items:center; gap:4px; padding:6px 10px 0; border-bottom:1px solid var(--border); background:var(--surface); }
+  .vtab { padding:6px 12px; border-radius:6px 6px 0 0; color:var(--muted); border:1px solid transparent; border-bottom:none; display:flex; gap:6px; align-items:center; }
+  .vtab.active { color:var(--text); background:var(--raised); border-color:var(--border); }
+  .filterbar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:8px 10px; background:var(--raised); border-bottom:1px solid var(--border); }
+  .chip { display:inline-flex; align-items:center; gap:6px; padding:3px 8px 3px 6px; border-radius:6px; border:1px solid var(--border-strong); background:var(--raised-alt); font:12px var(--mono); }
+  .chip .act { font:10px/1 inherit; font-family:inherit; padding:2px 4px; border-radius:3px; }
+  .chip.hl .act { background:#ffb02033; color:#ffb020; }
+  .chip.inc .act { background:#28d7fe22; color:var(--accent); }
+  .chip.exc { text-decoration:line-through; text-decoration-color:var(--faint); color:var(--muted); }
+  .chip.exc .act { background:#ff667a22; color:var(--error); text-decoration:none; }
+  .chip.global { border-style:dashed; }
+  .chip .x { color:var(--faint); }
+  .chip.off { opacity:.45; }
+  .seg { display:inline-flex; border:1px solid var(--border-strong); border-radius:6px; overflow:hidden; }
+  .seg span { padding:3px 8px; font-size:12px; color:var(--muted); border-right:1px solid var(--border-strong); }
+  .seg span:last-child { border-right:none; }
+  .seg span.on { background:var(--raised-alt); color:var(--text); }
+  .histo { height:46px; display:flex; align-items:flex-end; gap:2px; padding:6px 10px 4px; border-bottom:1px solid var(--border); background:var(--surface-alt); position:relative; }
+  .histo .b { flex:1; display:flex; flex-direction:column-reverse; }
+  .histo .b i { display:block; }
+  .histo .sel { position:absolute; top:4px; bottom:4px; left:62%; width:14%; border:1px solid var(--accent); background:#28d7fe14; border-radius:3px; }
+  .loghead, .logrow { display:grid; grid-template-columns:20px 96px 54px 110px 1fr; gap:10px; padding:3px 10px; font:12px/1.5 var(--mono); align-items:center; }
+  .loghead { color:var(--faint); font-family:inherit; font-size:11px; text-transform:uppercase; letter-spacing:.6px; border-bottom:1px solid var(--border); background:var(--surface); }
+  .logrow { border-bottom:1px solid #263449aa; color:#cfd8e6; }
+  .logrow:hover { background:var(--raised); }
+  .logrow.sel { background:#28d7fe14; box-shadow:inset 2px 0 0 var(--accent); }
+  .lvl { font-weight:700; font-size:11px; }
+  .lvl.E { color:var(--error); } .lvl.W { color:var(--warn); } .lvl.I { color:var(--success); } .lvl.D { color:var(--debug); }
+  .row-E { background:#ff667a0d; }
+  .srcbadge { display:flex; align-items:center; gap:6px; color:var(--muted); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  mark { background:#ffb020; color:#111; border-radius:2px; padding:0 1px; }
+  mark.c { background:#28d7fe; }
+  .logs { flex:1; overflow:hidden; position:relative; }
+  .newpill { position:absolute; bottom:14px; left:50%; transform:translateX(-50%); }
+  .statusbar { grid-column:1/3; display:flex; align-items:center; gap:18px; padding:0 12px; font-size:12px; color:var(--muted); background:var(--toolbar); border-top:1px solid var(--border); }
+  .inspector { width:320px; border-left:1px solid var(--border); background:var(--surface-alt); padding:10px 12px; font-size:12px; }
+  .kv { display:grid; grid-template-columns:110px 1fr; gap:4px 10px; font:12px var(--mono); margin-top:8px; }
+  .kv b { color:var(--faint); font-weight:400; }
+  .fieldacts { color:var(--faint); font-family:inherit; }
+
+  /* ---------- Popover ---------- */
+  .pop { background:var(--raised); border:1px solid var(--border-strong); border-radius:8px; box-shadow:0 12px 40px #000a; padding:12px; }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:24px; max-width:1280px; }
+  .lab { font-size:11px; color:var(--faint); text-transform:uppercase; letter-spacing:.6px; margin:10px 0 4px; }
+  .presets { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+  .presets span { padding:5px 8px; border:1px solid var(--border); border-radius:6px; text-align:center; color:var(--muted); }
+  .presets span.on { border-color:var(--accent); color:var(--text); background:#28d7fe14; }
+
+  /* ---------- Wizard ---------- */
+  .wiz { display:grid; grid-template-columns:220px 1fr; min-height:560px; }
+  .steps { background:var(--surface-alt); border-right:1px solid var(--border); padding:16px 12px; }
+  .step { display:flex; gap:10px; align-items:center; padding:8px; border-radius:6px; color:var(--muted); }
+  .step .n { width:22px; height:22px; border-radius:50%; border:1px solid var(--border-strong); display:grid; place-items:center; font-size:11px; }
+  .step.done .n { background:var(--success); color:#00170b; border-color:var(--success); }
+  .step.cur { background:var(--raised-alt); color:var(--text); }
+  .step.cur .n { border-color:var(--accent); color:var(--accent); }
+  .step small { display:block; color:var(--faint); font-size:11px; }
+  .wbody { padding:18px 22px; display:flex; flex-direction:column; gap:12px; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .list { border:1px solid var(--border); border-radius:6px; background:var(--surface); height:200px; overflow:hidden; }
+  .li { display:flex; align-items:center; gap:8px; padding:5px 10px; border-bottom:1px solid #26344988; font:12px var(--mono); }
+  .li .t { margin-left:auto; font:11px inherit; color:var(--faint); font-family:inherit; }
+  .grip { color:var(--faint); cursor:grab; }
+  table.prev { width:100%; border-collapse:collapse; font:12px var(--mono); }
+  table.prev th { text-align:left; color:var(--faint); font:11px "Inter",system-ui,sans-serif; text-transform:uppercase; letter-spacing:.6px; padding:4px 8px; border-bottom:1px solid var(--border); }
+  table.prev td { padding:4px 8px; border-bottom:1px solid #26344988; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:420px; }
+  .ok { color:var(--success); } .err { color:var(--error); }
+  .callout { border:1px solid var(--accent-muted); background:#28d7fe0d; border-radius:6px; padding:8px 10px; color:var(--muted); }
+</style>
+</head>
+<body>
+<h1>HexTail — UX proposal mockups</h1>
+<p class="note">Static HTML sketches using the Cyber Tail palette. They show layout and interaction intent, not pixel specs; every element maps to an Avalonia control (TreeView, ItemsRepeater, Popup, custom row control). Companion doc: <code>docs/ux/2026-11-04-ux-proposals.md</code>.</p>
+
+<!-- =============================== A. SHELL =============================== -->
+<h2>A · Unified shell: source sidebar, one view bar, filter chips, timeline, status bar</h2>
+<p class="note">Chrome above the first log row drops from ~270px to ~185px at 1280×720, or ~140px with the timeline collapsed. Sources live in a sidebar instead of a second tab strip plus a duplicate “Tabs” dropdown. The selected item here is a <b>merged stream</b> of two files and an Elastic source, interleaved by timestamp, with a color stripe per source.</p>
+<div class="frame">
+  <div class="shell">
+    <div class="topbar">
+      <div class="brand">⬡ HEXTAIL</div>
+      <div class="cmd">⌕ <span>Search, add filter, open source, jump to time…</span><span style="margin-left:auto" class="kbd">Ctrl K</span></div>
+      <span class="pill">⏱ Last 15 min <span class="dot" style="background:var(--success)"></span> live</span>
+      <div style="margin-left:auto" class="row">
+        <span class="btn ghost">⏸ Pause</span>
+        <span class="btn ghost">↧ Follow</span>
+        <span class="btn ghost">⚙</span>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="side-h"><span>Streams</span><span>＋</span></div>
+      <div class="src active"><span class="swatch" style="background:linear-gradient(#28D7FE,#B98CFF,#39E58C)"></span>checkout (merged)<span class="count">3 src</span></div>
+      <div class="side-h"><span>Files</span><span>＋</span></div>
+      <div class="src"><span class="swatch" style="background:#28D7FE"></span>api.log<span class="count">12.4k</span></div>
+      <div class="src"><span class="swatch" style="background:#B98CFF"></span>worker.jsonl<span class="count">8.1k</span></div>
+      <div class="src"><span class="dot" style="background:var(--warn)"></span>&nbsp;nginx.log <span class="count">missing</span></div>
+      <div class="side-h"><span>Elastic</span><span>＋</span></div>
+      <div class="src" style="color:var(--text)"><span class="dot" style="background:var(--success)"></span>prod-eu</div>
+      <div class="src" style="padding-left:24px"><span class="swatch" style="background:#39E58C"></span>logs-app · service=checkout<span class="count">3.2k</span></div>
+      <div class="src" style="padding-left:24px"><span class="swatch" style="background:#3A4A60"></span>logs-app · service=billing</div>
+      <div class="src"><span class="dot" style="background:var(--error)"></span>staging <span class="count">auth failed</span></div>
+      <div class="side-h"><span>Saved filters</span></div>
+      <div class="src">level ≥ warn</div>
+      <div class="src">hide healthchecks</div>
+    </div>
+
+    <div class="main">
+      <div class="viewbar">
+        <div class="vtab active">All <span class="faint">23.7k</span></div>
+        <div class="vtab"><span class="dot" style="background:#ffb020"></span>timeout <span class="faint">41</span></div>
+        <div class="vtab"><span class="dot" style="background:#28d7fe"></span>order_id=8812 <span class="faint">6</span></div>
+        <span class="btn ghost" style="margin-left:auto">⇲ Wrap</span>
+        <span class="btn ghost">▤ Columns</span>
+        <span class="btn ghost">◫ Inspector</span>
+      </div>
+      <div class="filterbar">
+        <span class="seg"><span>T</span><span class="on">D</span><span class="on">I</span><span class="on">W</span><span class="on">E</span></span>
+        <span class="chip hl"><span class="act">HL</span>timeout<span class="x">✕</span></span>
+        <span class="chip inc"><span class="act">ONLY</span>service:checkout<span class="x">✕</span></span>
+        <span class="chip exc global" title="Global rule (dashed)"><span class="act">HIDE</span>GET /healthz<span class="x">✕</span></span>
+        <span class="chip off"><span class="act">HL</span>/user-\d+/<span class="x">✕</span></span>
+        <input class="field" style="flex:1;min-width:200px;padding:3px 8px" placeholder="Type to highlight · Enter = add · Shift+Enter = only · Alt+Enter = hide">
+        <span class="faint" style="font-size:12px">41 / 23.7k shown</span>
+      </div>
+      <div class="histo" title="Event density by level; drag to set time range">
+        <!-- generated bars -->
+        <div class="b"><i style="height:8px;background:#39E58C66"></i></div><div class="b"><i style="height:12px;background:#39E58C66"></i></div><div class="b"><i style="height:10px;background:#39E58C66"></i></div><div class="b"><i style="height:14px;background:#39E58C66"></i><i style="height:2px;background:#FFC24B"></i></div><div class="b"><i style="height:16px;background:#39E58C66"></i></div><div class="b"><i style="height:11px;background:#39E58C66"></i></div><div class="b"><i style="height:9px;background:#39E58C66"></i></div><div class="b"><i style="height:13px;background:#39E58C66"></i></div><div class="b"><i style="height:15px;background:#39E58C66"></i><i style="height:3px;background:#FFC24B"></i></div><div class="b"><i style="height:18px;background:#39E58C66"></i></div><div class="b"><i style="height:17px;background:#39E58C66"></i></div><div class="b"><i style="height:12px;background:#39E58C66"></i></div><div class="b"><i style="height:14px;background:#39E58C66"></i></div><div class="b"><i style="height:20px;background:#39E58C66"></i><i style="height:4px;background:#FFC24B"></i></div><div class="b"><i style="height:22px;background:#39E58C66"></i><i style="height:6px;background:#FF667A"></i></div><div class="b"><i style="height:24px;background:#39E58C66"></i><i style="height:9px;background:#FF667A"></i></div><div class="b"><i style="height:21px;background:#39E58C66"></i><i style="height:5px;background:#FF667A"></i></div><div class="b"><i style="height:16px;background:#39E58C66"></i><i style="height:2px;background:#FFC24B"></i></div><div class="b"><i style="height:14px;background:#39E58C66"></i></div><div class="b"><i style="height:12px;background:#39E58C66"></i></div><div class="b"><i style="height:15px;background:#39E58C66"></i></div><div class="b"><i style="height:13px;background:#39E58C66"></i></div><div class="b"><i style="height:11px;background:#39E58C66"></i></div><div class="b"><i style="height:16px;background:#39E58C66"></i></div><div class="b"><i style="height:18px;background:#39E58C66"></i><i style="height:2px;background:#FFC24B"></i></div><div class="b"><i style="height:14px;background:#39E58C66"></i></div><div class="b"><i style="height:10px;background:#39E58C66"></i></div><div class="b"><i style="height:12px;background:#39E58C66"></i></div>
+        <div class="sel"></div>
+      </div>
+      <div style="display:flex;flex:1;min-height:0">
+        <div class="logs">
+          <div class="loghead"><span></span><span>Time</span><span>Level</span><span>Source</span><span>Message</span></div>
+          <div class="logrow"><span class="swatch" style="background:#28D7FE"></span><span>14:02:11.204</span><span class="lvl I">INFO</span><span class="srcbadge">api.log</span><span>POST /orders 201 order_id=8811 12ms</span></div>
+          <div class="logrow"><span class="swatch" style="background:#39E58C"></span><span>14:02:11.387</span><span class="lvl D">DEBUG</span><span class="srcbadge">prod-eu/checkout</span><span>cart.reserve sku=AX-22 qty=1</span></div>
+          <div class="logrow"><span class="swatch" style="background:#B98CFF"></span><span>14:02:11.902</span><span class="lvl I">INFO</span><span class="srcbadge">worker.jsonl</span><span>job=charge <mark class="c">order_id=8812</mark> attempt=1</span></div>
+          <div class="logrow row-E sel"><span class="swatch" style="background:#B98CFF"></span><span>14:02:16.913</span><span class="lvl E">ERROR</span><span class="srcbadge">worker.jsonl</span><span>payment gateway <mark>timeout</mark> after 5000ms <mark class="c">order_id=8812</mark></span></div>
+          <div class="logrow"><span class="swatch" style="background:#28D7FE"></span><span>14:02:16.950</span><span class="lvl W">WARN</span><span class="srcbadge">api.log</span><span>upstream retry 1/3 route=/orders/8812/pay</span></div>
+          <div class="logrow"><span class="swatch" style="background:#39E58C"></span><span>14:02:17.002</span><span class="lvl W">WARN</span><span class="srcbadge">prod-eu/checkout</span><span>circuit half-open gateway=stripe</span></div>
+          <div class="logrow"><span class="swatch" style="background:#B98CFF"></span><span>14:02:17.431</span><span class="lvl I">INFO</span><span class="srcbadge">worker.jsonl</span><span>job=charge <mark class="c">order_id=8812</mark> attempt=2</span></div>
+          <div class="logrow row-E"><span class="swatch" style="background:#28D7FE"></span><span>14:02:22.440</span><span class="lvl E">ERROR</span><span class="srcbadge">api.log</span><span>POST /orders/8812/pay 504 gateway <mark>timeout</mark></span></div>
+          <div class="logrow"><span class="swatch" style="background:#39E58C"></span><span>14:02:22.501</span><span class="lvl I">INFO</span><span class="srcbadge">prod-eu/checkout</span><span>order.state 8812 → payment_failed</span></div>
+          <div class="logrow"><span class="swatch" style="background:#28D7FE"></span><span>14:02:23.118</span><span class="lvl I">INFO</span><span class="srcbadge">api.log</span><span>GET /orders/8812 200 3ms</span></div>
+          <div class="logrow"><span class="swatch" style="background:#B98CFF"></span><span>14:02:24.006</span><span class="lvl D">DEBUG</span><span class="srcbadge">worker.jsonl</span><span>queue depth=14 lag=1.2s</span></div>
+          <div class="newpill"><span class="btn primary">↓ 128 new lines — jump to latest</span></div>
+        </div>
+        <div class="inspector">
+          <div class="row"><b>Row details</b><span class="faint" style="margin-left:auto">worker.jsonl : 8,114</span></div>
+          <div class="kv">
+            <b>@timestamp</b><span>2026-11-04T14:02:16.913Z</span>
+            <b>level</b><span class="err">error</span>
+            <b>msg</b><span>payment gateway timeout…</span>
+            <b>order_id</b><span>8812</span>
+            <b>gateway</b><span>stripe</span>
+            <b>elapsed_ms</b><span>5000</span>
+            <b>trace.id</b><span>9f2c…a71e</span>
+          </div>
+          <div class="lab">On field “order_id”</div>
+          <div class="row" style="flex-wrap:wrap;gap:6px">
+            <span class="btn">Only this value</span><span class="btn">Hide value</span><span class="btn">Highlight</span><span class="btn">Add column</span>
+          </div>
+          <div class="lab">Row</div>
+          <div class="row" style="flex-wrap:wrap;gap:6px">
+            <span class="btn">Copy raw</span><span class="btn">Copy JSON</span><span class="btn">Show ±50 context</span><span class="btn">Bookmark</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <span><span class="dot" style="background:var(--success)"></span> 3 sources live</span>
+      <span>41 shown · 23,704 loaded · buffer 24%</span>
+      <span>Range 13:47:22 → now (UTC)</span>
+      <span style="margin-left:auto">Elastic poll 2s · last 14:02:24</span>
+      <span>UTC ▾</span>
+    </div>
+  </div>
+</div>
+
+<!-- =============================== B. FILTER / TIME =============================== -->
+<h2>B · One rule editor for searches, labels and exclusions · compact time picker</h2>
+<p class="note">Left: clicking a chip (or pressing Enter in the filter input) opens one popover that edits every kind of rule. “Scope” replaces the split between per-file searches and Settings → Labels &amp; Exclusions. Right: the time picker collapses presets, relative and absolute input into one popover with a single parseable text field per endpoint.</p>
+<div class="grid2">
+  <div class="pop" style="max-width:440px">
+    <div class="row"><b>Rule</b><span class="faint" style="margin-left:auto">Esc to close</span></div>
+    <div class="lab">Pattern</div>
+    <div class="row"><input class="field" style="flex:1;font-family:var(--mono)" value="timeout"><span class="btn">Aa</span><span class="btn">.*</span></div>
+    <div class="faint" style="font-size:12px;margin-top:4px">41 matches in current view · last 14:02:22</div>
+    <div class="lab">Action</div>
+    <span class="seg"><span class="on">Highlight</span><span>Show only</span><span>Hide</span></span>
+    <div class="lab">Scope</div>
+    <span class="seg"><span class="on">This view</span><span>This source</span><span>All sources (global)</span></span>
+    <div class="lab">Appearance</div>
+    <div class="row">
+      <span class="dot" style="background:#ffb020;width:18px;height:18px;outline:2px solid var(--text);outline-offset:1px"></span>
+      <span class="dot" style="background:#28d7fe;width:18px;height:18px"></span>
+      <span class="dot" style="background:#39e58c;width:18px;height:18px"></span>
+      <span class="dot" style="background:#ff667a;width:18px;height:18px"></span>
+      <span class="dot" style="background:#b98cff;width:18px;height:18px"></span>
+      <span class="faint">＋</span>
+      <label style="margin-left:auto" class="row"><input type="checkbox" checked> Pin as tab</label>
+    </div>
+    <div class="row" style="margin-top:14px"><span class="btn ghost">Delete</span><span class="btn" style="margin-left:auto">Save to “Saved filters”</span><span class="btn primary">Apply</span></div>
+  </div>
+
+  <div class="pop" style="max-width:440px">
+    <div class="row"><b>Time range</b><span class="seg" style="margin-left:auto"><span class="on">UTC</span><span>Local</span></span></div>
+    <div class="lab">Quick</div>
+    <div class="presets">
+      <span>5 min</span><span class="on">15 min</span><span>1 hour</span><span>4 hours</span><span>24 hours</span><span>7 days</span>
+    </div>
+    <div class="lab">From</div>
+    <input class="field" style="width:100%;font-family:var(--mono)" value="now-15m">
+    <div class="faint" style="font-size:12px;margin-top:3px">= 2026-11-04 13:47:22 UTC · accepts ISO, “14:00”, “-2h”, “yesterday 09:00”</div>
+    <div class="lab">To</div>
+    <div class="row"><input class="field" style="flex:1;font-family:var(--mono)" value="now"><label class="row"><input type="checkbox" checked> Live</label></div>
+    <div class="lab">Recent</div>
+    <div class="faint" style="font-size:12px;line-height:1.8">2026-11-03 22:10 → 22:40 · last 1 hour · 2026-11-01 09:00 → 12:00</div>
+    <div class="row" style="margin-top:14px"><span class="faint" style="font-size:12px">Unapplied · Enter to apply</span><span class="btn primary" style="margin-left:auto">Apply</span></div>
+  </div>
+</div>
+
+<!-- =============================== C. ELASTIC WIZARD =============================== -->
+<h2>C · Elastic setup as a stepped flow with real sample data (step 4 of 5 shown)</h2>
+<p class="note">Replaces the single nested server → view → fields scroll. Connection and sources are separate objects; a source is created from a connection. Step 4 replaces “uncheck and recheck to move it last” with drag ordering, and previews five real recent documents instead of <code>&lt;message&gt; &lt;level&gt;</code>.</p>
+<div class="frame" style="max-width:1100px">
+  <div class="wiz">
+    <div class="steps">
+      <div class="step done"><span class="n">✓</span><div>Connection<small>prod-eu · API key · keyring</small></div></div>
+      <div class="step done"><span class="n">✓</span><div>Data view<small>logs-app-* · @timestamp</small></div></div>
+      <div class="step done"><span class="n">✓</span><div>Filter<small>service = checkout · ~3.2k / 15m</small></div></div>
+      <div class="step cur"><span class="n">4</span><div>Columns<small>3 selected</small></div></div>
+      <div class="step"><span class="n">5</span><div>Name &amp; open</div></div>
+      <div class="callout" style="margin-top:24px;font-size:12px">Shortcut: <b>Paste a Kibana Discover URL</b> to prefill data view, query, filters, columns and time range.</div>
+    </div>
+    <div class="wbody">
+      <div class="row"><b style="font-size:15px">Choose and order columns</b><span class="faint" style="margin-left:auto">Level and timestamp are detected automatically</span></div>
+      <div class="cols">
+        <div>
+          <input class="field" style="width:100%;margin-bottom:6px" placeholder="Filter 412 fields…" value="err">
+          <div class="list">
+            <div class="li">☐ error.message<span class="t">text</span></div>
+            <div class="li">☐ error.type<span class="t">keyword</span></div>
+            <div class="li">☐ error.stack_trace<span class="t">text · not searchable</span></div>
+            <div class="li">☐ http.response.error_code<span class="t">keyword</span></div>
+            <div class="li faint">Suggested: <span style="color:var(--text)">&nbsp;message · log.level · service.name · trace.id</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="lab" style="margin-top:6px">Selected · drag to reorder</div>
+          <div class="list">
+            <div class="li"><span class="grip">⠿</span>log.level<span class="t">→ Level column</span></div>
+            <div class="li"><span class="grip">⠿</span>service.name<span class="t">keyword</span></div>
+            <div class="li"><span class="grip">⠿</span>message<span class="t">text · fills row</span></div>
+            <div class="li faint">Drop fields here</div>
+          </div>
+        </div>
+      </div>
+      <div class="lab">Preview · 5 most recent documents matching the filter</div>
+      <table class="prev">
+        <tr><th>Time</th><th>Level</th><th>service.name</th><th>message</th></tr>
+        <tr><td>14:02:22.501</td><td class="ok">info</td><td>checkout</td><td>order.state 8812 → payment_failed</td></tr>
+        <tr><td>14:02:17.002</td><td style="color:var(--warn)">warn</td><td>checkout</td><td>circuit half-open gateway=stripe</td></tr>
+        <tr><td>14:02:11.387</td><td style="color:var(--debug)">debug</td><td>checkout</td><td>cart.reserve sku=AX-22 qty=1</td></tr>
+        <tr><td>14:02:09.774</td><td class="ok">info</td><td>checkout</td><td>session resumed user=u-1931</td></tr>
+        <tr><td>14:02:05.120</td><td class="err">error</td><td>checkout</td><td><span class="faint">(message missing)</span></td></tr>
+      </table>
+      <div class="row" style="margin-top:auto"><span class="btn ghost">← Back</span><span class="faint" style="margin-left:12px;font-size:12px">Draft kept automatically</span><span class="btn primary" style="margin-left:auto">Next: Name &amp; open →</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- =============================== D. EMPTY STATE =============================== -->
+<h2>D · Empty state with recents and a sample</h2>
+<div class="frame" style="max-width:820px;padding:40px;text-align:center">
+  <div style="font-size:28px;color:var(--accent)">⬡</div>
+  <div style="font-size:16px;margin:8px 0 18px">Drop log files here, or</div>
+  <div class="row" style="justify-content:center;gap:10px"><span class="btn primary">Open file… <span class="kbd">Ctrl O</span></span><span class="btn">Connect to Elastic</span><span class="btn">Try a sample log</span></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;text-align:left;margin-top:28px">
+    <div><div class="lab">Recent files</div><div class="src">/var/log/app/api.log</div><div class="src">~/dl/worker-2026-11-03.jsonl</div></div>
+    <div><div class="lab">Recent streams &amp; Elastic sources</div><div class="src">checkout (merged)</div><div class="src">prod-eu · service=billing</div></div>
+  </div>
+</div>
+</body>
+</html>
