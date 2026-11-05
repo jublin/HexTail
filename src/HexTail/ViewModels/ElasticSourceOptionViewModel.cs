@@ -50,13 +50,6 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
         get => _status;
         private set => this.RaiseAndSetIfChanged(ref _status, value);
     }
-    public string StatusGlyph =>
-        Status switch
-        {
-            "Connected" => "mdi-cloud-check",
-            "Checking" => "mdi-cloud-sync",
-            _ => "mdi-cloud-alert",
-        };
     public string? OpenError
     {
         get => _openError;
@@ -74,18 +67,20 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
     public string LoadStatus
     {
         get => _loadStatus;
-        private set => this.RaiseAndSetIfChanged(ref _loadStatus, value);
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _loadStatus, value);
+            this.RaisePropertyChanged(nameof(RowToolTip));
+        }
     }
+
+    /// <summary>The source's description plus whether its logs are closed, loading, live, historical, or failed.</summary>
+    public string RowToolTip => $"{ToolTip}{Environment.NewLine}{LoadStatus}";
     public bool IsOpening
     {
         get => _isOpening;
-        private set
-        {
-            this.RaiseAndSetIfChanged(ref _isOpening, value);
-            this.RaisePropertyChanged(nameof(CanToggle));
-        }
+        private set => this.RaiseAndSetIfChanged(ref _isOpening, value);
     }
-    public bool CanToggle => !IsOpening;
     public bool IsOpen
     {
         get => _isOpen;
@@ -181,6 +176,7 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
         {
             ToolTip = source.ToolTip;
             this.RaisePropertyChanged(nameof(ToolTip));
+            this.RaisePropertyChanged(nameof(RowToolTip));
         }
     }
 
@@ -209,9 +205,6 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
             _isOpen = isOpen;
             this.RaisePropertyChanged(nameof(IsOpen));
         }
-        if (Status == status)
-            return;
         Status = status;
-        this.RaisePropertyChanged(nameof(StatusGlyph));
     }
 }

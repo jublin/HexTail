@@ -135,7 +135,7 @@
                         Classes="source-row"
                         Classes.selected="{Binding IsSelected}"
                         Margin="12,0,0,0"
-                        ToolTip.Tip="{Binding ToolTip}"
+                        ToolTip.Tip="{Binding RowToolTip}"
                       >
                         <Grid ColumnDefinitions="*,Auto">
                           <Button

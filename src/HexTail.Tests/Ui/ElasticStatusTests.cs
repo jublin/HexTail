@@ -113,4 +113,26 @@ public sealed class ElasticStatusTests
         var message = source.OpenError;
         Assert.Contains("credential", message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
+
+    [AvaloniaFact]
+    public async Task SourceRowToolTip_IncludesTheLoadStatus()
+    {
+        await using var owner = new MainWindowViewModel(
+            new AppState(new LogSourceService(), new TestPersistence()),
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        var source = new ElasticSourceOptionViewModel(owner, "source", "Ops", "Ops / Logs");
+        Assert.Equal($"Ops / Logs{Environment.NewLine}Logs: closed", source.RowToolTip);
+
+        var changed = new List<string?>();
+        source.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+        source.Sync(true, "Connected", null, "Logs: live");
+        Assert.Contains("Logs: live", source.RowToolTip);
+        Assert.StartsWith("Ops / Logs", source.RowToolTip);
+        Assert.Contains(nameof(source.RowToolTip), changed);
+
+        source.Sync(true, "Connected", null, "Logs: historical");
+        Assert.EndsWith("Logs: historical", source.RowToolTip);
+    }
 }

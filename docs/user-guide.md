@@ -50,13 +50,13 @@ A newly opened source initially loads the previous five minutes. Select an Elast
 - **Live** next to **To** keeps the range open-ended so newly arriving logs keep appending, normally every two seconds. Clear it and enter a **To** time to load a fixed historical range once. Both endpoints are inclusive, and From must be at or before To.
 - Press Enter in either field, or choose **Apply**. Until then the flyout shows **Unapplied — press Enter or Apply**. Applying clears the previous results and loads the requested range; the pill and status bar show what is actually loading or loaded.
 
-The **display time zone** picker in the status bar (**Local** or **Utc**) is the single time-zone setting. It sets how typed times without an offset are read (and the previews and applied range are shown in it), and which clock the status bar uses. Times with an explicit offset or `Z` are never changed. Switching the zone does not change the instant a loaded range represents. A local wall-clock time that is missing or ambiguous because of a daylight-saving change is rejected; switch to Utc and type the time again. The zone never rewrites timestamps inside log messages.
+The **display time zone** picker in the status bar (**Local** or **Utc**) is the single time-zone setting. It sets how typed times without an offset are read, and the zone the previews, the range pill, and the applied range are shown in. Times with an explicit offset or `Z` are never changed. Switching the zone does not change the instant a loaded range represents. A local wall-clock time that is missing or ambiguous because of a daylight-saving change is rejected; switch to Utc and type the time again. The zone never rewrites timestamps inside log messages.
 
 Preset offsets are relative to the load's clock. Live polling appends from the loaded cursor rather than repeatedly replacing the view with a sliding window. When an open tab is restored after restart, a saved relative range resolves again; fixed endpoints are restored before the first request. Searches are restored too.
 
 ## Read source status and results
 
-Connection and source health describe reachability and authentication: an untested or failed connection is not shown as connected. Opening progress and open errors appear beside the source. A reachable server can still have a failed log query or an interval with no logs; read the selected tab's load status and result message as well.
+Connection and source health describe reachability and authentication: an untested or failed connection is not shown as connected. Open errors appear under the source in the sidebar, and hovering a source shows whether its logs are closed, loading, live, historical, or failed. A reachable server can still have a failed log query or an interval with no logs; read the selected tab's load status and result message as well.
 
 Each view distinguishes loading, query failure, no returned logs, no search matches, and logs hidden by global exclusions. Counts show **visible** rows and rows **loaded from source**, not the server's total matching count.
 
@@ -64,7 +64,7 @@ The initial fetch is bounded (10,000 newest logs by default). If the initial lim
 
 ## Search, labels, and exclusions
 
-Enter a search in the toolbar, choose **Literal** or **Regex**, and press Enter to add a search tab. Literal treats punctuation as ordinary text; Regex uses a regular expression and reports invalid patterns. The case-sensitive control applies to that search.
+Enter a search in the search bar under the top bar, choose **Literal** or **Regex**, and press Enter to add a search tab. Literal treats punctuation as ordinary text; Regex uses a regular expression and reports invalid patterns. The case-sensitive control applies to that search.
 
 In **Settings → Labels & Exclusions**, labels highlight case-insensitive matches and can create search tabs. Exclusions hide matching rows from log and context views while keeping them buffered. Each rule has an explicit Literal/Regex choice; new rules default to Literal. For example, Literal `[ERROR]` matches those brackets exactly. Invalid Regex drafts show an error and do not replace the last saved valid rule. Existing rules retain their earlier matching behavior.
 
@@ -82,4 +82,4 @@ Keyboard shortcuts for navigating views (they do not fire while a text box has f
 
 **Follow** and **Context** are toggles on each view's toolbar. Follow keeps the newest row (or match) in view; scrolling up, pressing `g`, or turning Follow off stops it. While a view is not following and new lines arrive, a **↓ N new lines** pill appears at the bottom of the list; click it to jump to the newest line and resume following. **Context** shows the neighboring buffered rows around the selected row.
 
-**Pause** (toolbar button or `Space`) freezes the rows shown while the sources keep buffering. The status bar says **Paused — rows are buffering**, the row count stops changing, and the new-lines pill counts what has arrived since. Press `Space` or the button again to resume and catch up, or click the pill, which resumes and follows. Pause applies to the whole window, not one view.
+**Pause** (toolbar button or `Space`) freezes the rows shown while the sources keep buffering. The status bar says **Paused — rows are buffering**, the **visible** count stops changing while the **loaded** count keeps rising, and the new-lines pill counts what has arrived since. Press `Space` or the button again to resume and catch up, or click the pill, which resumes and follows. Pause applies to the whole window, not one view.

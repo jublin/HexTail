@@ -27,7 +27,7 @@
         FontSize="12"
         ItemsSource="{Binding Settings.TimeZoneModes}"
         SelectedItem="{Binding Settings.TimeZoneMode, Mode=TwoWay}"
-        ToolTip.Tip="Time zone for status times and typed range times. Log text is unchanged."
+        ToolTip.Tip="Time zone for typed range times and the range display. Log text is unchanged."
         AutomationProperties.Name="Display time zone"
       />
       <TextBlock
