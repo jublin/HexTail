@@ -135,6 +135,7 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
         try
         {
             await _owner.State.OpenElasticSourceAsync(SourceId);
+            _owner.DismissNarrowSidebar();
         }
         catch (Exception exception)
         {

@@ -25,285 +25,230 @@
       <views:SettingsPanel />
     </dialogHost:DialogHost.DialogContent>
 
-    <Grid
-      RowDefinitions="Auto,Auto,Auto,*"
-      Background="{DynamicResource SurfaceBrush}"
-      HorizontalAlignment="Stretch"
-    >
-      <Grid
-        Grid.Row="0"
-        ColumnDefinitions="Auto,*"
-        RowDefinitions="Auto,Auto,Auto"
-        HorizontalAlignment="Stretch"
+    <Grid x:Name="ShellGrid" RowDefinitions="Auto,*" Background="{DynamicResource SurfaceBrush}">
+      <Border
+        x:Name="TopBar"
+        Background="{DynamicResource ToolbarBrush}"
+        BorderBrush="{DynamicResource BorderBrush}"
+        BorderThickness="0,0,0,1"
+        Padding="6,4"
       >
-        <CommandBar
-          Grid.Column="0"
-          HorizontalAlignment="Left"
-          HasMirrorTransform="True"
-          VerticalAlignment="Top"
-          FlowDirection="LeftToRight"
-          DefaultLabelPosition="Collapsed"
-          BorderBrush="{DynamicResource RaisedBrush}"
-        >
-          <CommandBar.PrimaryCommands>
-            <CommandBarButton
-              x:Name="SettingsButton"
-              Foreground="{DynamicResource TextBrush}"
-              Command="{Binding ToggleSettingsCommand}"
-              Label="Settings"
-              ToolTip.Tip="Open settings"
-              AutomationProperties.Name="Open settings"
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" ColumnSpacing="6">
+          <Button
+            x:Name="SidebarToggleButton"
+            Classes="icon"
+            Command="{Binding ToggleSidebarCommand}"
+            ToolTip.Tip="Toggle sidebar (Ctrl+B)"
+            AutomationProperties.Name="Toggle sidebar"
+          >
+            <i:Icon Value="mdi-dock-left" Foreground="{DynamicResource AccentBrush}" />
+          </Button>
+          <Button
+            x:Name="OpenFileButton"
+            Grid.Column="1"
+            Classes="icon"
+            Command="{Binding OpenCommand}"
+            ToolTip.Tip="Open log files (Ctrl+O)"
+            AutomationProperties.Name="Open log files"
+          >
+            <i:Icon Value="mdi-folder-open" Foreground="{DynamicResource AccentBrush}" />
+          </Button>
+          <StackPanel
+            x:Name="ElasticTimeRangePanel"
+            Grid.Column="2"
+            Orientation="Horizontal"
+            Spacing="8"
+            VerticalAlignment="Center"
+            IsVisible="{Binding IsElasticSelected}"
+          >
+            <Button
+              x:Name="ElasticTimeRangeButton"
+              Content="Time range…"
+              AutomationProperties.Name="Elastic log time range"
             >
-              <CommandBarButton.Icon>
-                <i:Icon
-                  Foreground="{DynamicResource AccentBrush}"
-                  FontSize="22"
-                  Value="mdi-cogs"
-                  Background="{DynamicResource SurfaceBrush}"
-                />
-              </CommandBarButton.Icon>
-            </CommandBarButton>
-            <CommandBarButton
-              x:Name="ElasticSourcesButton"
-              IsVisible="{Binding HasElasticSources}"
-              Label="Elastic sources"
-              ToolTip.Tip="Select Elastic sources"
-              AutomationProperties.Name="Elastic sources"
-            >
-              <CommandBarButton.Icon>
-                <i:Icon Value="{Binding ElasticSourceIcon}" FontSize="22" />
-              </CommandBarButton.Icon>
-              <CommandBarButton.Flyout>
+              <Button.Flyout>
                 <Flyout>
-                  <ItemsControl ItemsSource="{Binding ElasticSources}">
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="vm:ElasticSourceOptionViewModel">
-                        <StackPanel Spacing="4" MaxWidth="520">
-                          <StackPanel Orientation="Horizontal" Spacing="6">
-                            <i:Icon Value="{Binding StatusGlyph}" />
-                            <CheckBox
-                              Content="{Binding DisplayName}"
-                              ToolTip.Tip="{Binding ToolTip}"
-                              AutomationProperties.Name="{Binding ToolTip}"
-                              IsChecked="{Binding IsOpen, Mode=TwoWay}"
-                              IsEnabled="{Binding CanToggle}"
-                            />
-                          </StackPanel>
-                          <TextBlock
-                            Text="{Binding HealthMessage}"
-                            TextWrapping="Wrap"
-                            Foreground="{DynamicResource MutedBrush}"
-                          />
-                          <TextBlock Text="{Binding LoadStatus}" TextWrapping="Wrap" />
-                          <TextBlock
-                            Text="{Binding OpenError}"
-                            TextWrapping="Wrap"
-                            Classes="error"
-                          />
-                        </StackPanel>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
+                  <ScrollViewer MaxHeight="570" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="8" Width="390">
+                      <TextBlock Text="Log time range" FontWeight="SemiBold" />
+                      <TextBlock Text="Preset" />
+                      <ComboBox
+                        x:Name="ElasticPresetPicker"
+                        ItemsSource="{Binding ElasticPresets}"
+                        SelectedIndex="{Binding ElasticPresetIndex, Mode=TwoWay}"
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="Log time range preset"
+                      />
+                      <TextBlock Text="Input and interval display time zone" />
+                      <ComboBox
+                        x:Name="ElasticZonePicker"
+                        ItemsSource="{Binding ElasticInputZones}"
+                        SelectedItem="{Binding ElasticInputZone, Mode=TwoWay}"
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="Range input and display time zone"
+                      />
+                      <TextBlock
+                        Text="Local uses this computer’s time zone. Log message timestamps are unchanged."
+                        TextWrapping="Wrap"
+                        FontSize="12"
+                      />
+                      <TextBlock Text="From (inclusive)" />
+                      <StackPanel Spacing="4">
+                        <DatePicker
+                          x:Name="ElasticFromDatePicker"
+                          SelectedDate="{Binding ElasticFromDate, Mode=TwoWay}"
+                          MonthFormat="MM"
+                          DayFormat="dd"
+                          YearFormat="yyyy"
+                          HorizontalAlignment="Stretch"
+                          AutomationProperties.Name="From date"
+                        />
+                        <TimePicker
+                          x:Name="ElasticFromTimePicker"
+                          HorizontalAlignment="Stretch"
+                          SelectedTime="{Binding ElasticFromTime, Mode=TwoWay}"
+                          ClockIdentifier="24HourClock"
+                          UseSeconds="True"
+                          AutomationProperties.Name="From time"
+                        />
+                      </StackPanel>
+                      <CheckBox
+                        x:Name="ElasticToNowCheckBox"
+                        Content="To now (live logs)"
+                        IsChecked="{Binding ElasticToNow, Mode=TwoWay}"
+                      />
+                      <TextBlock Text="To (inclusive)" />
+                      <StackPanel Spacing="4" IsEnabled="{Binding !ElasticToNow}">
+                        <DatePicker
+                          x:Name="ElasticToDatePicker"
+                          SelectedDate="{Binding ElasticToDate, Mode=TwoWay}"
+                          MonthFormat="MM"
+                          DayFormat="dd"
+                          YearFormat="yyyy"
+                          HorizontalAlignment="Stretch"
+                          AutomationProperties.Name="To date"
+                        />
+                        <TimePicker
+                          x:Name="ElasticToTimePicker"
+                          HorizontalAlignment="Stretch"
+                          SelectedTime="{Binding ElasticToTime, Mode=TwoWay}"
+                          ClockIdentifier="24HourClock"
+                          UseSeconds="True"
+                          AutomationProperties.Name="To time"
+                        />
+                      </StackPanel>
+                      <TextBlock Text="{Binding ElasticDraftStatus}" TextWrapping="Wrap" />
+                      <TextBlock
+                        Text="{Binding ElasticAppliedRange}"
+                        TextWrapping="Wrap"
+                        FontSize="12"
+                      />
+                      <TextBlock
+                        Text="{Binding ElasticRangeStatus}"
+                        TextWrapping="Wrap"
+                        FontSize="12"
+                      />
+                      <TextBlock
+                        Text="Presets start at Apply; live logs append from that interval. Fixed-end intervals load once."
+                        TextWrapping="Wrap"
+                        FontSize="12"
+                      />
+                      <TextBlock
+                        Text="{Binding FileError}"
+                        IsVisible="{Binding HasFileError}"
+                        TextWrapping="Wrap"
+                        Foreground="{DynamicResource TextBrush}"
+                      />
+                      <Button
+                        x:Name="ApplyElasticTimeRangeButton"
+                        Content="Apply"
+                        Command="{Binding ApplyElasticTimeRangeCommand}"
+                        Classes="primary"
+                      />
+                    </StackPanel>
+                  </ScrollViewer>
                 </Flyout>
-              </CommandBarButton.Flyout>
-            </CommandBarButton>
-            <CommandBarSeparator />
-            <CommandBarButton
-              x:Name="SaveSessionButton"
-              Command="{Binding SaveCommand}"
-              Foreground="{DynamicResource TextBrush}"
-              Label="Save Session"
-              ToolTip.Tip="Save session"
-              AutomationProperties.Name="Save session"
-            >
-              <CommandBarButton.Icon>
-                <i:Icon
-                  Foreground="{DynamicResource AccentBrush}"
-                  Value="mdi-content-save"
-                  FontSize="22"
-                  Background="{DynamicResource SurfaceBrush}"
-                />
-              </CommandBarButton.Icon>
-            </CommandBarButton>
-            <CommandBarButton
-              x:Name="OpenFileButton"
-              Label="Open"
-              Command="{Binding OpenCommand}"
-              Foreground="{DynamicResource TextBrush}"
-              ToolTip.Tip="Open log files"
-              AutomationProperties.Name="Open log files"
-            >
-              <CommandBarButton.Icon>
-                <i:Icon
-                  Foreground="{DynamicResource AccentBrush}"
-                  Value="mdi-folder-open"
-                  FontSize="22"
-                  Background="{DynamicResource SurfaceBrush}"
-                />
-              </CommandBarButton.Icon>
-            </CommandBarButton>
-          </CommandBar.PrimaryCommands>
-        </CommandBar>
-
-        <DockPanel Grid.Column="1" HorizontalAlignment="Right" Margin="0,0,5,0">
+              </Button.Flyout>
+            </Button>
+            <TextBlock
+              x:Name="ElasticAppliedSummary"
+              Text="{Binding ElasticAppliedRange}"
+              TextWrapping="NoWrap"
+              TextTrimming="CharacterEllipsis"
+              VerticalAlignment="Center"
+              FontSize="12"
+            />
+            <TextBlock
+              Text="{Binding ElasticRangeStatus}"
+              TextWrapping="NoWrap"
+              TextTrimming="CharacterEllipsis"
+              VerticalAlignment="Center"
+              FontSize="12"
+            />
+          </StackPanel>
+          <ToggleSwitch
+            x:Name="InlineContextToggle"
+            Grid.Column="3"
+            AutomationProperties.Name="Show inline context"
+            OnContent="Inline Shown"
+            OffContent="No Inline"
+            FontSize="12"
+            DataContext="{Binding SelectedFile}"
+            IsVisible="{Binding $parent[Window].DataContext.HasFile}"
+            IsChecked="{Binding ShowContext, Mode=TwoWay}"
+          />
           <ToggleSwitch
             x:Name="AutoScrollToggle"
+            Grid.Column="4"
             AutomationProperties.Name="Auto-scroll logs"
             ToolTip.Tip="Auto-scroll follows new rows; it does not pause log retrieval."
             OnContent="Auto-scroll on"
             OffContent="Auto-scroll off"
             FontSize="12"
-            DockPanel.Dock="Right"
             DataContext="{Binding SelectedFile}"
-            Padding="{Binding Workspace.Settings.SecondaryPadding}"
-            MinHeight="{Binding Workspace.Settings.SecondaryControlHeight}"
+            IsVisible="{Binding $parent[Window].DataContext.HasFile}"
             IsChecked="{Binding SelectedView.IsFollowing, Mode=TwoWay}"
           />
-          <ToggleSwitch
-            x:Name="InlineContextToggle"
-            AutomationProperties.Name="Show inline context"
-            OnContent="Inline Shown"
-            OffContent="No Inline"
-            FontSize="12"
-            DockPanel.Dock="Right"
-            DataContext="{Binding SelectedFile}"
-            Padding="{Binding Workspace.Settings.SecondaryPadding}"
-            MinHeight="{Binding Workspace.Settings.SecondaryControlHeight}"
-            IsChecked="{Binding ShowContext, Mode=TwoWay}"
-          />
-        </DockPanel>
-        <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto" Margin="0,0,5,0">
-          <views:SearchBar DataContext="{Binding }" />
-        </Grid>
-        <StackPanel
-          Grid.Row="2"
-          Grid.ColumnSpan="2"
-          x:Name="ElasticTimeRangePanel"
-          VerticalAlignment="Center"
-          Margin="4,0,4,4"
-          IsVisible="{Binding IsElasticSelected}"
-        >
           <Button
-            x:Name="ElasticTimeRangeButton"
-            Content="Time range…"
-            AutomationProperties.Name="Elastic log time range"
+            x:Name="SettingsButton"
+            Grid.Column="5"
+            Classes="icon"
+            Command="{Binding ToggleSettingsCommand}"
+            ToolTip.Tip="Open settings"
+            AutomationProperties.Name="Open settings"
           >
-            <Button.Flyout>
-              <Flyout>
-                <ScrollViewer MaxHeight="570" HorizontalScrollBarVisibility="Disabled">
-                  <StackPanel Spacing="8" Width="390">
-                    <TextBlock Text="Log time range" FontWeight="SemiBold" />
-                    <TextBlock Text="Preset" />
-                    <ComboBox
-                      x:Name="ElasticPresetPicker"
-                      ItemsSource="{Binding ElasticPresets}"
-                      SelectedIndex="{Binding ElasticPresetIndex, Mode=TwoWay}"
-                      HorizontalAlignment="Stretch"
-                      AutomationProperties.Name="Log time range preset"
-                    />
-                    <TextBlock Text="Input and interval display time zone" />
-                    <ComboBox
-                      x:Name="ElasticZonePicker"
-                      ItemsSource="{Binding ElasticInputZones}"
-                      SelectedItem="{Binding ElasticInputZone, Mode=TwoWay}"
-                      HorizontalAlignment="Stretch"
-                      AutomationProperties.Name="Range input and display time zone"
-                    />
-                    <TextBlock
-                      Text="Local uses this computer’s time zone. Log message timestamps are unchanged."
-                      TextWrapping="Wrap"
-                      FontSize="12"
-                    />
-                    <TextBlock Text="From (inclusive)" />
-                    <StackPanel Spacing="4">
-                      <DatePicker
-                        x:Name="ElasticFromDatePicker"
-                        SelectedDate="{Binding ElasticFromDate, Mode=TwoWay}"
-                        MonthFormat="MM"
-                        DayFormat="dd"
-                        YearFormat="yyyy"
-                        HorizontalAlignment="Stretch"
-                        AutomationProperties.Name="From date"
-                      />
-                      <TimePicker
-                        x:Name="ElasticFromTimePicker"
-                        HorizontalAlignment="Stretch"
-                        SelectedTime="{Binding ElasticFromTime, Mode=TwoWay}"
-                        ClockIdentifier="24HourClock"
-                        UseSeconds="True"
-                        AutomationProperties.Name="From time"
-                      />
-                    </StackPanel>
-                    <CheckBox
-                      x:Name="ElasticToNowCheckBox"
-                      Content="To now (live logs)"
-                      IsChecked="{Binding ElasticToNow, Mode=TwoWay}"
-                    />
-                    <TextBlock Text="To (inclusive)" />
-                    <StackPanel Spacing="4" IsEnabled="{Binding !ElasticToNow}">
-                      <DatePicker
-                        x:Name="ElasticToDatePicker"
-                        SelectedDate="{Binding ElasticToDate, Mode=TwoWay}"
-                        MonthFormat="MM"
-                        DayFormat="dd"
-                        YearFormat="yyyy"
-                        HorizontalAlignment="Stretch"
-                        AutomationProperties.Name="To date"
-                      />
-                      <TimePicker
-                        x:Name="ElasticToTimePicker"
-                        HorizontalAlignment="Stretch"
-                        SelectedTime="{Binding ElasticToTime, Mode=TwoWay}"
-                        ClockIdentifier="24HourClock"
-                        UseSeconds="True"
-                        AutomationProperties.Name="To time"
-                      />
-                    </StackPanel>
-                    <TextBlock Text="{Binding ElasticDraftStatus}" TextWrapping="Wrap" />
-                    <TextBlock
-                      Text="{Binding ElasticAppliedRange}"
-                      TextWrapping="Wrap"
-                      FontSize="12"
-                    />
-                    <TextBlock
-                      Text="{Binding ElasticRangeStatus}"
-                      TextWrapping="Wrap"
-                      FontSize="12"
-                    />
-                    <TextBlock
-                      Text="Presets start at Apply; live logs append from that interval. Fixed-end intervals load once."
-                      TextWrapping="Wrap"
-                      FontSize="12"
-                    />
-                    <TextBlock
-                      Text="{Binding FileError}"
-                      IsVisible="{Binding HasFileError}"
-                      TextWrapping="Wrap"
-                      Foreground="{DynamicResource TextBrush}"
-                    />
-                    <Button
-                      x:Name="ApplyElasticTimeRangeButton"
-                      Content="Apply"
-                      Command="{Binding ApplyElasticTimeRangeCommand}"
-                      Classes="primary"
-                    />
-                  </StackPanel>
-                </ScrollViewer>
-              </Flyout>
-            </Button.Flyout>
+            <i:Icon Value="mdi-cog" Foreground="{DynamicResource AccentBrush}" />
           </Button>
-          <TextBlock
-            x:Name="ElasticAppliedSummary"
-            Text="{Binding ElasticAppliedRange}"
-            TextWrapping="Wrap"
-            FontSize="12"
-          />
-          <TextBlock Text="{Binding ElasticRangeStatus}" TextWrapping="Wrap" FontSize="12" />
-        </StackPanel>
-      </Grid>
-      <views:FileStrip Grid.Column="0" Grid.Row="1" />
-      <views:WorkspaceError Grid.Column="0" Grid.Row="2" />
-      <views:LogWorkspace Grid.Column="0" Grid.Row="3" />
+        </Grid>
+      </Border>
+      <SplitView
+        x:Name="ShellSplitView"
+        Grid.Row="1"
+        IsPaneOpen="{Binding SidebarPaneOpen, Mode=TwoWay}"
+        DisplayMode="{Binding SidebarDisplayMode}"
+        OpenPaneLength="{Binding SidebarWidth}"
+        CompactPaneLength="0"
+        PaneBackground="{DynamicResource SurfaceAltBrush}"
+      >
+        <SplitView.Pane>
+          <Grid ColumnDefinitions="*,4">
+            <views:SourceSidebar />
+            <Thumb
+              x:Name="SidebarResizeThumb"
+              Grid.Column="1"
+              Cursor="SizeWestEast"
+              Background="{DynamicResource BorderBrush}"
+              DragDelta="OnSidebarResize"
+              AutomationProperties.Name="Resize sidebar"
+            />
+          </Grid>
+        </SplitView.Pane>
+        <Grid RowDefinitions="Auto,Auto,*">
+          <views:SearchBar Grid.Row="0" />
+          <views:WorkspaceError Grid.Row="1" />
+          <views:LogWorkspace Grid.Row="2" />
+        </Grid>
+      </SplitView>
     </Grid>
   </dialogHost:DialogHost>
 </Window>

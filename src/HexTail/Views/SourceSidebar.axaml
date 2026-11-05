@@ -1,0 +1,185 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTail.ViewModels"
+  xmlns:ic="https://github.com/projektanker/icons.avalonia"
+  xmlns:i="using:Avalonia.Xaml.Interactivity"
+  xmlns:behaviors="using:HexTail.Behaviors"
+  x:Class="HexTail.Views.SourceSidebar"
+  x:DataType="vm:MainWindowViewModel"
+  AutomationProperties.Name="Sources"
+>
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="8" Spacing="2">
+      <Grid ColumnDefinitions="*,Auto" Margin="4,4,0,2">
+        <TextBlock Text="FILES" Classes="sidebar-heading" />
+        <Button
+          x:Name="SidebarOpenFileButton"
+          Grid.Column="1"
+          Classes="icon tab-close"
+          Width="24"
+          Height="24"
+          FontSize="16"
+          Command="{Binding OpenCommand}"
+          ToolTip.Tip="Open log files (Ctrl+O)"
+          AutomationProperties.Name="Open log files from sidebar"
+        >
+          <ic:Icon Value="mdi-plus" />
+        </Button>
+      </Grid>
+      <TextBlock
+        x:Name="NoFilesHint"
+        Text="No files open"
+        Classes="hint"
+        Margin="6,2"
+        IsVisible="{Binding !HasFileTabs}"
+      />
+      <ItemsControl x:Name="FileSourceList" ItemsSource="{Binding FileTabs}">
+        <i:Interaction.Behaviors>
+          <behaviors:ListReorderBehavior />
+        </i:Interaction.Behaviors>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:FileTabViewModel">
+            <Border
+              Classes="source-row"
+              Classes.selected="{Binding IsSelected}"
+              ToolTip.Tip="{Binding SourceDetails}"
+            >
+              <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="4">
+                <Ellipse
+                  Classes="source-status"
+                  Classes.connected="{Binding !HasError}"
+                  Classes.failed="{Binding HasError}"
+                  ToolTip.Tip="{Binding Error}"
+                />
+                <Button
+                  Grid.Column="1"
+                  Classes="source-select"
+                  Command="{Binding $parent[UserControl].DataContext.SelectFileCommand}"
+                  CommandParameter="{Binding}"
+                  AutomationProperties.Name="{Binding SourceDetails, StringFormat='Select {0}'}"
+                >
+                  <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                </Button>
+                <TextBlock Grid.Column="2" Text="{Binding LineCountText}" Classes="source-count" />
+                <Button
+                  Grid.Column="3"
+                  Classes="icon tab-close"
+                  Width="22"
+                  Height="22"
+                  FontSize="14"
+                  Command="{Binding $parent[UserControl].DataContext.CloseFileCommand}"
+                  CommandParameter="{Binding}"
+                  ToolTip.Tip="{Binding SourceDetails, StringFormat='Close {0}'}"
+                  AutomationProperties.Name="{Binding SourceDetails, StringFormat='Close {0}'}"
+                >
+                  <ic:Icon Value="mdi-close" />
+                </Button>
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <Grid ColumnDefinitions="*,Auto" Margin="4,12,0,2">
+        <TextBlock Text="ELASTIC" Classes="sidebar-heading" />
+        <Button
+          x:Name="SidebarElasticSetupButton"
+          Grid.Column="1"
+          Classes="icon tab-close"
+          Width="24"
+          Height="24"
+          FontSize="16"
+          Command="{Binding SetUpElasticCommand}"
+          ToolTip.Tip="Set up Elastic"
+          AutomationProperties.Name="Set up Elastic from sidebar"
+        >
+          <ic:Icon Value="mdi-plus" />
+        </Button>
+      </Grid>
+      <TextBlock
+        x:Name="ElasticEmptyHint"
+        Text="No Elastic servers"
+        Classes="hint"
+        Margin="6,2"
+        IsVisible="{Binding !HasElasticSources}"
+      />
+      <ItemsControl x:Name="ElasticGroupList" ItemsSource="{Binding ElasticConnectionGroups}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:ElasticConnectionGroupViewModel">
+            <StackPanel Spacing="1" Margin="0,2">
+              <Grid
+                ColumnDefinitions="Auto,*,Auto"
+                ColumnSpacing="6"
+                Margin="6,4,4,2"
+                ToolTip.Tip="{Binding StatusMessage}"
+              >
+                <Ellipse
+                  Classes="source-status"
+                  Classes.connected="{Binding IsConnected}"
+                  Classes.failed="{Binding IsFailed}"
+                />
+                <TextBlock
+                  Grid.Column="1"
+                  Text="{Binding Name}"
+                  FontWeight="SemiBold"
+                  TextTrimming="CharacterEllipsis"
+                />
+                <TextBlock Grid.Column="2" Text="{Binding StatusText}" Classes="source-count" />
+              </Grid>
+              <ItemsControl ItemsSource="{Binding Sources}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ElasticSourceOptionViewModel">
+                    <StackPanel>
+                      <Border
+                        Classes="source-row"
+                        Classes.selected="{Binding IsSelected}"
+                        Margin="12,0,0,0"
+                        ToolTip.Tip="{Binding ToolTip}"
+                      >
+                        <Grid ColumnDefinitions="*,Auto">
+                          <Button
+                            Classes="source-select"
+                            Command="{Binding ActivateCommand}"
+                            AutomationProperties.Name="{Binding DisplayName, StringFormat='Open {0}'}"
+                          >
+                            <TextBlock
+                              Text="{Binding ShortName}"
+                              Classes.muted="{Binding !IsOpen}"
+                              TextTrimming="CharacterEllipsis"
+                            />
+                          </Button>
+                          <Button
+                            Grid.Column="1"
+                            Classes="icon tab-close"
+                            Width="22"
+                            Height="22"
+                            FontSize="14"
+                            IsVisible="{Binding IsOpen}"
+                            Command="{Binding CloseCommand}"
+                            ToolTip.Tip="{Binding DisplayName, StringFormat='Close {0}'}"
+                            AutomationProperties.Name="{Binding DisplayName, StringFormat='Close {0}'}"
+                          >
+                            <ic:Icon Value="mdi-close" />
+                          </Button>
+                        </Grid>
+                      </Border>
+                      <TextBlock
+                        Text="{Binding OpenError}"
+                        IsVisible="{Binding HasOpenError}"
+                        Classes="error"
+                        TextWrapping="Wrap"
+                        FontSize="12"
+                        Margin="16,0,0,4"
+                      />
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

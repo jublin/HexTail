@@ -3,6 +3,7 @@ using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -29,6 +30,9 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         "#F97316",
         "#E879F9",
     ];
+    internal const double NarrowShellWidth = 1000;
+    internal const double MinSidebarWidth = 160;
+    internal const double MaxSidebarWidth = 480;
     private readonly AppState _state;
     private readonly string[] _startupPaths;
     private readonly IScheduler _scheduler;
@@ -56,6 +60,10 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private bool _elasticRangeDirty;
     private int _elasticPresetIndex;
     private AppTimeZoneMode _elasticInputZone = AppTimeZoneMode.Utc;
+    private bool _sidebarOpen = true;
+    private bool _narrowShell;
+    private bool _narrowPaneOpen;
+    private double _sidebarWidth = 240;
 
     public MainWindowViewModel(
         AppState state,
@@ -89,6 +97,13 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             {
                 Settings.SectionIndex = 2;
                 SettingsOpen = true;
+            },
+            _scheduler
+        );
+        ToggleSidebarCommand = ReactiveCommand.Create(
+            () =>
+            {
+                SidebarPaneOpen = !SidebarPaneOpen;
             },
             _scheduler
         );
@@ -161,6 +176,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<IEnumerable<string>, Unit> OpenPathsCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSettingsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleSidebarCommand { get; }
     public ReactiveCommand<Unit, Unit> SetUpElasticCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> SelectFileCommand { get; }
     public ReactiveCommand<Unit, Unit> ApplyElasticTimeRangeCommand { get; }
@@ -480,6 +496,70 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         set => this.RaiseAndSetIfChanged(ref _selectedViewIndex, Math.Max(0, value));
     }
 
+    /// <summary>Persisted preference for wide windows.</summary>
+    public bool SidebarOpen
+    {
+        get => _sidebarOpen;
+        set
+        {
+            if (_sidebarOpen == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _sidebarOpen, value);
+            if (!_narrowShell)
+                this.RaisePropertyChanged(nameof(SidebarPaneOpen));
+        }
+    }
+
+    /// <summary>Effective pane state: the preference when wide, a transient overlay when narrow.</summary>
+    public bool SidebarPaneOpen
+    {
+        get => _narrowShell ? _narrowPaneOpen : _sidebarOpen;
+        set
+        {
+            if (_narrowShell)
+            {
+                if (_narrowPaneOpen == value)
+                    return;
+                _narrowPaneOpen = value;
+                this.RaisePropertyChanged();
+            }
+            else
+                SidebarOpen = value;
+        }
+    }
+
+    public double SidebarWidth
+    {
+        get => _sidebarWidth;
+        set =>
+            this.RaiseAndSetIfChanged(
+                ref _sidebarWidth,
+                Math.Clamp(value, MinSidebarWidth, MaxSidebarWidth)
+            );
+    }
+
+    public bool IsNarrowShell => _narrowShell;
+    public SplitViewDisplayMode SidebarDisplayMode =>
+        _narrowShell ? SplitViewDisplayMode.Overlay : SplitViewDisplayMode.Inline;
+
+    internal void SetShellWidth(double width)
+    {
+        var narrow = width < NarrowShellWidth;
+        if (narrow == _narrowShell)
+            return;
+        _narrowShell = narrow;
+        _narrowPaneOpen = false;
+        this.RaisePropertyChanged(nameof(IsNarrowShell));
+        this.RaisePropertyChanged(nameof(SidebarDisplayMode));
+        this.RaisePropertyChanged(nameof(SidebarPaneOpen));
+    }
+
+    internal void DismissNarrowSidebar()
+    {
+        if (_narrowShell)
+            SidebarPaneOpen = false;
+    }
+
     public async Task InitializeAsync()
     {
         if (_started)
@@ -490,6 +570,9 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         try
         {
             await _state.RestoreAsync();
+            SidebarOpen = !_state.Window.SidebarCollapsed;
+            if (_state.Window.SidebarWidth > 0)
+                SidebarWidth = _state.Window.SidebarWidth;
             if (Dispatcher.UIThread.CheckAccess())
                 ThemeManager.Apply(_state.Settings.Theme);
             else
@@ -674,6 +757,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     {
         _state.SelectFile(file.Model);
         SelectedViewIndex = 0;
+        DismissNarrowSidebar();
     }
 
     private void DrainTailer()

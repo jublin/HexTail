@@ -27,19 +27,6 @@ namespace HexTail.Tests.Ui;
 public sealed class MainWindowInteractionTests
 {
     [AvaloniaFact]
-    public void ElasticToolbarButtonIsHiddenWhenNoSourcesAreConfigured()
-    {
-        var window = TestWindow.Create(out var viewModel);
-        window.Show();
-
-        var button = window.FindControl<CommandBarButton>("ElasticSourcesButton")!;
-
-        Assert.False(viewModel.HasElasticSources);
-        Assert.False(button.IsVisible);
-        window.Close();
-    }
-
-    [AvaloniaFact]
     public void SettingsModalClosesWhenTheBackdropIsClicked()
     {
         var window = TestWindow.Create(out var viewModel);
@@ -118,8 +105,8 @@ public sealed class MainWindowInteractionTests
                 var name in new[]
                 {
                     "SettingsButton",
-                    "SaveSessionButton",
                     "OpenFileButton",
+                    "SidebarToggleButton",
                     "AutoScrollToggle",
                     "InlineContextToggle",
                     "ElasticTimeRangeButton",
@@ -283,7 +270,7 @@ public sealed class MainWindowInteractionTests
             .Select(control => control.GetType().Name)
             .ToHashSet();
 
-        Assert.Contains("FileStrip", controlNames);
+        Assert.Contains("SourceSidebar", controlNames);
         Assert.Contains("WorkspaceError", controlNames);
         Assert.Contains("LogWorkspace", controlNames);
         window.Close();
@@ -308,11 +295,9 @@ public sealed class MainWindowInteractionTests
                 .OfType<TabControl>()
                 .Where(tab => tab.DataContext is MainWindowViewModel or FileTabViewModel)
                 .ToArray();
-            Assert.Equal(2, tabs.Length);
-            Assert.All(tabs, tab => Assert.Equal(typeof(TabControl), tab.GetType()));
-            Assert.NotNull(
-                tabs.Single(tab => tab.DataContext is MainWindowViewModel).ContentTemplate
-            );
+            var tab = Assert.Single(tabs);
+            Assert.IsType<FileTabViewModel>(tab.DataContext);
+            Assert.NotNull(tab.ContentTemplate);
             window.Close();
         }
         finally
@@ -458,7 +443,7 @@ public sealed class MainWindowInteractionTests
         var window = TestWindow.Create(out var viewModel);
         window.Show();
         Dispatcher.UIThread.RunJobs();
-        var button = window.FindControl<CommandBarButton>("SettingsButton")!;
+        var button = window.FindControl<Button>("SettingsButton")!;
 
         Assert.True(button.Command!.CanExecute(button.CommandParameter));
         button.Command.Execute(button.CommandParameter);
@@ -746,6 +731,7 @@ public sealed class MainWindowInteractionTests
         try
         {
             var window = TestWindow.Create(out var viewModel);
+            window.Width = 1280;
             window.Show();
             await viewModel.OpenPathsCommand.Execute([firstPath, secondPath]);
             Dispatcher.UIThread.RunJobs();
@@ -754,7 +740,7 @@ public sealed class MainWindowInteractionTests
             var tabs = window
                 .GetVisualDescendants()
                 .OfType<Border>()
-                .Where(border => border.Classes.Contains("file-tab"))
+                .Where(border => border.Classes.Contains("source-row"))
                 .ToDictionary(border => Assert.IsType<FileTabViewModel>(border.DataContext));
 
             Click(
@@ -771,15 +757,6 @@ public sealed class MainWindowInteractionTests
 
             Assert.Contains("selected", tabs[first].Classes);
             Assert.DoesNotContain("selected", tabs[second].Classes);
-            Assert.NotNull(tabs[first].Background);
-            Assert.Equal(new Thickness(2), tabs[first].BorderThickness);
-            Assert.Equal(
-                "#FF28D7FE",
-                Assert
-                    .IsType<SolidColorBrush>(tabs[first].BorderBrush)
-                    .Color.ToString()
-                    .ToUpperInvariant()
-            );
             Assert.Equal(firstPath, ToolTip.GetTip(tabs[first]));
             var closeButton = window
                 .GetVisualDescendants()
@@ -807,6 +784,7 @@ public sealed class MainWindowInteractionTests
         try
         {
             var window = TestWindow.Create(out var viewModel);
+            window.Width = 1280;
             window.Show();
             await viewModel.OpenPathsCommand.Execute([firstPath, secondPath]);
             Dispatcher.UIThread.RunJobs();
@@ -867,6 +845,7 @@ public sealed class MainWindowInteractionTests
             var second = viewModel.Files[1];
             viewModel.State.SelectFile(first.Model);
             Dispatcher.UIThread.RunJobs();
+            window.Width = 1280;
             window.Show();
             Dispatcher.UIThread.RunJobs();
             var firstButton = window

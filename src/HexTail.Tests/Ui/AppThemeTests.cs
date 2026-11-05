@@ -133,7 +133,7 @@ public sealed class AppThemeTests
         var app = Assert.IsType<App>(Avalonia.Application.Current);
         var textBox = new TextBox { PlaceholderText = "Search logs", Width = 300 };
         var checkBox = new CheckBox { Content = "Include field", IsChecked = true };
-        var selectedTab = new Border { Classes = { "file-tab", "selected" } };
+        var selectedTab = new Border { Classes = { "source-row", "selected" } };
         var window = new Window
         {
             Content = new StackPanel { Children = { textBox, checkBox, selectedTab } },
@@ -151,7 +151,7 @@ public sealed class AppThemeTests
                     app.TryGetResource("SystemAccentColor", ThemeVariant.Dark, out var nativeAccent)
                 );
                 Assert.Equal(accent, Assert.IsType<Color>(nativeAccent));
-                Assert.Equal(new Avalonia.Thickness(2), selectedTab.BorderThickness);
+                Assert.Equal(new Avalonia.Thickness(2, 0, 0, 0), selectedTab.BorderThickness);
                 Assert.Equal(accent, Assert.IsType<SolidColorBrush>(selectedTab.BorderBrush).Color);
 
                 Assert.True(

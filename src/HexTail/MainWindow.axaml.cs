@@ -62,6 +62,7 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, OnDrop);
         Opened += OnOpened;
         Closed += OnClosed;
+        SizeChanged += (_, args) => ViewModel.SetShellWidth(args.NewSize.Width);
     }
 
     internal MainWindowViewModel ViewModel { get; }
@@ -132,6 +133,8 @@ public partial class MainWindow : Window
 
     private async void OnOpened(object? sender, EventArgs e)
     {
+        if (ClientSize.Width > 0)
+            ViewModel.SetShellWidth(ClientSize.Width);
         await InitializeOnUiThreadAsync();
         if (ViewModel.SettingsOpen)
             UpdateSettingsFocus();
@@ -156,11 +159,15 @@ public partial class MainWindow : Window
                 X = Position.X,
                 Y = Position.Y,
                 ContextPaneSize = ViewModel.State.Window.ContextPaneSize,
-                VerticalFileTabs = ViewModel.State.Window.VerticalFileTabs,
+                SidebarCollapsed = !ViewModel.SidebarOpen,
+                SidebarWidth = ViewModel.SidebarWidth,
             }
         );
         await ViewModel.DisposeAsync();
     }
+
+    private void OnSidebarResize(object? sender, VectorEventArgs e) =>
+        ViewModel.SidebarWidth += e.Vector.X;
 
     private void ApplyWindowState()
     {
@@ -224,6 +231,9 @@ public partial class MainWindow : Window
                 break;
             case Key.F:
                 this.GetVisualDescendants().OfType<SearchBar>().FirstOrDefault()?.FocusQuery();
+                break;
+            case Key.B:
+                ViewModel.ToggleSidebarCommand.Execute().Subscribe();
                 break;
             case Key.S:
                 ViewModel.SaveCommand.Execute().Subscribe();

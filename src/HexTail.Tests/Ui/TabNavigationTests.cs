@@ -19,7 +19,7 @@ namespace HexTail.Tests.Ui;
 public sealed class TabNavigationTests
 {
     [AvaloniaFact]
-    public async Task TenLongTabsCanBeSelectedReorderedAndClosedAtMinimumWidth()
+    public async Task TenLongFileNamesFitTheSidebarAndCanBeSelectedAndClosed()
     {
         var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(directory);
@@ -32,65 +32,33 @@ public sealed class TabNavigationTests
         var window = TestWindow.Create(out var workspace);
         try
         {
-            window.Width = 720;
-            window.Height = 480;
+            window.Width = 1280;
+            window.Height = 720;
             await workspace.OpenPathsCommand.Execute(paths);
             window.Show();
             Dispatcher.UIThread.RunJobs();
-            var strip = window.GetVisualDescendants().OfType<FileStrip>().Single();
-            var picker = strip.FindControl<ComboBox>("FileTabPicker");
-            Assert.NotNull(picker);
-            Assert.Equal(10, picker.ItemCount);
-            Assert.True(picker.Bounds.Width > 0);
-            Assert.True(
-                picker.TranslatePoint(default, window)!.Value.X + picker.Bounds.Width
-                    <= window.Bounds.Width
-            );
-            var original = workspace.Files.ToArray();
-            foreach (var file in original)
+            var sidebar = window.GetVisualDescendants().OfType<SourceSidebar>().Single();
+            var selectButtons = sidebar
+                .GetVisualDescendants()
+                .OfType<Button>()
+                .Where(button => button.Classes.Contains("source-select"))
+                .ToArray();
+            Assert.Equal(10, selectButtons.Length);
+            foreach (var button in selectButtons)
             {
-                picker.SelectedItem = file;
+                var right = button
+                    .TranslatePoint(new Point(button.Bounds.Width, 0), sidebar)!
+                    .Value.X;
+                Assert.True(right <= sidebar.Bounds.Width, "row text must trim, not overflow");
+                button.Command!.Execute(button.CommandParameter);
                 Dispatcher.UIThread.RunJobs();
-                Assert.Same(file, workspace.SelectedFile);
+                Assert.Same(button.DataContext, workspace.SelectedFile);
             }
 
-            var selected = workspace.SelectedFile!;
-            selected.FollowAll = false;
-            var tabs = strip.GetVisualDescendants().OfType<TabControl>().Single();
-            var header = Assert.IsType<TabItem>(tabs.ContainerFromIndex(9));
-            header.RaiseEvent(
-                new KeyEventArgs
-                {
-                    RoutedEvent = InputElement.KeyDownEvent,
-                    Key = Key.Left,
-                    KeyModifiers = KeyModifiers.Alt,
-                }
-            );
-            Dispatcher.UIThread.RunJobs();
-            Assert.Same(selected, workspace.Files[8]);
-            Assert.Same(selected, workspace.SelectedFile);
-            Assert.False(selected.FollowAll);
-            Assert.Same(selected, picker.SelectedItem);
-
-            var close = strip.FindControl<Button>("CloseSelectedFile")!;
-            foreach (var file in original)
+            foreach (var file in workspace.FileTabs.ToArray())
             {
-                picker.SelectedItem = file;
-                Dispatcher.UIThread.RunJobs();
-                var point = close
-                    .TranslatePoint(
-                        new Point(close.Bounds.Width / 2, close.Bounds.Height / 2),
-                        window
-                    )!
-                    .Value;
-                window.MouseDown(point, MouseButton.Left, RawInputModifiers.None);
-                window.MouseUp(point, MouseButton.Left, RawInputModifiers.None);
-                for (var attempt = 0; attempt < 50 && workspace.Files.Contains(file); attempt++)
-                {
-                    await Task.Delay(10);
-                    Dispatcher.UIThread.RunJobs();
-                }
-                Assert.DoesNotContain(file, workspace.Files);
+                await workspace.CloseFileCommand.Execute(file);
+                await UiWait.Until(() => !workspace.Files.Contains(file));
             }
         }
         finally

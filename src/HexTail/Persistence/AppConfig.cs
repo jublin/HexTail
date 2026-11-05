@@ -52,7 +52,8 @@ public sealed class PersistedSearch
 
 public sealed class AppWindowState
 {
-    public bool VerticalFileTabs { get; init; }
+    public bool SidebarCollapsed { get; init; }
+    public double SidebarWidth { get; init; }
     public int ContextPaneSize { get; init; } = 300;
     public double Width { get; init; } = 1280;
     public double Height { get; init; } = 800;
