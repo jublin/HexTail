@@ -105,6 +105,7 @@ public sealed class MainWindowInteractionTests
                 var name in new[]
                 {
                     "SettingsButton",
+                    "CommandPaletteButton",
                     "OpenFileButton",
                     "SidebarToggleButton",
                     "AutoScrollToggle",

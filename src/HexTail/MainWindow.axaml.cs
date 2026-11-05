@@ -66,6 +66,10 @@ public partial class MainWindow : Window
         Closed += OnClosed;
         SizeChanged += (_, args) => ViewModel.SetShellWidth(args.NewSize.Width);
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+        ViewModel.FocusSearchRequested += (_, _) =>
+            Dispatcher.UIThread.Post(() =>
+                this.GetVisualDescendants().OfType<SearchBar>().FirstOrDefault()?.FocusQuery()
+            );
     }
 
     internal MainWindowViewModel ViewModel { get; }
@@ -215,7 +219,7 @@ public partial class MainWindow : Window
     // before the bubbling OnKeyDown runs, so those two get a tunnel handler.
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
-        if (ViewModel.SettingsOpen || e.Handled)
+        if (ViewModel.SettingsOpen || ViewModel.Palette.IsOpen || e.Handled)
             return;
         var onLogRow =
             e.Key == Key.Space
@@ -245,7 +249,7 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
-        if (ViewModel.SettingsOpen || e.Handled)
+        if (ViewModel.SettingsOpen || ViewModel.Palette.IsOpen || e.Handled)
             return;
 
         var command = ShellShortcuts.Resolve(
@@ -264,6 +268,9 @@ public partial class MainWindow : Window
         var file = ViewModel.SelectedFile;
         switch (command.Action)
         {
+            case ShellAction.CommandPalette:
+                ViewModel.OpenPaletteCommand.Execute().Subscribe();
+                break;
             case ShellAction.OpenFiles:
                 Dispatcher.UIThread.Post(() => ViewModel.OpenCommand.Execute().Subscribe());
                 break;

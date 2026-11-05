@@ -19,8 +19,16 @@
     <SolidColorBrush x:Key="SelectedTabBrush" Color="#28D7FE" />
     <SolidColorBrush x:Key="SuccessBrush" Color="#39E58C" />
     <SolidColorBrush x:Key="ErrorBrush" Color="#FF667A" />
+    <SolidColorBrush x:Key="ScrimBrush" Color="#99000000" />
     <x:Double x:Key="ControlHeight">34</x:Double>
   </Styles.Resources>
+  <Style Selector="Border.palette">
+    <Setter Property="Background" Value="{DynamicResource RaisedBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="12" />
+  </Style>
   <Style Selector="Border.command-bar">
     <Setter Property="Background" Value="{DynamicResource ToolbarBrush}" />
     <Setter Property="Padding" Value="12" />

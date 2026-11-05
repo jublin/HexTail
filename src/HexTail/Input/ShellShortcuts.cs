@@ -6,6 +6,7 @@ internal enum ShellAction
 {
     None,
     OpenFiles,
+    CommandPalette,
     FocusSearch,
     SaveSession,
     ToggleSidebar,
@@ -36,6 +37,8 @@ internal static class ShellShortcuts
         if (primary)
             return key switch
             {
+                Key.K => new(ShellAction.CommandPalette),
+                Key.P when shift => new(ShellAction.CommandPalette),
                 Key.O => new(ShellAction.OpenFiles),
                 Key.F => new(ShellAction.FocusSearch),
                 Key.S => new(ShellAction.SaveSession),

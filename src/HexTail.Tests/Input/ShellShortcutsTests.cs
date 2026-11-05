@@ -6,6 +6,12 @@ namespace HexTail.Tests.Input;
 public sealed class ShellShortcutsTests
 {
     [Theory]
+    [InlineData(Key.K, KeyModifiers.Control, nameof(ShellAction.CommandPalette))]
+    [InlineData(
+        Key.P,
+        KeyModifiers.Control | KeyModifiers.Shift,
+        nameof(ShellAction.CommandPalette)
+    )]
     [InlineData(Key.O, KeyModifiers.Control, nameof(ShellAction.OpenFiles))]
     [InlineData(Key.O, KeyModifiers.Meta, nameof(ShellAction.OpenFiles))]
     [InlineData(Key.F, KeyModifiers.Control, nameof(ShellAction.FocusSearch))]

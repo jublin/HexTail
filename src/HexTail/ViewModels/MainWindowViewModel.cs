@@ -77,6 +77,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         _startPolling = startPolling;
         Settings = new SettingsViewModel(this, _scheduler);
         PickFiles = new Interaction<Unit, IReadOnlyList<string>>(_scheduler);
+        Palette = new CommandPaletteViewModel(BuildPaletteItems);
+        OpenPaletteCommand = ReactiveCommand.Create(Palette.Open, _scheduler);
 
         OpenCommand = ReactiveCommand.CreateFromTask(OpenFilesAsync, _scheduler);
         OpenPathsCommand = ReactiveCommand.CreateFromTask<IEnumerable<string>>(
@@ -179,6 +181,9 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public string ElasticSourceIcon => HasElasticWarning ? "mdi-cloud-alert" : "mdi-cloud-check";
     public SettingsViewModel Settings { get; }
     public Interaction<Unit, IReadOnlyList<string>> PickFiles { get; }
+    public CommandPaletteViewModel Palette { get; }
+    public ReactiveCommand<Unit, Unit> OpenPaletteCommand { get; }
+    internal event EventHandler? FocusSearchRequested;
     public ReactiveCommand<Unit, Unit> OpenCommand { get; }
     public ReactiveCommand<IEnumerable<string>, Unit> OpenPathsCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
@@ -719,6 +724,102 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         {
             SearchError = ex.Message;
         }
+    }
+
+    internal IEnumerable<PaletteItem> BuildPaletteItems()
+    {
+        yield return new("Open files…", "File", "Ctrl+O", async () => await OpenCommand.Execute());
+        yield return new(
+            "Set up Elastic",
+            "Elastic",
+            null,
+            async () => await SetUpElasticCommand.Execute()
+        );
+        yield return new(
+            "Settings",
+            "App",
+            null,
+            async () => await ToggleSettingsCommand.Execute()
+        );
+        yield return new(
+            "Toggle sidebar",
+            "View",
+            "Ctrl+B",
+            async () => await ToggleSidebarCommand.Execute()
+        );
+        yield return new(
+            IsPaused ? "Resume view updates" : "Pause view updates",
+            "View",
+            "Space",
+            async () => await TogglePauseCommand.Execute()
+        );
+        if (SelectedFile is { } file)
+        {
+            yield return new(
+                "Focus search",
+                "Search",
+                "/",
+                () =>
+                {
+                    FocusSearchRequested?.Invoke(this, EventArgs.Empty);
+                    return Task.CompletedTask;
+                }
+            );
+            yield return new(
+                "Follow newest lines",
+                "View",
+                "F",
+                () =>
+                {
+                    file.SelectedView.IsFollowing = true;
+                    return Task.CompletedTask;
+                }
+            );
+            foreach (var view in file.Views)
+                yield return new(
+                    $"View: {view.Header}",
+                    "View",
+                    null,
+                    () =>
+                    {
+                        file.SelectedViewIndex = file.Views.IndexOf(view);
+                        return Task.CompletedTask;
+                    }
+                );
+        }
+        if (IsElasticSelected)
+            foreach (
+                var (label, expression) in new[]
+                {
+                    ("last 15 min", "now-15m"),
+                    ("last hour", "now-1h"),
+                    ("last 24 hours", "now-24h"),
+                }
+            )
+                yield return new(
+                    $"Time range: {label}",
+                    "Elastic",
+                    null,
+                    async () => await ApplyRangePresetCommand.Execute(expression)
+                );
+        foreach (var tab in Files)
+            yield return new(
+                tab.DisplayName,
+                "Open source",
+                null,
+                () =>
+                {
+                    SelectFile(tab);
+                    return Task.CompletedTask;
+                }
+            );
+        foreach (var option in ElasticSources.Where(option => !option.IsOpen))
+            yield return new(
+                option.DisplayName,
+                "Elastic source",
+                null,
+                async () => await option.ActivateCommand.Execute()
+            );
     }
 
     internal void SelectFile(FileTabViewModel file)
