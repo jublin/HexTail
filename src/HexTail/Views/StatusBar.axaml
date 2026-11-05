@@ -12,7 +12,7 @@
     BorderThickness="0,1,0,0"
     Padding="10,2"
   >
-    <Grid x:Name="StatusGrid" ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="16">
+    <Grid x:Name="StatusGrid" ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="16">
       <TextBlock x:Name="SourceSummary" Classes="status" Text="{Binding SourceSummary}" />
       <TextBlock
         x:Name="ResultCount"
@@ -25,9 +25,11 @@
         x:Name="StatusRange"
         Grid.Column="3"
         Classes="status"
+        HorizontalAlignment="Right"
         Text="{Binding ElasticRangeStatus}"
         IsVisible="{Binding IsElasticSelected}"
         TextTrimming="CharacterEllipsis"
+        ToolTip.Tip="{Binding ElasticRangeStatus}"
       />
       <ComboBox
         x:Name="DisplayZonePicker"
