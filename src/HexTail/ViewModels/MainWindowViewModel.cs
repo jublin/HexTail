@@ -36,6 +36,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private readonly AppState _state;
     private readonly string[] _startupPaths;
     private readonly IScheduler _scheduler;
+    private bool _isPaused;
     private readonly bool _startPolling;
     private readonly CompositeDisposable _subscriptions = new();
     private FileTabViewModel? _selectedFile;
@@ -102,6 +103,13 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             () =>
             {
                 SidebarPaneOpen = !SidebarPaneOpen;
+            },
+            _scheduler
+        );
+        TogglePauseCommand = ReactiveCommand.Create(
+            () =>
+            {
+                IsPaused = !IsPaused;
             },
             _scheduler
         );
@@ -176,6 +184,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSidebarCommand { get; }
+    public ReactiveCommand<Unit, Unit> TogglePauseCommand { get; }
     public ReactiveCommand<Unit, Unit> SetUpElasticCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> SelectFileCommand { get; }
     public ReactiveCommand<Unit, Unit> ApplyElasticTimeRangeCommand { get; }
@@ -204,6 +213,19 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     }
 
     public bool HasFile => SelectedFile is not null;
+
+    public bool IsPaused
+    {
+        get => _isPaused;
+        set
+        {
+            if (_isPaused == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _isPaused, value);
+            if (!value)
+                SelectedFile?.SelectedView.Sync();
+        }
+    }
 
     public string SourceSummary
     {

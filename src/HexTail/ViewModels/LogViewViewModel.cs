@@ -22,6 +22,9 @@ internal sealed class LogViewViewModel : ReactiveObject
     private int? _lastExpandedLine;
     private int _lastViewsVersion;
     private ViewSnapshot? _lastSnapshot;
+    internal const int UnseenScanLimit = 10_000;
+    private Line? _seenAnchor;
+    private int _unseenCount;
 
     internal LogViewViewModel(MainWindowViewModel owner, FileTabViewModel file, Search? search)
     {
@@ -30,6 +33,7 @@ internal sealed class LogViewViewModel : ReactiveObject
         Search = search;
         SelectLineCommand = ReactiveCommand.Create<Line>(line => _file.SelectLine(line));
         ToggleExpandedCommand = ReactiveCommand.Create<Line>(line => _file.ToggleExpanded(line));
+        JumpToLatestCommand = ReactiveCommand.Create(JumpToLatest, owner.Scheduler);
     }
 
     public Search? Search { get; }
@@ -65,6 +69,14 @@ internal sealed class LogViewViewModel : ReactiveObject
     public AvaloniaList<LogLineViewModel> ContextLines { get; } = [];
     public ReactiveCommand<Line, Unit> SelectLineCommand { get; }
     public ReactiveCommand<Line, Unit> ToggleExpandedCommand { get; }
+    public ReactiveCommand<Unit, Unit> JumpToLatestCommand { get; }
+
+    public int UnseenCount => _unseenCount;
+    public bool HasUnseen => _unseenCount > 0;
+    public string UnseenLabel =>
+        _unseenCount >= UnseenScanLimit ? $"↓ {UnseenScanLimit:N0}+ new lines"
+        : _unseenCount == 1 ? "↓ 1 new line"
+        : $"↓ {_unseenCount:N0} new lines";
     public bool ShowContext
     {
         get => _file.Model.ShowContext;
@@ -100,8 +112,40 @@ internal sealed class LogViewViewModel : ReactiveObject
                 _ = _owner.SetFollowAllAsync(_file, value);
             else
                 _ = _file.SetSearchFollowAsync(Search, value);
+            if (!value)
+                _seenAnchor = Lines.Count > 0 ? Lines[^1].Line : null;
             this.RaisePropertyChanged(nameof(IsFollowing));
         }
+    }
+
+    private void JumpToLatest()
+    {
+        _owner.IsPaused = false;
+        IsFollowing = true;
+        Sync();
+    }
+
+    private void UpdateUnseen(IReadOnlyList<Line> lines, bool frozen)
+    {
+        var count = 0;
+        if (!frozen && IsFollowing)
+            _seenAnchor = lines.Count > 0 ? lines[^1] : null;
+        else
+        {
+            _seenAnchor ??= Lines.Count > 0 ? Lines[^1].Line : null;
+            for (var index = lines.Count - 1; index >= 0 && count < UnseenScanLimit; index--)
+            {
+                if (ReferenceEquals(lines[index], _seenAnchor))
+                    break;
+                count++;
+            }
+        }
+        if (count == _unseenCount)
+            return;
+        _unseenCount = count;
+        this.RaisePropertyChanged(nameof(UnseenCount));
+        this.RaisePropertyChanged(nameof(HasUnseen));
+        this.RaisePropertyChanged(nameof(UnseenLabel));
     }
 
     public void Sync(bool resetItems = false)
@@ -124,7 +168,10 @@ internal sealed class LogViewViewModel : ReactiveObject
             InvalidateRows(ContextLines);
         }
         var lines = LinesFor();
-        SyncRows(Lines, lines, isContext: false, resetItems, refreshRows);
+        var frozen = _owner.IsPaused && Lines.Count > 0;
+        if (!frozen)
+            SyncRows(Lines, lines, isContext: false, resetItems, refreshRows);
+        UpdateUnseen(lines, frozen);
 
         var context = _file.Model.ShowContext ? ContextLinesFor() : [];
         SyncRows(ContextLines, context, isContext: true, resetItems, refreshRows);

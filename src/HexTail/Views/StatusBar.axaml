@@ -12,14 +12,34 @@
     BorderThickness="0,1,0,0"
     Padding="10,2"
   >
-    <Grid x:Name="StatusGrid" ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="16">
-      <TextBlock x:Name="SourceSummary" Classes="status" Text="{Binding SourceSummary}" />
+    <Grid x:Name="StatusGrid" ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="12">
+      <TextBlock
+        x:Name="SourceSummary"
+        Classes="status"
+        Text="{Binding SourceSummary}"
+        TextTrimming="CharacterEllipsis"
+        MaxWidth="130"
+        ToolTip.Tip="{Binding SourceSummary}"
+      />
       <TextBlock
         x:Name="ResultCount"
         Grid.Column="1"
         Classes="status"
         Text="{Binding SelectedFile.SelectedView.ResultCount}"
         IsVisible="{Binding HasFile}"
+        TextTrimming="CharacterEllipsis"
+        MaxWidth="200"
+        ToolTip.Tip="{Binding SelectedFile.SelectedView.ResultCount}"
+      />
+      <TextBlock
+        x:Name="PausedIndicator"
+        Grid.Column="2"
+        Classes="status"
+        Foreground="{DynamicResource AccentBrush}"
+        Text="Paused — rows are buffering"
+        IsVisible="{Binding IsPaused}"
+        TextTrimming="CharacterEllipsis"
+        MaxWidth="200"
       />
       <TextBlock
         x:Name="StatusRange"

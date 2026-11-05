@@ -109,6 +109,7 @@ public sealed class MainWindowInteractionTests
                     "SidebarToggleButton",
                     "AutoScrollToggle",
                     "InlineContextToggle",
+                    "PauseToggle",
                     "ElasticTimeRangeButton",
                 }
             )

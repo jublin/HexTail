@@ -37,7 +37,7 @@
         BorderThickness="0,0,0,1"
         Padding="6,4"
       >
-        <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="6">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="6">
           <Button
             x:Name="SidebarToggleButton"
             Classes="icon"
@@ -207,9 +207,21 @@
               </Button.Flyout>
             </Button>
           </StackPanel>
+          <ToggleButton
+            x:Name="PauseToggle"
+            Grid.Column="3"
+            IsChecked="{Binding IsPaused, Mode=TwoWay}"
+            ToolTip.Tip="Pause view updates; logs keep buffering (Space)"
+            AutomationProperties.Name="Pause view updates"
+          >
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <i:Icon Value="mdi-pause" />
+              <TextBlock Text="Pause" />
+            </StackPanel>
+          </ToggleButton>
           <Button
             x:Name="SettingsButton"
-            Grid.Column="3"
+            Grid.Column="4"
             Classes="icon"
             Command="{Binding ToggleSettingsCommand}"
             ToolTip.Tip="Open settings"
