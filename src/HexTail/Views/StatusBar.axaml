@@ -12,48 +12,14 @@
     BorderThickness="0,1,0,0"
     Padding="10,2"
   >
-    <Grid x:Name="StatusGrid" ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="12">
-      <TextBlock
-        x:Name="SourceSummary"
-        Classes="status"
-        Text="{Binding SourceSummary}"
-        TextTrimming="CharacterEllipsis"
-        MaxWidth="130"
-        ToolTip.Tip="{Binding SourceSummary}"
-      />
-      <TextBlock
-        x:Name="ResultCount"
-        Grid.Column="1"
-        Classes="status"
-        Text="{Binding SelectedFile.SelectedView.ResultCount}"
-        IsVisible="{Binding HasFile}"
-        TextTrimming="CharacterEllipsis"
-        MaxWidth="200"
-        ToolTip.Tip="{Binding SelectedFile.SelectedView.ResultCount}"
-      />
-      <TextBlock
-        x:Name="PausedIndicator"
-        Grid.Column="2"
-        Classes="status"
-        Foreground="{DynamicResource AccentBrush}"
-        Text="Paused — rows are buffering"
-        IsVisible="{Binding IsPaused}"
-        TextTrimming="CharacterEllipsis"
-        MaxWidth="200"
-      />
-      <TextBlock
-        x:Name="StatusRange"
-        Grid.Column="3"
-        Classes="status"
-        HorizontalAlignment="Right"
-        Text="{Binding ElasticRangeStatus}"
-        IsVisible="{Binding IsElasticSelected}"
-        TextTrimming="CharacterEllipsis"
-        ToolTip.Tip="{Binding ElasticRangeStatus}"
-      />
+    <!-- DockPanel hands each child only the width left after the earlier ones, so the picker
+         (declared first) always keeps its slot, texts show in full while there is room, and
+         later texts ellipsize only when the bar is tight. -->
+    <DockPanel x:Name="StatusGrid" LastChildFill="True">
       <ComboBox
         x:Name="DisplayZonePicker"
-        Grid.Column="4"
+        DockPanel.Dock="Right"
+        Margin="12,0,0,0"
         MinHeight="0"
         Padding="6,0"
         FontSize="12"
@@ -62,6 +28,45 @@
         ToolTip.Tip="Time zone for status times and typed range times. Log text is unchanged."
         AutomationProperties.Name="Display time zone"
       />
-    </Grid>
+      <TextBlock
+        x:Name="SourceSummary"
+        DockPanel.Dock="Left"
+        Margin="0,0,12,0"
+        Classes="status"
+        Text="{Binding SourceSummary}"
+        TextTrimming="CharacterEllipsis"
+        ToolTip.Tip="{Binding SourceSummary}"
+      />
+      <TextBlock
+        x:Name="ResultCount"
+        DockPanel.Dock="Left"
+        Margin="0,0,12,0"
+        Classes="status"
+        Text="{Binding SelectedFile.SelectedView.ResultCount}"
+        IsVisible="{Binding HasFile}"
+        TextTrimming="CharacterEllipsis"
+        ToolTip.Tip="{Binding SelectedFile.SelectedView.ResultCount}"
+      />
+      <TextBlock
+        x:Name="PausedIndicator"
+        DockPanel.Dock="Left"
+        Margin="0,0,12,0"
+        Classes="status"
+        Foreground="{DynamicResource AccentBrush}"
+        Text="Paused — rows are buffering"
+        IsVisible="{Binding IsPaused}"
+        TextTrimming="CharacterEllipsis"
+        ToolTip.Tip="Paused — rows are buffering"
+      />
+      <TextBlock
+        x:Name="StatusRange"
+        Classes="status"
+        HorizontalAlignment="Right"
+        Text="{Binding ElasticRangeStatus}"
+        IsVisible="{Binding IsElasticSelected}"
+        TextTrimming="CharacterEllipsis"
+        ToolTip.Tip="{Binding ElasticRangeStatus}"
+      />
+    </DockPanel>
   </Border>
 </UserControl>

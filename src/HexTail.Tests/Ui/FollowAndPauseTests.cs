@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using HexTail.Persistence;
 using HexTail.Tests.Support;
 using HexTail.ViewModels;
 
@@ -74,6 +75,88 @@ public sealed class FollowAndPauseTests
             await viewModel.TogglePauseCommand.Execute();
             Assert.Equal(12, view.Lines.Count);
             Assert.Equal(0, view.UnseenCount);
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task SettingsChangedWhilePausedRefreshRetainedRowsOnResume()
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllLinesAsync(path, Enumerable.Range(0, 5).Select(i => $"line {i}"));
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            window.Show();
+            await viewModel.OpenPathsCommand.Execute([path]);
+            var view = await LoadedView(viewModel, 5);
+            var before = view.Lines[0].FontSize;
+
+            await viewModel.TogglePauseCommand.Execute();
+            await viewModel.State.UpdateSettingsAsync(
+                viewModel.State.Settings with
+                {
+                    LogFontSize = LogFontSize.ExtraLarge,
+                }
+            );
+            view.Sync();
+            Assert.Equal(before, view.Lines[0].FontSize);
+
+            await viewModel.TogglePauseCommand.Execute();
+            view.Sync();
+            Assert.Equal(17, view.Lines[0].FontSize);
+            Assert.All(view.Lines, row => Assert.Equal(17, row.FontSize));
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task MissingSeenAnchorResetsUnseenCountInsteadOfCountingEverything()
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllLinesAsync(path, Enumerable.Range(0, 10).Select(i => $"line {i}"));
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            window.Show();
+            await viewModel.OpenPathsCommand.Execute([path]);
+            var view = await LoadedView(viewModel, 10);
+
+            await viewModel.TogglePauseCommand.Execute();
+            await File.AppendAllLinesAsync(path, ["late 1", "late 2"]);
+            await UiWait.Until(() =>
+            {
+                viewModel.State.DrainTailerEvents();
+                return viewModel.SelectedFile!.Model.Buffer.Count == 12;
+            });
+            Assert.Equal(2, view.UnseenCount);
+
+            // Excluding the anchor line (the last row shown before pausing) removes it from the list.
+            await viewModel.State.UpdateSettingsAsync(
+                viewModel.State.Settings with
+                {
+                    GlobalExcludeLabels = ["line 9"],
+                }
+            );
+            view.Sync();
+            Assert.Equal(0, view.UnseenCount);
+            Assert.False(view.HasUnseen);
+
+            await File.AppendAllLinesAsync(path, ["late 3"]);
+            await UiWait.Until(() =>
+            {
+                viewModel.State.DrainTailerEvents();
+                return viewModel.SelectedFile!.Model.Buffer.Count == 13;
+            });
+            Assert.Equal(1, view.UnseenCount);
             window.Close();
         }
         finally

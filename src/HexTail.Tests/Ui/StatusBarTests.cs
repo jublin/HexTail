@@ -103,6 +103,94 @@ public sealed class StatusBarTests
     [AvaloniaFact]
     public async Task LongElasticStatusKeepsDisplayZonePickerInsideTheWindowAtMinimumWidth()
     {
+        var (state, viewModel, window) = await OpenElasticWindowAsync();
+        await using var _ = state;
+
+        state.Files.Single().Error = new string('x', 600);
+        viewModel.RaisePropertyChanged(nameof(MainWindowViewModel.ElasticRangeStatus));
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
+        var statusBar = window.GetVisualDescendants().OfType<StatusBar>().Single();
+        var range = statusBar.FindControl<TextBlock>("StatusRange")!;
+        var picker = statusBar.FindControl<ComboBox>("DisplayZonePicker")!;
+        Assert.True(viewModel.IsElasticSelected);
+        Assert.True(range.IsEffectivelyVisible);
+        Assert.StartsWith("Failed: xxx", range.Text);
+        AssertPickerInside(statusBar, picker);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task LongElasticStatusAndPausedIndicatorKeepDisplayZonePickerInsideTheWindowAtMinimumWidth()
+    {
+        var (state, viewModel, window) = await OpenElasticWindowAsync();
+        await using var _ = state;
+
+        state.Files.Single().Error = new string('x', 600);
+        viewModel.IsPaused = true;
+        viewModel.RaisePropertyChanged(nameof(MainWindowViewModel.ElasticRangeStatus));
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
+        var statusBar = window.GetVisualDescendants().OfType<StatusBar>().Single();
+        var picker = statusBar.FindControl<ComboBox>("DisplayZonePicker")!;
+        Assert.True(viewModel.IsElasticSelected);
+        Assert.True(statusBar.FindControl<TextBlock>("PausedIndicator")!.IsEffectivelyVisible);
+        Assert.True(statusBar.FindControl<TextBlock>("StatusRange")!.IsEffectivelyVisible);
+        AssertPickerInside(statusBar, picker);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task StatusTextsAreNotTrimmedAtNormalWidths()
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllLinesAsync(path, ["a", "b", "c", "d", "e"]);
+        var missing = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".log");
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            window.Show();
+            window.Width = 1280;
+            await viewModel.OpenPathsCommand.Execute([path]);
+            await viewModel.OpenPathsCommand.Execute([missing]);
+            await UiWait.Until(() =>
+            {
+                viewModel.State.DrainTailerEvents();
+                return Text(window, "SourceSummary") == "2 sources open · 1 with errors"
+                    && Text(window, "ResultCount") is { } count
+                    && count.Contains("loaded from source");
+            });
+            viewModel.IsPaused = true;
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+
+            var statusBar = window.GetVisualDescendants().OfType<StatusBar>().Single();
+            foreach (var name in new[] { "SourceSummary", "ResultCount", "PausedIndicator" })
+            {
+                var block = statusBar.FindControl<TextBlock>(name)!;
+                Assert.True(block.IsEffectivelyVisible, name);
+                Assert.False(IsTrimmed(block), $"{name} is ellipsized: {block.Text}");
+            }
+            Assert.Equal(
+                "Paused — rows are buffering",
+                ToolTip.GetTip(statusBar.FindControl<TextBlock>("PausedIndicator")!)
+            );
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static async Task<(
+        AppState State,
+        MainWindowViewModel ViewModel,
+        MainWindow Window
+    )> OpenElasticWindowAsync()
+    {
         var connection = new ElasticConnectionSettings
         {
             Id = "server-1",
@@ -132,7 +220,7 @@ public sealed class StatusBarTests
                 },
             ],
         };
-        await using var state = new AppState(
+        var state = new AppState(
             new LogSourceService(),
             new TestPersistence(),
             new AppSettings { ElasticConnections = [connection] },
@@ -149,17 +237,11 @@ public sealed class StatusBarTests
         window.Width = 720;
         Dispatcher.UIThread.RunJobs();
 
-        state.Files.Single().Error = new string('x', 600);
-        viewModel.RaisePropertyChanged(nameof(MainWindowViewModel.ElasticRangeStatus));
-        Dispatcher.UIThread.RunJobs();
-        window.UpdateLayout();
+        return (state, viewModel, window);
+    }
 
-        var statusBar = window.GetVisualDescendants().OfType<StatusBar>().Single();
-        var range = statusBar.FindControl<TextBlock>("StatusRange")!;
-        var picker = statusBar.FindControl<ComboBox>("DisplayZonePicker")!;
-        Assert.True(viewModel.IsElasticSelected);
-        Assert.True(range.IsEffectivelyVisible);
-        Assert.StartsWith("Failed: xxx", range.Text);
+    private static void AssertPickerInside(StatusBar statusBar, ComboBox picker)
+    {
         Assert.True(picker.IsEffectivelyVisible && picker.Bounds.Width > 0);
         var left = picker.TranslatePoint(default, statusBar)!.Value.X;
         Assert.True(left >= 0, $"picker left {left}");
@@ -168,8 +250,10 @@ public sealed class StatusBarTests
             $"picker right {left + picker.Bounds.Width} exceeds status bar width {statusBar.Bounds.Width}"
         );
         Assert.True(statusBar.Bounds.Width <= 720);
-        window.Close();
     }
+
+    private static bool IsTrimmed(TextBlock block) =>
+        block.TextLayout.TextLines.Any(line => line.HasCollapsed);
 
     private static string? Text(Window window, string name) =>
         window

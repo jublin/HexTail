@@ -24,6 +24,7 @@ internal sealed class LogViewViewModel : ReactiveObject
     private ViewSnapshot? _lastSnapshot;
     internal const int UnseenScanLimit = 10_000;
     private Line? _seenAnchor;
+    private bool _rowRefreshPending;
     private int _unseenCount;
 
     internal LogViewViewModel(MainWindowViewModel owner, FileTabViewModel file, Search? search)
@@ -113,7 +114,7 @@ internal sealed class LogViewViewModel : ReactiveObject
             else
                 _ = _file.SetSearchFollowAsync(Search, value);
             if (!value)
-                _seenAnchor = Lines.Count > 0 ? Lines[^1].Line : null;
+                _seenAnchor = DisplayedTail;
             this.RaisePropertyChanged(nameof(IsFollowing));
         }
     }
@@ -125,6 +126,8 @@ internal sealed class LogViewViewModel : ReactiveObject
         Sync();
     }
 
+    private Line? DisplayedTail => Lines.Count > 0 ? Lines[^1].Line : null;
+
     private void UpdateUnseen(IReadOnlyList<Line> lines, bool frozen)
     {
         var count = 0;
@@ -132,12 +135,23 @@ internal sealed class LogViewViewModel : ReactiveObject
             _seenAnchor = lines.Count > 0 ? lines[^1] : null;
         else
         {
-            _seenAnchor ??= Lines.Count > 0 ? Lines[^1].Line : null;
-            for (var index = lines.Count - 1; index >= 0 && count < UnseenScanLimit; index--)
+            _seenAnchor ??= DisplayedTail;
+            var anchorSeen = _seenAnchor is null;
+            var index = lines.Count - 1;
+            for (; index >= 0 && count < UnseenScanLimit; index--)
             {
                 if (ReferenceEquals(lines[index], _seenAnchor))
+                {
+                    anchorSeen = true;
                     break;
+                }
                 count++;
+            }
+            // The anchor left the list (exclusion change, eviction, elastic re-apply): restart from the tail.
+            if (!anchorSeen && index < 0)
+            {
+                _seenAnchor = lines.Count > 0 ? lines[^1] : null;
+                count = 0;
             }
         }
         if (count == _unseenCount)
@@ -151,7 +165,7 @@ internal sealed class LogViewViewModel : ReactiveObject
     public void Sync(bool resetItems = false)
     {
         var settings = Settings;
-        var refreshRows = !ReferenceEquals(_lastSettings, settings);
+        var settingsChanged = !ReferenceEquals(_lastSettings, settings);
         var expandedChanged = _lastExpandedLine != _file.Model.ExpandedLine;
         var viewsChanged = _lastViewsVersion != _file.ViewsVersion;
         _lastSettings = settings;
@@ -170,11 +184,23 @@ internal sealed class LogViewViewModel : ReactiveObject
         var lines = LinesFor();
         var frozen = _owner.IsPaused && Lines.Count > 0;
         if (!frozen)
-            SyncRows(Lines, lines, isContext: false, resetItems, refreshRows);
+        {
+            // A settings change seen while frozen still has to reach the retained rows once they sync.
+            SyncRows(
+                Lines,
+                lines,
+                isContext: false,
+                resetItems,
+                settingsChanged || _rowRefreshPending
+            );
+            _rowRefreshPending = false;
+        }
+        else
+            _rowRefreshPending |= settingsChanged;
         UpdateUnseen(lines, frozen);
 
         var context = _file.Model.ShowContext ? ContextLinesFor() : [];
-        SyncRows(ContextLines, context, isContext: true, resetItems, refreshRows);
+        SyncRows(ContextLines, context, isContext: true, resetItems, settingsChanged);
 
         var snapshot = new ViewSnapshot(
             MatchSummary,
