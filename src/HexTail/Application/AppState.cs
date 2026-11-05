@@ -420,7 +420,8 @@ public sealed class AppState : IAsyncDisposable
         string path,
         bool save = true,
         CancellationToken cancellationToken = default,
-        bool remember = true
+        bool remember = true,
+        bool ephemeral = false
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -445,6 +446,7 @@ public sealed class AppState : IAsyncDisposable
                     ContextAbove = _settings.ContextAbove,
                     ContextBelow = _settings.ContextBelow,
                     Error = File.Exists(fullPath) ? null : "File missing",
+                    Ephemeral = ephemeral,
                 };
                 tab.SyncGlobalLabelSearches(_settings.GlobalLabels);
                 _files.Add(tab);
@@ -876,12 +878,14 @@ public sealed class AppState : IAsyncDisposable
                 .SelectMany(view => view.Sources)
                 .Select(source => source.Id)
                 .ToHashSet(StringComparer.Ordinal);
+            // Sources removed from the settings must not keep occupying recent slots.
+            _recentElasticSourceIds.RemoveAll(id => !sourceIds.Contains(id));
             config = new AppConfig
             {
                 RecentFiles = [.. _recentFiles],
                 RecentElasticSourceIds = [.. _recentElasticSourceIds],
                 OpenFiles = _files
-                    .Where(tab => tab.Source.Kind == LogSourceKind.File)
+                    .Where(tab => tab.Source.Kind == LogSourceKind.File && !tab.Ephemeral)
                     .Select(tab => new PersistedFileTab
                     {
                         Path = tab.Path,
@@ -940,7 +944,10 @@ public sealed class AppState : IAsyncDisposable
                     })
                     .ToList(),
                 SelectedFilePath =
-                    SelectedFile?.Source.Kind == LogSourceKind.File ? SelectedFile.Path : null,
+                    SelectedFile is { Ephemeral: false } selected
+                    && selected.Source.Kind == LogSourceKind.File
+                        ? selected.Path
+                        : null,
                 SelectedElasticSourceId =
                     SelectedFile?.Source.ElasticSourceId is { } selectedId
                     && sourceIds.Contains(selectedId)

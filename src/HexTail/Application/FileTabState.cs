@@ -62,6 +62,9 @@ public sealed class FileTabState : IAsyncDisposable
     public DateTimeOffset? ElasticResolvedFrom { get; internal set; }
     public DateTimeOffset? ElasticResolvedTo { get; internal set; }
     public string? Error { get; internal set; }
+
+    /// <summary>A tab backed by a temporary file the app owns; it is never saved to the session.</summary>
+    public bool Ephemeral { get; internal init; }
     public ILogTailer Tailer { get; internal set; }
     public string DisplayName => Source.DisplayName;
 

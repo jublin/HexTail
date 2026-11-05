@@ -78,6 +78,7 @@ public sealed class OnboardingTests
                 viewModel.State.RecentFiles,
                 path => path.EndsWith("hextail-sample.log")
             );
+            await viewModel.DisposeAsync();
             window.Close();
         }
         finally
@@ -113,14 +114,83 @@ public sealed class OnboardingTests
         await viewModel.OpenSampleCommand.Execute();
         await UiWait.Until(() => viewModel.SelectedFile?.DisplayName == "hextail-sample.log");
         var path = viewModel.SelectedFile!.Path;
+        Assert.Contains($"hextail-{Environment.ProcessId}", path);
         await viewModel.CloseFileCommand.Execute(viewModel.SelectedFile!);
         await UiWait.Until(() => viewModel.Files.Count == 0);
-        await Task.Delay(1200);
-        var length = new FileInfo(path).Length;
-        await Task.Delay(1200);
-        Assert.Equal(length, new FileInfo(path).Length);
+        // The writer is stopped and awaited, then removes its file and per-process directory.
+        await UiWait.Until(() => !File.Exists(path));
+        await UiWait.Until(() => !Directory.Exists(System.IO.Path.GetDirectoryName(path)!));
         await viewModel.DisposeAsync();
         window.Close();
-        File.Delete(path);
+    }
+
+    [AvaloniaFact]
+    public async Task SampleTabIsNotRestoredAfterRestart()
+    {
+        var persistence = new TestPersistence();
+        var window = TestWindow.Create(persistence, out var viewModel);
+        window.Show();
+        await viewModel.OpenSampleCommand.Execute();
+        await UiWait.Until(() => viewModel.SelectedFile?.DisplayName == "hextail-sample.log");
+        await viewModel.State.SaveAsync();
+        Assert.Empty(persistence.Config!.OpenFiles);
+        await viewModel.DisposeAsync();
+        window.Close();
+
+        var restored = TestWindow.Create(persistence, out var next);
+        restored.Show();
+        await next.State.RestoreAsync();
+        Assert.Empty(next.Files);
+        Assert.Null(next.FileError);
+        await next.DisposeAsync();
+        restored.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ClickingTheSampleButtonAndARecentEntryOpensThem()
+    {
+        var recent = Path.GetTempFileName();
+        try
+        {
+            var persistence = new TestPersistence(new AppConfig { RecentFiles = [recent] });
+            var window = TestWindow.Create(persistence, out var viewModel);
+            window.Show();
+            await UiWait.Until(() => viewModel.RecentFiles.Count == 1);
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            var content = Assert.Single(window.GetVisualDescendants().OfType<LogWorkspace>());
+
+            var list = content.FindControl<ItemsControl>("RecentFilesList")!;
+            var entry = Assert.Single(list.GetVisualDescendants().OfType<Button>());
+            Assert.NotNull(entry.Command);
+            Click(window, entry);
+            await UiWait.Until(() => viewModel.SelectedFile?.Path == recent);
+            await viewModel.CloseFileCommand.Execute(viewModel.SelectedFile!);
+            await UiWait.Until(() => viewModel.Files.Count == 0);
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+
+            var sample = content.FindControl<Button>("SampleLogButton")!;
+            Assert.True(sample.IsEffectivelyVisible);
+            Click(window, sample);
+            await UiWait.Until(() => viewModel.SelectedFile?.DisplayName == "hextail-sample.log");
+
+            await viewModel.DisposeAsync();
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(recent);
+        }
+    }
+
+    private static void Click(Window window, Control control)
+    {
+        var point = control
+            .TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)!
+            .Value;
+        window.MouseDown(point, MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(point, MouseButton.Left, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
     }
 }

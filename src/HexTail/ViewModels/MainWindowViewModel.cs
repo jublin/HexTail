@@ -686,12 +686,17 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         var sample =
             _sample
             ?? SampleLogWriter.Start(
-                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "hextail-sample.log"),
-                TimeSpan.FromMilliseconds(500)
+                System.IO.Path.Combine(
+                    System.IO.Path.GetTempPath(),
+                    $"hextail-{Environment.ProcessId}",
+                    "hextail-sample.log"
+                ),
+                TimeSpan.FromMilliseconds(500),
+                deleteOnDispose: true
             );
         try
         {
-            await _state.OpenFileAsync(sample.Path, remember: false);
+            await _state.OpenFileAsync(sample.Path, remember: false, ephemeral: true);
             // Publish the writer only once its tab exists, so a concurrent sync cannot mistake
             // the not-yet-open sample for a closed one and stop it.
             _sample = sample;
@@ -708,8 +713,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     {
         var files = _state.RecentFiles;
         var sources = _state.RecentElasticSourceIds;
+        var resolved = sources
+            .Select(id => ElasticSources.FirstOrDefault(option => option.SourceId == id))
+            .OfType<ElasticSourceOptionViewModel>()
+            .ToArray();
         var key =
-            $"{string.Join('\n', files)}\0{string.Join('\n', sources)}\0{ElasticSources.Count}";
+            $"{string.Join('\n', files)}\0{string.Join('\n', resolved.Select(option => option.SourceId))}";
         if (key == _recentKey)
             return;
         _recentKey = key;
@@ -717,9 +726,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         foreach (var path in files)
             RecentFiles.Add(new RecentFileViewModel(path, File.Exists(path)));
         RecentElasticSources.Clear();
-        foreach (var id in sources)
-            if (ElasticSources.FirstOrDefault(option => option.SourceId == id) is { } option)
-                RecentElasticSources.Add(option);
+        foreach (var option in resolved)
+            RecentElasticSources.Add(option);
         this.RaisePropertyChanged(nameof(HasRecents));
     }
 

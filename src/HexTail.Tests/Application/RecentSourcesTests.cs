@@ -61,4 +61,64 @@ public sealed class RecentSourcesTests
                 File.Delete(path);
         }
     }
+
+    [Fact]
+    public async Task EphemeralTabIsNeitherPersistedNorSelectedNorRestored()
+    {
+        var kept = Path.GetTempFileName();
+        var sample = Path.GetTempFileName();
+        var persistence = new TestPersistence();
+        try
+        {
+            await using (var state = new AppState(new LogSourceService(), persistence))
+            {
+                await state.OpenFileAsync(kept);
+                var tab = await state.OpenFileAsync(sample, remember: false, ephemeral: true);
+                Assert.True(tab.Ephemeral);
+                Assert.Same(tab, state.SelectedFile);
+                await state.SaveAsync();
+            }
+            var saved = persistence.Config!;
+            Assert.Equal([Path.GetFullPath(kept)], saved.OpenFiles.Select(file => file.Path));
+            Assert.DoesNotContain(Path.GetFullPath(sample), saved.RecentFiles);
+            Assert.NotEqual(Path.GetFullPath(sample), saved.SelectedFilePath);
+
+            await using var restored = new AppState(new LogSourceService(), persistence);
+            await restored.RestoreAsync();
+            var only = Assert.Single(restored.Files);
+            Assert.Equal(Path.GetFullPath(kept), only.Path);
+            Assert.Null(only.Error);
+            Assert.Same(only, restored.SelectedFile);
+        }
+        finally
+        {
+            File.Delete(kept);
+            File.Delete(sample);
+        }
+    }
+
+    [Fact]
+    public async Task SaveDropsRecentElasticSourcesThatNoLongerExist()
+    {
+        var persistence = new TestPersistence(
+            new AppConfig
+            {
+                Settings = new AppSettings
+                {
+                    ElasticConnections = [ElasticFixtures.Connection("c1", "One", "a")],
+                },
+                RecentElasticSourceIds = ["gone-1", "c1-a", "gone-2"],
+            }
+        );
+        await using var state = new AppState(
+            new LogSourceService(),
+            persistence,
+            credentials: new InMemoryCredentialVault(),
+            elastic: new FakeElasticApiClient()
+        );
+        await state.RestoreAsync();
+        await state.SaveAsync();
+        Assert.Equal(["c1-a"], state.RecentElasticSourceIds);
+        Assert.Equal(["c1-a"], persistence.Config!.RecentElasticSourceIds);
+    }
 }

@@ -36,4 +36,37 @@ public sealed class SampleLogWriterTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public async Task DisposeIsIdempotent()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".log");
+        try
+        {
+            var writer = SampleLogWriter.Start(path, TimeSpan.FromMilliseconds(20), backlog: 5);
+            await writer.DisposeAsync();
+            await writer.DisposeAsync();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task DisposeRemovesTheFileAndItsEmptyDirectoryWhenAsked()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "hextail-test-" + Guid.NewGuid());
+        var path = Path.Combine(directory, "hextail-sample.log");
+        var writer = SampleLogWriter.Start(
+            path,
+            TimeSpan.FromMilliseconds(20),
+            backlog: 5,
+            deleteOnDispose: true
+        );
+        Assert.True(File.Exists(path));
+        await writer.DisposeAsync();
+        Assert.False(File.Exists(path));
+        Assert.False(Directory.Exists(directory));
+    }
 }

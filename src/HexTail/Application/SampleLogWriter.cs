@@ -21,19 +21,39 @@ internal sealed class SampleLogWriter : IAsyncDisposable
 
     private readonly Random _random = new(1337);
     private readonly CancellationTokenSource _stop = new();
+    private readonly bool _deleteOnDispose;
     private Task _loop = Task.CompletedTask;
+    private int _disposed;
 
-    private SampleLogWriter(string path) => Path = path;
+    private SampleLogWriter(string path, bool deleteOnDispose)
+    {
+        Path = path;
+        _deleteOnDispose = deleteOnDispose;
+    }
 
     public string Path { get; }
 
-    public static SampleLogWriter Start(string path, TimeSpan interval, int backlog = 200)
+    /// <param name="deleteOnDispose">Remove the file, and its directory once empty, on dispose.</param>
+    public static SampleLogWriter Start(
+        string path,
+        TimeSpan interval,
+        int backlog = 200,
+        bool deleteOnDispose = false
+    )
     {
-        // The writer only ever touches this one file; refuse to follow a link planted at the path.
+        // The writer only ever touches this one file; refuse to follow a link planted at the path
+        // or at its directory.
+        var directory = System.IO.Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            if (new DirectoryInfo(directory).LinkTarget is not null)
+                throw new IOException($"The sample log directory is a link: {directory}");
+            Directory.CreateDirectory(directory);
+        }
         if (new FileInfo(path).LinkTarget is not null)
             throw new IOException($"The sample log path is a link: {path}");
 
-        var writer = new SampleLogWriter(path);
+        var writer = new SampleLogWriter(path, deleteOnDispose);
         try
         {
             var start = DateTimeOffset.UtcNow - interval * backlog;
@@ -79,8 +99,27 @@ internal sealed class SampleLogWriter : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
         await _stop.CancelAsync().ConfigureAwait(false);
         await _loop.ConfigureAwait(false);
         _stop.Dispose();
+        if (_deleteOnDispose)
+            Cleanup();
+    }
+
+    private void Cleanup()
+    {
+        try
+        {
+            File.Delete(Path);
+            var directory = System.IO.Path.GetDirectoryName(Path);
+            if (
+                !string.IsNullOrEmpty(directory)
+                && !Directory.EnumerateFileSystemEntries(directory).Any()
+            )
+                Directory.Delete(directory);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 }
