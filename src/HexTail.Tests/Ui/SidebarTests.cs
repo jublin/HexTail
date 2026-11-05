@@ -1,4 +1,5 @@
 using System.Reactive.Linq;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -152,6 +153,86 @@ public sealed class SidebarTests
     }
 
     [AvaloniaFact]
+    public async Task WideningRestoresThePreferenceAndNarrowingResetsTheOverlay()
+    {
+        // ApplyWindowState re-applies the restored size once after startup. Seeding a position
+        // gives a deterministic signal that it has finished before the test resizes the window.
+        var persistence = new TestPersistence(
+            new AppConfig
+            {
+                Window = new AppWindowState
+                {
+                    Width = 720,
+                    Height = 720,
+                    X = 10,
+                    Y = 20,
+                },
+            }
+        );
+        var window = TestWindow.Create(persistence, out var viewModel);
+        window.Width = 720;
+        window.Show();
+        await UiWait.Until(() => window.Position == new PixelPoint(10, 20));
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(SplitViewDisplayMode.Overlay, viewModel.SidebarDisplayMode);
+        Assert.False(viewModel.SidebarPaneOpen);
+
+        await viewModel.ToggleSidebarCommand.Execute();
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(viewModel.SidebarPaneOpen);
+
+        await ResizeAsync(window, 1280);
+        await UiWait.Until(() => viewModel.SidebarDisplayMode == SplitViewDisplayMode.Inline);
+        Assert.True(viewModel.SidebarOpen);
+        Assert.True(viewModel.SidebarPaneOpen);
+
+        await viewModel.ToggleSidebarCommand.Execute();
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(viewModel.SidebarOpen);
+        Assert.False(viewModel.SidebarPaneOpen);
+
+        await ResizeAsync(window, 720);
+        await UiWait.Until(() => viewModel.SidebarDisplayMode == SplitViewDisplayMode.Overlay);
+        Assert.False(viewModel.SidebarPaneOpen);
+        Assert.False(viewModel.SidebarOpen);
+
+        await ResizeAsync(window, 1280);
+        await UiWait.Until(() => viewModel.SidebarDisplayMode == SplitViewDisplayMode.Inline);
+        Assert.False(viewModel.SidebarPaneOpen);
+        Assert.False(viewModel.SidebarOpen);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task RestoredSidebarPreferenceIsAppliedAndWidthIsClamped()
+    {
+        var persistence = new TestPersistence(
+            new AppConfig
+            {
+                Window = new AppWindowState
+                {
+                    Width = 1280,
+                    Height = 720,
+                    SidebarCollapsed = true,
+                    SidebarWidth = 9999,
+                },
+            }
+        );
+        var window = TestWindow.Create(persistence, out var viewModel);
+        window.Width = 1280;
+        window.Show();
+        await UiWait.Until(() => viewModel.SidebarWidth == 480);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(viewModel.SidebarOpen);
+        Assert.False(viewModel.SidebarPaneOpen);
+        Assert.Equal(480, viewModel.SidebarWidth);
+
+        viewModel.SidebarWidth = 10;
+        Assert.Equal(160, viewModel.SidebarWidth);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task ElasticRowsOpenSelectAndCloseSources()
     {
         var viewModel = ElasticFixtures.Workspace(
@@ -192,6 +273,14 @@ public sealed class SidebarTests
         Assert.True(viewModel.SettingsOpen);
         Assert.Equal(2, viewModel.Settings.SectionIndex);
         window.Close();
+    }
+
+    private static async Task ResizeAsync(Window window, double width)
+    {
+        window.Width = width;
+        Dispatcher.UIThread.RunJobs();
+        await Task.Yield();
+        Dispatcher.UIThread.RunJobs();
     }
 
     private static SourceSidebar Sidebar(Window window) =>
