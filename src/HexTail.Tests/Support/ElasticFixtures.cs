@@ -41,16 +41,17 @@ internal static class ElasticFixtures
             ],
         };
 
+    public static TestPersistence Persistence(params ElasticConnectionSettings[] connections) =>
+        new(new AppConfig { Settings = new AppSettings { ElasticConnections = [.. connections] } });
+
     public static MainWindowViewModel Workspace(params ElasticConnectionSettings[] connections) =>
+        Workspace(Persistence(connections));
+
+    public static MainWindowViewModel Workspace(TestPersistence persistence) =>
         new(
             new AppState(
                 new LogSourceService(),
-                new TestPersistence(
-                    new AppConfig
-                    {
-                        Settings = new AppSettings { ElasticConnections = [.. connections] },
-                    }
-                ),
+                persistence,
                 credentials: new InMemoryCredentialVault(),
                 elastic: new FakeElasticApiClient()
             ),

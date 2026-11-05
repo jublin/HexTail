@@ -1,3 +1,4 @@
+using System.IO;
 using System.Reactive.Linq;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
@@ -48,6 +49,33 @@ public sealed class SidebarViewModelTests
         await source.CloseCommand.Execute();
         await UiWait.Until(() => !source.IsOpen);
         Assert.Empty(viewModel.Files);
+    }
+
+    [AvaloniaFact]
+    public async Task ClosingAnElasticSourceThatFailsToPersistSurfacesOpenErrorInsteadOfThrowing()
+    {
+        var connection = ElasticFixtures.Connection("c-1", "prod", "checkout");
+        var persistence = ElasticFixtures.Persistence(connection);
+        await using var viewModel = ElasticFixtures.Workspace(persistence);
+        await viewModel.InitializeAsync();
+        var source = viewModel.ElasticConnectionGroups.Single().Sources.Single();
+
+        await source.ActivateCommand.Execute();
+        await UiWait.Until(() => source.IsOpen);
+
+        persistence.SaveError = new IOException("disk full");
+        try
+        {
+            await source.CloseCommand.Execute();
+
+            await UiWait.Until(() => source.OpenError is not null);
+            Assert.Equal("disk full", source.OpenError);
+            Assert.False(source.IsOpening);
+        }
+        finally
+        {
+            persistence.SaveError = null;
+        }
     }
 
     [AvaloniaFact]

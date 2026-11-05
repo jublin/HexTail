@@ -29,7 +29,7 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
         ToolTip = toolTip;
         ShortName = displayName;
         ActivateCommand = ReactiveCommand.CreateFromTask(ActivateAsync, owner.Scheduler);
-        CloseCommand = ReactiveCommand.CreateFromTask(CloseAsync, owner.Scheduler);
+        CloseCommand = ReactiveCommand.CreateFromTask(CloseFromSidebarAsync, owner.Scheduler);
     }
 
     public string SourceId { get; }
@@ -104,6 +104,26 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
         );
         if (tab is not null)
             await _owner.State.CloseFileAsync(tab);
+    }
+
+    private async Task CloseFromSidebarAsync()
+    {
+        if (IsOpening)
+            return;
+        IsOpening = true;
+        OpenError = null;
+        try
+        {
+            await CloseAsync();
+        }
+        catch (Exception exception)
+        {
+            OpenError = exception.Message;
+        }
+        finally
+        {
+            IsOpening = false;
+        }
     }
 
     private async Task ActivateAsync()
