@@ -2,12 +2,14 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using DialogHostAvalonia;
 using HexTail.Application;
 using HexTail.Elastic;
+using HexTail.Input;
 using HexTail.Persistence;
 using HexTail.Security;
 using HexTail.Tailing;
@@ -63,6 +65,7 @@ public partial class MainWindow : Window
         Opened += OnOpened;
         Closed += OnClosed;
         SizeChanged += (_, args) => ViewModel.SetShellWidth(args.NewSize.Width);
+        AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
     }
 
     internal MainWindowViewModel ViewModel { get; }
@@ -208,6 +211,31 @@ public partial class MainWindow : Window
         ViewModel.OpenPathsCommand.Execute(paths).Subscribe();
     }
 
+    // Tab is consumed by focus navigation, and a focused log row consumes Space for selection,
+    // before the bubbling OnKeyDown runs, so those two get a tunnel handler.
+    private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (ViewModel.SettingsOpen || e.Handled)
+            return;
+        var onLogRow =
+            e.Key == Key.Space
+            && e.Source is Visual source
+            && source.FindAncestorOfType<ListBox>(includeSelf: true)?.Name
+                is "LogList"
+                    or "ContextList";
+        if (e.Key != Key.Tab && !onLogRow)
+            return;
+        var command = ShellShortcuts.Resolve(e.Key, e.KeyModifiers, textInputFocused: false);
+        if (
+            onLogRow
+                ? command.Action != ShellAction.TogglePause
+                : command.Action is not (ShellAction.NextView or ShellAction.PreviousView)
+        )
+            return;
+        Execute(command);
+        e.Handled = true;
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
@@ -217,31 +245,66 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
-
-        if (ViewModel.SettingsOpen)
+        if (ViewModel.SettingsOpen || e.Handled)
             return;
 
-        if ((e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) == 0)
+        var command = ShellShortcuts.Resolve(
+            e.Key,
+            e.KeyModifiers,
+            FocusManager?.GetFocusedElement() is TextBox
+        );
+        if (command.Action == ShellAction.None)
             return;
+        Execute(command);
+        e.Handled = true;
+    }
 
-        switch (e.Key)
+    private void Execute(ShellCommand command)
+    {
+        var file = ViewModel.SelectedFile;
+        switch (command.Action)
         {
-            case Key.O:
+            case ShellAction.OpenFiles:
                 Dispatcher.UIThread.Post(() => ViewModel.OpenCommand.Execute().Subscribe());
                 break;
-            case Key.F:
+            case ShellAction.FocusSearch:
                 this.GetVisualDescendants().OfType<SearchBar>().FirstOrDefault()?.FocusQuery();
                 break;
-            case Key.B:
-                ViewModel.ToggleSidebarCommand.Execute().Subscribe();
-                break;
-            case Key.S:
+            case ShellAction.SaveSession:
                 ViewModel.SaveCommand.Execute().Subscribe();
                 break;
-            default:
-                return;
+            case ShellAction.ToggleSidebar:
+                ViewModel.ToggleSidebarCommand.Execute().Subscribe();
+                break;
+            case ShellAction.TogglePause:
+                ViewModel.TogglePauseCommand.Execute().Subscribe();
+                break;
+            case ShellAction.CloseView when file is not null:
+                if (file.SelectedView.Search is not null)
+                    ViewModel.RemoveSearchCommand.Execute(file.SelectedView).Subscribe();
+                else
+                    ViewModel.CloseFileCommand.Execute(file).Subscribe();
+                break;
+            case ShellAction.NextView or ShellAction.PreviousView when file is not null:
+                var step = command.Action == ShellAction.NextView ? 1 : -1;
+                file.SelectedViewIndex =
+                    (file.SelectedViewIndex + step + file.Views.Count) % file.Views.Count;
+                break;
+            case ShellAction.SelectView when file is not null && command.Index < file.Views.Count:
+                file.SelectedViewIndex = command.Index;
+                break;
+            case ShellAction.ToggleFollow when file is not null:
+                file.SelectedView.IsFollowing = !file.SelectedView.IsFollowing;
+                break;
+            case ShellAction.ScrollToBottom when file is not null:
+                file.SelectedView.IsFollowing = true;
+                break;
+            case ShellAction.ScrollToTop:
+                this.GetVisualDescendants()
+                    .OfType<LogView>()
+                    .FirstOrDefault(view => view.IsEffectivelyVisible)
+                    ?.ScrollToTop();
+                break;
         }
-
-        e.Handled = true;
     }
 }
