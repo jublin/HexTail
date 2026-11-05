@@ -25,7 +25,7 @@
       <views:SettingsPanel />
     </dialogHost:DialogHost.DialogContent>
 
-    <Grid x:Name="ShellGrid" RowDefinitions="Auto,*" Background="{DynamicResource SurfaceBrush}">
+    <Grid x:Name="ShellGrid" RowDefinitions="Auto,*,Auto" Background="{DynamicResource SurfaceBrush}">
       <Border
         x:Name="TopBar"
         Background="{DynamicResource ToolbarBrush}"
@@ -33,7 +33,7 @@
         BorderThickness="0,0,0,1"
         Padding="6,4"
       >
-        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" ColumnSpacing="6">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="6">
           <Button
             x:Name="SidebarToggleButton"
             Classes="icon"
@@ -64,6 +64,7 @@
             <Button
               x:Name="ElasticTimeRangeButton"
               Content="Time range…"
+              ToolTip.Tip="{Binding ElasticAppliedRange}"
               AutomationProperties.Name="Elastic log time range"
             >
               <Button.Flyout>
@@ -170,48 +171,10 @@
                 </Flyout>
               </Button.Flyout>
             </Button>
-            <TextBlock
-              x:Name="ElasticAppliedSummary"
-              Text="{Binding ElasticAppliedRange}"
-              TextWrapping="NoWrap"
-              TextTrimming="CharacterEllipsis"
-              VerticalAlignment="Center"
-              FontSize="12"
-            />
-            <TextBlock
-              Text="{Binding ElasticRangeStatus}"
-              TextWrapping="NoWrap"
-              TextTrimming="CharacterEllipsis"
-              VerticalAlignment="Center"
-              FontSize="12"
-            />
           </StackPanel>
-          <ToggleSwitch
-            x:Name="InlineContextToggle"
-            Grid.Column="3"
-            AutomationProperties.Name="Show inline context"
-            OnContent="Inline Shown"
-            OffContent="No Inline"
-            FontSize="12"
-            DataContext="{Binding SelectedFile}"
-            IsVisible="{Binding $parent[Window].DataContext.HasFile}"
-            IsChecked="{Binding ShowContext, Mode=TwoWay}"
-          />
-          <ToggleSwitch
-            x:Name="AutoScrollToggle"
-            Grid.Column="4"
-            AutomationProperties.Name="Auto-scroll logs"
-            ToolTip.Tip="Auto-scroll follows new rows; it does not pause log retrieval."
-            OnContent="Auto-scroll on"
-            OffContent="Auto-scroll off"
-            FontSize="12"
-            DataContext="{Binding SelectedFile}"
-            IsVisible="{Binding $parent[Window].DataContext.HasFile}"
-            IsChecked="{Binding SelectedView.IsFollowing, Mode=TwoWay}"
-          />
           <Button
             x:Name="SettingsButton"
-            Grid.Column="5"
+            Grid.Column="3"
             Classes="icon"
             Command="{Binding ToggleSettingsCommand}"
             ToolTip.Tip="Open settings"
@@ -249,6 +212,7 @@
           <views:LogWorkspace Grid.Row="2" />
         </Grid>
       </SplitView>
+      <views:StatusBar Grid.Row="2" />
     </Grid>
   </dialogHost:DialogHost>
 </Window>

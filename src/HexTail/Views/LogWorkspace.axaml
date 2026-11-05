@@ -127,27 +127,48 @@
             <TabControl.ContentTemplate>
               <DataTemplate x:DataType="vm:LogViewViewModel">
                 <Grid RowDefinitions="Auto,*">
-                  <StackPanel Margin="12,6" Spacing="4">
-                    <TextBlock
-                      x:Name="ResultMessage"
-                      Text="{Binding ResultMessage}"
-                      IsVisible="{Binding HasResultMessage}"
-                      TextWrapping="Wrap"
-                      Foreground="{DynamicResource TextBrush}"
-                    />
-                    <TextBlock
-                      x:Name="ResultCount"
-                      Text="{Binding ResultCount}"
-                      Foreground="{DynamicResource MutedBrush}"
-                    />
-                    <TextBlock
-                      x:Name="InitialLimitMessage"
-                      Text="{Binding InitialLimitMessage}"
-                      IsVisible="{Binding HasInitialLimitMessage}"
-                      TextWrapping="Wrap"
-                      Foreground="{DynamicResource AccentBrush}"
-                    />
-                  </StackPanel>
+                  <Grid x:Name="ViewToolbar" ColumnDefinitions="*,Auto" Margin="12,4,8,4">
+                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                      <TextBlock
+                        x:Name="ResultMessage"
+                        Text="{Binding ResultMessage}"
+                        IsVisible="{Binding HasResultMessage}"
+                        TextWrapping="Wrap"
+                        Foreground="{DynamicResource TextBrush}"
+                      />
+                      <TextBlock
+                        x:Name="InitialLimitMessage"
+                        Text="{Binding InitialLimitMessage}"
+                        IsVisible="{Binding HasInitialLimitMessage}"
+                        TextWrapping="Wrap"
+                        Foreground="{DynamicResource AccentBrush}"
+                      />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                      <ToggleButton
+                        x:Name="InlineContextToggle"
+                        IsChecked="{Binding ShowContext, Mode=TwoWay}"
+                        ToolTip.Tip="Show surrounding lines for the selected row"
+                        AutomationProperties.Name="Show inline context"
+                      >
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                          <ic:Icon Value="mdi-arrow-expand-vertical" />
+                          <TextBlock Text="Context" />
+                        </StackPanel>
+                      </ToggleButton>
+                      <ToggleButton
+                        x:Name="AutoScrollToggle"
+                        IsChecked="{Binding IsFollowing, Mode=TwoWay}"
+                        ToolTip.Tip="Keep the newest line in view (F)"
+                        AutomationProperties.Name="Auto-scroll logs"
+                      >
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                          <ic:Icon Value="mdi-arrow-collapse-down" />
+                          <TextBlock Text="Follow" />
+                        </StackPanel>
+                      </ToggleButton>
+                    </StackPanel>
+                  </Grid>
                   <views:LogView Grid.Row="1" />
                 </Grid>
               </DataTemplate>

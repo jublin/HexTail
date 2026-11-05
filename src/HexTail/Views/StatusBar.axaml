@@ -1,0 +1,45 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTail.ViewModels"
+  x:Class="HexTail.Views.StatusBar"
+  x:DataType="vm:MainWindowViewModel"
+  AutomationProperties.Name="Status"
+>
+  <Border
+    Background="{DynamicResource ToolbarBrush}"
+    BorderBrush="{DynamicResource BorderBrush}"
+    BorderThickness="0,1,0,0"
+    Padding="10,2"
+  >
+    <Grid x:Name="StatusGrid" ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="16">
+      <TextBlock x:Name="SourceSummary" Classes="status" Text="{Binding SourceSummary}" />
+      <TextBlock
+        x:Name="ResultCount"
+        Grid.Column="1"
+        Classes="status"
+        Text="{Binding SelectedFile.SelectedView.ResultCount}"
+        IsVisible="{Binding HasFile}"
+      />
+      <TextBlock
+        x:Name="StatusRange"
+        Grid.Column="3"
+        Classes="status"
+        Text="{Binding ElasticRangeStatus}"
+        IsVisible="{Binding IsElasticSelected}"
+        TextTrimming="CharacterEllipsis"
+      />
+      <ComboBox
+        x:Name="DisplayZonePicker"
+        Grid.Column="4"
+        MinHeight="0"
+        Padding="6,0"
+        FontSize="12"
+        ItemsSource="{Binding Settings.TimeZoneModes}"
+        SelectedItem="{Binding Settings.TimeZoneMode, Mode=TwoWay}"
+        ToolTip.Tip="Time zone for status times and typed range times. Log text is unchanged."
+        AutomationProperties.Name="Display time zone"
+      />
+    </Grid>
+  </Border>
+</UserControl>

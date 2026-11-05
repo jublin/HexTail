@@ -113,7 +113,12 @@ public sealed class MainWindowInteractionTests
                 }
             )
             {
-                var control = window.FindControl<Control>(name);
+                var control =
+                    window.FindControl<Control>(name)
+                    ?? window
+                        .GetVisualDescendants()
+                        .OfType<Control>()
+                        .First(control => control.Name == name && control.IsEffectivelyVisible);
                 Assert.NotNull(control);
                 var position = control.TranslatePoint(default, window)!.Value;
                 Assert.True(control.IsVisible && control.Bounds.Width > 0);
@@ -867,7 +872,10 @@ public sealed class MainWindowInteractionTests
 
             Click(firstButton);
             Dispatcher.UIThread.RunJobs();
-            var following = window.FindControl<ToggleSwitch>("AutoScrollToggle")!;
+            var following = window
+                .GetVisualDescendants()
+                .OfType<ToggleButton>()
+                .Single(toggle => toggle.Name == "AutoScrollToggle" && toggle.IsEffectivelyVisible);
             following.IsChecked = false;
             Dispatcher.UIThread.RunJobs();
 

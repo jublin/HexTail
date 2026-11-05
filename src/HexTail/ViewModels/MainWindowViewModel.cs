@@ -40,6 +40,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private readonly CompositeDisposable _subscriptions = new();
     private FileTabViewModel? _selectedFile;
     private string _query = string.Empty;
+    private string _sourceSummary = "No sources open";
     private MatchMode _matchMode = MatchMode.Literal;
     private bool _caseSensitive;
     private Color _searchColor = Color.Parse("#F59E0B");
@@ -225,6 +226,22 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     }
 
     public bool HasFile => SelectedFile is not null;
+
+    public string SourceSummary
+    {
+        get => _sourceSummary;
+        private set => this.RaiseAndSetIfChanged(ref _sourceSummary, value);
+    }
+
+    internal static string DescribeSources(IReadOnlyCollection<FileTabState> files)
+    {
+        if (files.Count == 0)
+            return "No sources open";
+        var text = files.Count == 1 ? "1 source open" : $"{files.Count} sources open";
+        var failing = files.Count(file => file.Error is not null);
+        return failing == 0 ? text : $"{text} · {failing} with errors";
+    }
+
     public bool IsElasticSelected => SelectedFile?.Model.Source.Kind == LogSourceKind.Elastic;
     public DateTimeOffset? ElasticFromDate
     {
@@ -792,6 +809,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
         var previous = Snapshot();
         var files = _state.Files;
+        SourceSummary = DescribeSources(files);
 
         for (var index = Files.Count - 1; index >= 0; index--)
         {

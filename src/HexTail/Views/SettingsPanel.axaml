@@ -278,19 +278,6 @@
                   SelectedItem="{Binding Settings.SelectedTheme, Mode=TwoWay}"
                   DisplayMemberBinding="{Binding DisplayName}"
                 />
-                <TextBlock Text="Source clock time zone" />
-                <ComboBox
-                  ItemsSource="{Binding Settings.TimeZoneModes}"
-                  AutomationProperties.Name="Source clock time zone"
-                  SelectedItem="{Binding Settings.TimeZoneMode, Mode=TwoWay}"
-                  HorizontalContentAlignment="Right"
-                  HorizontalAlignment="Stretch"
-                />
-                <TextBlock
-                  Text="Sets UTC or local clock offsets for source requests and status times. Log message timestamps are unchanged. Range input and display time zone is selected separately."
-                  TextWrapping="Wrap"
-                  Foreground="{DynamicResource MutedBrush}"
-                />
               </StackPanel>
             </Grid>
           </Border>

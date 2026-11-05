@@ -83,7 +83,11 @@ internal sealed class FileTabViewModel : ReactiveObject
     public int SelectedViewIndex
     {
         get => _selectedViewIndex;
-        set => this.RaiseAndSetIfChanged(ref _selectedViewIndex, Math.Max(0, value));
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _selectedViewIndex, Math.Max(0, value));
+            this.RaisePropertyChanged(nameof(SelectedView));
+        }
     }
 
     public LogViewViewModel SelectedView => Views[SelectedViewIndex];
@@ -128,6 +132,7 @@ internal sealed class FileTabViewModel : ReactiveObject
 
             SelectedViewIndex = Math.Clamp(SelectedViewIndex, 0, Math.Max(0, Views.Count - 1));
             _viewsVersion++;
+            this.RaisePropertyChanged(nameof(SelectedView));
         }
 
         if (loadRows && Views.Count > 0)
