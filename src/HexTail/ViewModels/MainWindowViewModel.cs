@@ -53,6 +53,9 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private bool _closed;
     private bool _restoring;
     private int _syncQueued;
+    private SampleLogWriter? _sample;
+    private Task _sampleStopping = Task.CompletedTask;
+    private string _recentKey = string.Empty;
     private bool _elasticToNow = true;
     private bool _syncingRange;
     private bool _elasticRangeDirty;
@@ -85,6 +88,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             OpenPathsAsync,
             _scheduler
         );
+        OpenRecentCommand = ReactiveCommand.CreateFromTask<string>(OpenRecentAsync, _scheduler);
+        OpenSampleCommand = ReactiveCommand.CreateFromTask(OpenSampleAsync, _scheduler);
         SaveCommand = ReactiveCommand.CreateFromTask(SaveAsync, _scheduler);
         ToggleSettingsCommand = ReactiveCommand.Create(
             () =>
@@ -159,6 +164,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 .Merge(
                     OpenCommand.ThrownExceptions,
                     OpenPathsCommand.ThrownExceptions,
+                    OpenRecentCommand.ThrownExceptions,
+                    OpenSampleCommand.ThrownExceptions,
                     SaveCommand.ThrownExceptions,
                     CloseFileCommand.ThrownExceptions,
                     RemoveSearchCommand.ThrownExceptions,
@@ -169,6 +176,11 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     }
 
     public AppState State => _state;
+    public ObservableCollection<RecentFileViewModel> RecentFiles { get; } = [];
+    public ObservableCollection<ElasticSourceOptionViewModel> RecentElasticSources { get; } = [];
+    public bool HasRecents => RecentFiles.Count > 0 || RecentElasticSources.Count > 0;
+    public ReactiveCommand<string, Unit> OpenRecentCommand { get; }
+    public ReactiveCommand<Unit, Unit> OpenSampleCommand { get; }
     public ObservableCollection<FileTabViewModel> Files { get; } = [];
     public ObservableCollection<FileTabViewModel> FileTabs { get; } = [];
     public bool HasFileTabs => FileTabs.Count > 0;
@@ -582,6 +594,9 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
         _closed = true;
         _subscriptions.Dispose();
+        if (_sample is not null)
+            await _sample.DisposeAsync();
+        await _sampleStopping.ConfigureAwait(false);
         await _state.DisposeAsync();
     }
 
@@ -653,6 +668,59 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     {
         var paths = await PickFiles.Handle(Unit.Default);
         await OpenPathsAsync(paths);
+    }
+
+    private async Task OpenRecentAsync(string path)
+    {
+        if (!File.Exists(path))
+        {
+            SetFileError($"Could not open {path}: the file no longer exists.");
+            return;
+        }
+        await OpenPathsAsync([path]);
+    }
+
+    private async Task OpenSampleAsync()
+    {
+        await _sampleStopping.ConfigureAwait(true);
+        var sample =
+            _sample
+            ?? SampleLogWriter.Start(
+                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "hextail-sample.log"),
+                TimeSpan.FromMilliseconds(500)
+            );
+        try
+        {
+            await _state.OpenFileAsync(sample.Path, remember: false);
+            // Publish the writer only once its tab exists, so a concurrent sync cannot mistake
+            // the not-yet-open sample for a closed one and stop it.
+            _sample = sample;
+        }
+        catch
+        {
+            if (!ReferenceEquals(sample, _sample))
+                await sample.DisposeAsync();
+            throw;
+        }
+    }
+
+    private void SyncRecents()
+    {
+        var files = _state.RecentFiles;
+        var sources = _state.RecentElasticSourceIds;
+        var key =
+            $"{string.Join('\n', files)}\0{string.Join('\n', sources)}\0{ElasticSources.Count}";
+        if (key == _recentKey)
+            return;
+        _recentKey = key;
+        RecentFiles.Clear();
+        foreach (var path in files)
+            RecentFiles.Add(new RecentFileViewModel(path, File.Exists(path)));
+        RecentElasticSources.Clear();
+        foreach (var id in sources)
+            if (ElasticSources.FirstOrDefault(option => option.SourceId == id) is { } option)
+                RecentElasticSources.Add(option);
+        this.RaisePropertyChanged(nameof(HasRecents));
     }
 
     private async Task OpenPathsAsync(IEnumerable<string> paths)
@@ -941,6 +1009,17 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             option.Sync(tab is not null, status, health?.Message, load);
         }
         SyncConnectionGroups();
+        SyncRecents();
+        if (
+            _sample is { } sample
+            && !_state.Files.Any(file =>
+                string.Equals(file.Path, sample.Path, StringComparison.OrdinalIgnoreCase)
+            )
+        )
+        {
+            _sample = null;
+            _sampleStopping = Task.WhenAll(_sampleStopping, sample.DisposeAsync().AsTask());
+        }
         this.RaisePropertyChanged(nameof(ElasticAppliedRange));
         this.RaisePropertyChanged(nameof(ElasticRangeStatus));
         if (SelectedFile is not null && !ElasticRangeDirty)

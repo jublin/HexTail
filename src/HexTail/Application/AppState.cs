@@ -17,6 +17,9 @@ public sealed class AppState : IAsyncDisposable
     private readonly CancellationTokenSource _healthStop = new();
     private readonly SemaphoreSlim _healthSignal = new(0, 1);
     private readonly List<FileTabState> _files = [];
+    public const int MaxRecent = 10;
+    private readonly List<string> _recentFiles = [];
+    private readonly List<string> _recentElasticSourceIds = [];
     private AppSettings _settings;
     private int _nextFileId;
     private Task? _healthLoop;
@@ -51,6 +54,24 @@ public sealed class AppState : IAsyncDisposable
                 return _files.ToArray();
         }
     }
+    public IReadOnlyList<string> RecentFiles
+    {
+        get
+        {
+            lock (_gate)
+                return _recentFiles.ToArray();
+        }
+    }
+
+    public IReadOnlyList<string> RecentElasticSourceIds
+    {
+        get
+        {
+            lock (_gate)
+                return _recentElasticSourceIds.ToArray();
+        }
+    }
+
     public FileTabState? SelectedFile { get; private set; }
     public AppWindowState Window { get; private set; } = new();
     public AppSettings Settings => _settings;
@@ -269,6 +290,14 @@ public sealed class AppState : IAsyncDisposable
             cancellationToken
         );
 
+    private static void Remember(List<string> list, string value, StringComparer comparer)
+    {
+        list.RemoveAll(item => comparer.Equals(item, value));
+        list.Insert(0, value);
+        if (list.Count > MaxRecent)
+            list.RemoveRange(MaxRecent, list.Count - MaxRecent);
+    }
+
     public async ValueTask RestoreAsync(CancellationToken cancellationToken = default)
     {
         var config = await _persistence.LoadAsync(cancellationToken).ConfigureAwait(false);
@@ -282,7 +311,12 @@ public sealed class AppState : IAsyncDisposable
         }
         foreach (var persisted in config.OpenFiles)
         {
-            var tab = await OpenFileAsync(persisted.Path, save: false, cancellationToken)
+            var tab = await OpenFileAsync(
+                    persisted.Path,
+                    save: false,
+                    cancellationToken,
+                    remember: false
+                )
                 .ConfigureAwait(false);
             tab.FollowAll = persisted.FollowAll;
             tab.ShowContext = persisted.ShowContext;
@@ -320,7 +354,8 @@ public sealed class AppState : IAsyncDisposable
                         cancellationToken,
                         persisted.From,
                         persisted.To,
-                        persisted.InputZone
+                        persisted.InputZone,
+                        remember: false
                     )
                     .ConfigureAwait(false);
                 tab.FollowAll = persisted.FollowAll;
@@ -355,6 +390,14 @@ public sealed class AppState : IAsyncDisposable
 
         lock (_gate)
         {
+            _recentFiles.Clear();
+            _recentFiles.AddRange(config.RecentFiles.Take(MaxRecent));
+            _recentElasticSourceIds.Clear();
+            _recentElasticSourceIds.AddRange(config.RecentElasticSourceIds.Take(MaxRecent));
+        }
+
+        lock (_gate)
+        {
             if (config.SelectedFilePath is not null)
                 SelectedFile = _files.FirstOrDefault(file =>
                     string.Equals(
@@ -376,7 +419,8 @@ public sealed class AppState : IAsyncDisposable
     public async ValueTask<FileTabState> OpenFileAsync(
         string path,
         bool save = true,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        bool remember = true
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -406,6 +450,8 @@ public sealed class AppState : IAsyncDisposable
                 _files.Add(tab);
                 SelectedFile = tab;
             }
+            if (remember)
+                Remember(_recentFiles, fullPath, StringComparer.OrdinalIgnoreCase);
         }
 
         NotifyChanged();
@@ -424,7 +470,8 @@ public sealed class AppState : IAsyncDisposable
         CancellationToken cancellationToken = default,
         string from = "now-5m",
         string to = "now",
-        AppTimeZoneMode inputZone = AppTimeZoneMode.Utc
+        AppTimeZoneMode inputZone = AppTimeZoneMode.Utc,
+        bool remember = true
     )
     {
         var match = _settings
@@ -442,6 +489,8 @@ public sealed class AppState : IAsyncDisposable
             if (existing is not null)
             {
                 SelectedFile = existing;
+                if (remember)
+                    Remember(_recentElasticSourceIds, sourceId, StringComparer.Ordinal);
                 return existing;
             }
         }
@@ -484,6 +533,8 @@ public sealed class AppState : IAsyncDisposable
         {
             _files.Add(tab);
             SelectedFile = tab;
+            if (remember)
+                Remember(_recentElasticSourceIds, sourceId, StringComparer.Ordinal);
         }
         tailer.Start();
         NotifyChanged();
@@ -827,6 +878,8 @@ public sealed class AppState : IAsyncDisposable
                 .ToHashSet(StringComparer.Ordinal);
             config = new AppConfig
             {
+                RecentFiles = [.. _recentFiles],
+                RecentElasticSourceIds = [.. _recentElasticSourceIds],
                 OpenFiles = _files
                     .Where(tab => tab.Source.Kind == LogSourceKind.File)
                     .Select(tab => new PersistedFileTab

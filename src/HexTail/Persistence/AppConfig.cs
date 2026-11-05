@@ -13,6 +13,8 @@ public sealed class AppConfig
     public string? SelectedElasticSourceId { get; init; }
     public AppWindowState Window { get; init; } = new();
     public AppSettings Settings { get; init; } = new();
+    public List<string> RecentFiles { get; init; } = [];
+    public List<string> RecentElasticSourceIds { get; init; } = [];
 }
 
 public sealed class PersistedElasticTab
