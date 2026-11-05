@@ -11,7 +11,7 @@ Elastic sources use separate Kibana and Elasticsearch URLs, generic
 server/namespace mappings, ordered output fields, a five-minute initial
 lookback, and native OS credential storage for authenticated connections.
 
-![HexTail desktop UI](assets/hextail-ui.png)
+![HexTail desktop UI: source sidebar, search bar, and a live log view](assets/hextail-ui.png)
 
 ## Features
 
