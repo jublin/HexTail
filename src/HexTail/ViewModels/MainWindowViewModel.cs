@@ -128,6 +128,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 })
                 .Subscribe(_ => QueueSyncFromState())
         );
+        FileTabs.CollectionChanged += (_, _) => this.RaisePropertyChanged(nameof(HasFileTabs));
 
         _subscriptions.Add(
             Observable
@@ -145,7 +146,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
     public AppState State => _state;
     public ObservableCollection<FileTabViewModel> Files { get; } = [];
+    public ObservableCollection<FileTabViewModel> FileTabs { get; } = [];
+    public bool HasFileTabs => FileTabs.Count > 0;
     public ObservableCollection<ElasticSourceOptionViewModel> ElasticSources { get; } = [];
+    public ObservableCollection<ElasticConnectionGroupViewModel> ElasticConnectionGroups { get; } =
+    [];
+    internal IScheduler Scheduler => _scheduler;
     public bool HasElasticSources => ElasticSources.Count > 0;
     public bool HasElasticWarning => _state.HasElasticWarning;
     public string ElasticSourceIcon => HasElasticWarning ? "mdi-cloud-alert" : "mdi-cloud-check";
@@ -723,6 +729,13 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 viewModel.SyncViews(loadRows);
         }
 
+        for (var index = FileTabs.Count - 1; index >= 0; index--)
+            if (!Files.Contains(FileTabs[index]))
+                FileTabs.RemoveAt(index);
+        foreach (var file in Files)
+            if (file.Model.Source.Kind == LogSourceKind.File && !FileTabs.Contains(file))
+                FileTabs.Add(file);
+
         SelectedFile = _state.SelectedFile is null
             ? null
             : Files.FirstOrDefault(item => ReferenceEquals(item.Model, _state.SelectedFile));
@@ -731,22 +744,35 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             .Settings.ElasticConnections.SelectMany(connection =>
                 connection.Views.SelectMany(view =>
                     view.Sources.Select(source =>
-                        LogSourceDescriptor.Elastic(connection, view, source)
+                        (
+                            ConnectionId: connection.Id,
+                            Descriptor: LogSourceDescriptor.Elastic(connection, view, source),
+                            ShortName: $"{(string.IsNullOrWhiteSpace(view.Name) ? view.DataViewTitle : view.Name)} · {source.ServerValue}"
+                        )
                     )
                 )
             )
             .ToArray();
         for (var index = ElasticSources.Count - 1; index >= 0; index--)
-            if (!configured.Any(item => item.Id == ElasticSources[index].SourceId))
+            if (!configured.Any(item => item.Descriptor.Id == ElasticSources[index].SourceId))
                 ElasticSources.RemoveAt(index);
         foreach (var item in configured)
-            if (!ElasticSources.Any(option => option.SourceId == item.Id))
+            if (!ElasticSources.Any(option => option.SourceId == item.Descriptor.Id))
                 ElasticSources.Add(
-                    new ElasticSourceOptionViewModel(this, item.Id, item.DisplayName, item.ToolTip)
+                    new ElasticSourceOptionViewModel(
+                        this,
+                        item.Descriptor.Id,
+                        item.Descriptor.DisplayName,
+                        item.Descriptor.ToolTip
+                    )
                 );
+        var selectedSourceId = SelectedFile?.Model.Source.ElasticSourceId;
         foreach (var option in ElasticSources)
         {
-            option.SyncIdentity(configured.First(source => source.Id == option.SourceId));
+            var item = configured.First(source => source.Descriptor.Id == option.SourceId);
+            option.SyncIdentity(item.Descriptor);
+            option.SyncConnection(item.ConnectionId, item.ShortName);
+            option.SyncSelection(option.SourceId == selectedSourceId);
             var status =
                 _state.ElasticSourceStatuses.GetValueOrDefault(option.SourceId)?.Status.ToString()
                 ?? "Checking";
@@ -760,6 +786,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 : "Logs: historical";
             option.Sync(tab is not null, status, health?.Message, load);
         }
+        SyncConnectionGroups();
         this.RaisePropertyChanged(nameof(ElasticAppliedRange));
         this.RaisePropertyChanged(nameof(ElasticRangeStatus));
         var current = Snapshot();
@@ -783,6 +810,30 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             this.RaisePropertyChanged(nameof(HasElasticWarning));
         if (previous.ElasticSourceIcon != current.ElasticSourceIcon)
             this.RaisePropertyChanged(nameof(ElasticSourceIcon));
+    }
+
+    private void SyncConnectionGroups()
+    {
+        var connections = _state.Settings.ElasticConnections;
+        for (var index = ElasticConnectionGroups.Count - 1; index >= 0; index--)
+            if (!connections.Any(connection => connection.Id == ElasticConnectionGroups[index].Id))
+                ElasticConnectionGroups.RemoveAt(index);
+        for (var index = 0; index < connections.Count; index++)
+        {
+            var connection = connections[index];
+            var group = ElasticConnectionGroups.FirstOrDefault(item => item.Id == connection.Id);
+            if (group is null)
+            {
+                group = new ElasticConnectionGroupViewModel(connection.Id);
+                ElasticConnectionGroups.Insert(index, group);
+            }
+            else if (ElasticConnectionGroups.IndexOf(group) is var current && current != index)
+                ElasticConnectionGroups.Move(current, index);
+            group.Sync(
+                connection.Name,
+                ElasticSources.Where(option => option.ConnectionId == connection.Id).ToArray()
+            );
+        }
     }
 
     private MainSnapshot Snapshot() =>

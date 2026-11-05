@@ -224,15 +224,16 @@ public sealed class WorkspaceViewModelTests
             var firstTab = await owner.State.OpenFileAsync(firstPath, save: false);
             await owner.State.OpenFileAsync(secondPath, save: false);
             var first = new FileTabViewModel(owner, firstTab);
-            var propertyChanges = 0;
+            var propertyChanges = new List<string?>();
             var viewPropertyChanges = 0;
-            first.PropertyChanged += (_, _) => propertyChanges++;
+            first.PropertyChanged += (_, args) => propertyChanges.Add(args.PropertyName);
             first.Views[0].PropertyChanged += (_, _) => viewPropertyChanges++;
 
             firstTab.Buffer.Append(new Line("new line"));
             first.SyncViews(loadRows: false);
 
-            Assert.Equal(0, propertyChanges);
+            // The sidebar shows a live line count for every file tab, so only that notifies.
+            Assert.Equal([nameof(FileTabViewModel.LineCountText)], propertyChanges);
             Assert.Equal(0, viewPropertyChanges);
             Assert.Empty(first.Views[0].Lines);
         }

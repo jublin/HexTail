@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using Avalonia.Automation;
 using Avalonia.Media;
 using HexTail.Application;
@@ -22,6 +23,18 @@ internal sealed class FileTabViewModel : ReactiveObject
         SyncViews(loadRows);
     }
 
+    internal static string CompactCount(int count) =>
+        count switch
+        {
+            < 1_000 => count.ToString(CultureInfo.InvariantCulture),
+            < 1_000_000 => (Math.Floor(count / 100d) / 10).ToString(
+                "0.#",
+                CultureInfo.InvariantCulture
+            ) + "k",
+            _ => (Math.Floor(count / 100_000d) / 10).ToString("0.#", CultureInfo.InvariantCulture)
+                + "M",
+        };
+
     internal HighlightSpanCache HighlightSpans { get; } = new();
 
     public MainWindowViewModel Workspace => _owner;
@@ -30,6 +43,8 @@ internal sealed class FileTabViewModel : ReactiveObject
     public string SourceDetails => Model.Source.ToolTip;
     public string Path => Model.Path;
     public string? Error => Model.Error;
+    public bool HasError => Model.Error is not null;
+    public string LineCountText => CompactCount(Model.Buffer.Count);
     public bool IsSelected => ReferenceEquals(_owner.SelectedFile, this);
 
     public IBrush SelectedTabBrush =>
@@ -124,7 +139,8 @@ internal sealed class FileTabViewModel : ReactiveObject
             DisplayName,
             SourceDetails,
             Error,
-            Model.Searches.Count
+            Model.Searches.Count,
+            Model.Buffer.Count
         );
         var previous = _lastSnapshot;
         _lastSnapshot = snapshot;
@@ -137,9 +153,14 @@ internal sealed class FileTabViewModel : ReactiveObject
         if (previous is null || previous.Value.SourceDetails != snapshot.SourceDetails)
             this.RaisePropertyChanged(nameof(SourceDetails));
         if (previous is null || previous.Value.Error != snapshot.Error)
+        {
             this.RaisePropertyChanged(nameof(Error));
+            this.RaisePropertyChanged(nameof(HasError));
+        }
         if (previous is null || previous.Value.SearchCount != snapshot.SearchCount)
             this.RaisePropertyChanged(nameof(SearchCount));
+        if (previous is null || previous.Value.LineCount != snapshot.LineCount)
+            this.RaisePropertyChanged(nameof(LineCountText));
     }
 
     private bool HasCurrentViews()
@@ -178,6 +199,7 @@ internal sealed class FileTabViewModel : ReactiveObject
         string DisplayName,
         string SourceDetails,
         string? Error,
-        int SearchCount
+        int SearchCount,
+        int LineCount
     );
 }

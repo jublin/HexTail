@@ -1,3 +1,4 @@
+using System.Reactive;
 using HexTail.Application;
 using ReactiveUI;
 using ReactiveUI.Reactive;
@@ -11,6 +12,7 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
     private string _status = "Not tested";
     private string? _openError;
     private bool _isOpening;
+    private bool _isSelected;
     private string _healthMessage = "Server reachability: not tested";
     private string _loadStatus = "Logs: closed";
 
@@ -25,9 +27,22 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
         SourceId = sourceId;
         DisplayName = displayName;
         ToolTip = toolTip;
+        ShortName = displayName;
+        ActivateCommand = ReactiveCommand.CreateFromTask(ActivateAsync, owner.Scheduler);
+        CloseCommand = ReactiveCommand.CreateFromTask(CloseAsync, owner.Scheduler);
     }
 
     public string SourceId { get; }
+    public string ConnectionId { get; private set; } = string.Empty;
+    public string ShortName { get; private set; }
+    public bool IsSelected
+    {
+        get => _isSelected;
+        private set => this.RaiseAndSetIfChanged(ref _isSelected, value);
+    }
+    public bool HasOpenError => !string.IsNullOrEmpty(OpenError);
+    public ReactiveCommand<Unit, Unit> ActivateCommand { get; }
+    public ReactiveCommand<Unit, Unit> CloseCommand { get; }
     public string DisplayName { get; private set; }
     public string ToolTip { get; private set; }
     public string Status
@@ -45,7 +60,11 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
     public string? OpenError
     {
         get => _openError;
-        private set => this.RaiseAndSetIfChanged(ref _openError, value);
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _openError, value);
+            this.RaisePropertyChanged(nameof(HasOpenError));
+        }
     }
     public string HealthMessage
     {
@@ -87,6 +106,26 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
             await _owner.State.CloseFileAsync(tab);
     }
 
+    private async Task ActivateAsync()
+    {
+        if (IsOpening)
+            return;
+        IsOpening = true;
+        OpenError = null;
+        try
+        {
+            await _owner.State.OpenElasticSourceAsync(SourceId);
+        }
+        catch (Exception exception)
+        {
+            OpenError = exception.Message;
+        }
+        finally
+        {
+            IsOpening = false;
+        }
+    }
+
     private async Task ToggleAsync(bool open)
     {
         IsOpening = true;
@@ -123,6 +162,17 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(ToolTip));
         }
     }
+
+    internal void SyncConnection(string connectionId, string shortName)
+    {
+        ConnectionId = connectionId;
+        if (ShortName == shortName)
+            return;
+        ShortName = shortName;
+        this.RaisePropertyChanged(nameof(ShortName));
+    }
+
+    internal void SyncSelection(bool selected) => IsSelected = selected;
 
     internal void Sync(
         bool isOpen,
