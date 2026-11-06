@@ -105,7 +105,7 @@ The bookmark toggle, **Pin as tab**, changes what a plain `Enter` does: instead 
 The inspector is a panel on the right of the log that shows the selected row in detail. Open it with `Ctrl+I` (which also closes it), by pressing Enter on a focused row, by double-clicking a row, or with **Inspect** in the row menu; the last three open it on that row. Drag the handle on its left edge to resize it (260 to 640 px). Whether it is open and how wide it is are saved with the session.
 
 - **Raw** shows the row's full, selectable text.
-- **Fields** lists the parsed fields. Each field has a **…** menu: **Show only this value**, **Hide value** and **Highlight** add a source rule for that field's value (literal and case-sensitive), and **Copy value** copies it.
+- **Fields** lists the parsed fields. Each field has a **…** menu: **Show only this value**, **Hide value** and **Highlight** add a source rule for that field's value (literal and case-sensitive), and **Copy value** copies it. These rules match the value as literal text anywhere in the raw line, so a very short value such as `1` also matches unrelated rows.
 - **Copy raw** copies the raw text. **Copy JSON** copies the fields as JSON and is disabled for plain-text rows.
 - **Show context** toggles a list of the rows around the selected one, taken from the source's buffer regardless of filters. The numbers of rows before and after come from **Settings → Limits**. Click a context row to select it. The toggle is not saved.
 - **Bookmark** marks the row. Bookmarked rows show a bookmark glyph. `m` toggles the bookmark on the selected row even when the inspector is closed, and `]` and `[` jump to the next and previous bookmarked row that is visible. Bookmarks last for the session and are not saved. The command palette has **Toggle inspector** and **Toggle bookmark on selected row**.
@@ -121,7 +121,7 @@ Keyboard shortcuts for navigating views and rows (they do not fire while a text 
 - `Ctrl+Tab` and `Ctrl+Shift+Tab` select the next and previous view; `Ctrl+1` to `Ctrl+9` select a view by position.
 - `Ctrl+W` closes the selected search view, or the source when **All** is selected.
 - `F` toggles **Follow**, `g` jumps to the first line, and `Shift+G` jumps to the newest line and follows. `/` or `Ctrl+F` focuses the filter input.
-- `Ctrl+I` toggles the inspector, and works while a text box has focus. `m` toggles a bookmark on the selected row, and `]` and `[` jump to the next and previous bookmarked row; they behave like the other row keys and stop following.
+- `Ctrl+I` toggles the inspector, and works while a text box has focus. `m` toggles a bookmark on the selected row, and `]` and `[` jump to the next and previous bookmarked row. `]` and `[` behave like the other row keys and stop following; `m` does not move the selection.
 - `j` and `k` select the next and previous row in the current view. `n` and `N` select the next and previous row that has at least one highlight in the current view (a match of a highlight rule or search). They stop at the ends of the list rather than wrapping, and `j`, `k`, `n` and `N` do nothing while a text box has focus.
 
 **Follow** is a toggle on each view's toolbar. Follow keeps the newest row (or match) in view; scrolling up, pressing `g`, turning Follow off, or using a row key such as `j`, `k`, `[` or `]` stops it. While a view is not following and new lines arrive, a **↓ N new lines** pill appears at the bottom of the list; click it to jump to the newest line and resume following.

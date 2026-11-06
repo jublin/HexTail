@@ -57,24 +57,36 @@ public sealed class FileTabState : IAsyncDisposable
     public int? SelectedLine { get; set; }
 
     /// <summary>Buffer indices of bookmarked rows. In-session only; never saved to the session file.</summary>
+    /// <remarks>
+    /// Guarded by an internal lock inside this class. External readers (tests) must not enumerate it while
+    /// the buffer can change off-thread (an Elastic connection replacement clears it); use <see cref="IsBookmarked"/>.
+    /// </remarks>
     public SortedSet<int> Bookmarks { get; } = [];
+
+    private readonly object _bookmarksGate = new();
 
     /// <summary>Bumped whenever <see cref="Bookmarks"/> changes, so rows re-render their glyph.</summary>
     public int BookmarksVersion { get; private set; }
 
     public bool IsBookmarked(Line line)
     {
-        foreach (var index in Bookmarks)
-            if (index >= 0 && index < Buffer.Count && ReferenceEquals(Buffer[index], line))
-                return true;
-        return false;
+        lock (_bookmarksGate)
+        {
+            foreach (var index in Bookmarks)
+                if (index >= 0 && index < Buffer.Count && ReferenceEquals(Buffer[index], line))
+                    return true;
+            return false;
+        }
     }
 
     internal void ToggleBookmarkAt(int index)
     {
-        if (!Bookmarks.Remove(index))
-            Bookmarks.Add(index);
-        BookmarksVersion++;
+        lock (_bookmarksGate)
+        {
+            if (!Bookmarks.Remove(index))
+                Bookmarks.Add(index);
+            BookmarksVersion++;
+        }
     }
 
     public AppTimeZoneMode ElasticInputZone { get; set; } = AppTimeZoneMode.Utc;
@@ -178,22 +190,28 @@ public sealed class FileTabState : IAsyncDisposable
 
     private void OnBufferChanged(BufferChange change)
     {
-        if (Bookmarks.Count > 0)
+        lock (_bookmarksGate)
         {
-            if (change.Cleared)
+            if (Bookmarks.Count > 0)
             {
-                Bookmarks.Clear();
-                BookmarksVersion++;
-            }
-            else if (change.RolledOutCount > 0)
-            {
-                var shifted = Bookmarks
-                    .Select(index => index - change.RolledOutCount)
-                    .Where(index => index >= 0)
-                    .ToList();
-                Bookmarks.Clear();
-                Bookmarks.UnionWith(shifted);
-                BookmarksVersion++;
+                if (change.Cleared)
+                {
+                    Bookmarks.Clear();
+                    BookmarksVersion++;
+                }
+                else if (change.RolledOutCount > 0)
+                {
+                    var shifted = Bookmarks
+                        .Select(index => index - change.RolledOutCount)
+                        .Where(index => index >= 0)
+                        .ToList();
+                    var dropped = shifted.Count < Bookmarks.Count;
+                    Bookmarks.Clear();
+                    Bookmarks.UnionWith(shifted);
+                    // An index-only shift keeps the same lines bookmarked (rows compare by Line reference).
+                    if (dropped)
+                        BookmarksVersion++;
+                }
             }
         }
 

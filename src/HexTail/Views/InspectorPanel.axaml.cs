@@ -42,6 +42,7 @@ public partial class InspectorPanel : UserControl
             || text(viewModel) is not { } value
         )
             return;
+        viewModel.Error = null;
         try
         {
             await clipboard.SetTextAsync(value);

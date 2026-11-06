@@ -37,7 +37,7 @@ public partial class LogLineView : UserControl
 
     private void OnTapped(object? sender, RoutedEventArgs e)
     {
-        if (e.Handled || e.Source is SelectableTextBlock || DataContext is not LogLineViewModel row)
+        if (e.Handled || DataContext is not LogLineViewModel row)
             return;
         row.Select();
         _container?.Focus();
@@ -46,8 +46,6 @@ public partial class LogLineView : UserControl
 
     private void OnDoubleTapped(object? sender, RoutedEventArgs e)
     {
-        if (e.Source is SelectableTextBlock)
-            return;
         if (DataContext is LogLineViewModel row)
             row.Inspect();
         e.Handled = true;
@@ -107,7 +105,6 @@ public partial class LogLineView : UserControl
         else if (
             e.Key == Key.C
             && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) != 0
-            && e.Source is not SelectableTextBlock
         )
         {
             var fields = e.KeyModifiers.HasFlag(KeyModifiers.Shift);

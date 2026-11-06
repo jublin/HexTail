@@ -268,6 +268,44 @@ public sealed class InspectorViewModelTests
     }
 
     [AvaloniaFact]
+    public async Task ARolloverShiftingTheSelectedRowKeepsItsFieldsAndError()
+    {
+        var path = Path.GetTempFileName();
+        var window = TestWindow.Create(out var owner);
+        try
+        {
+            owner.Settings.MaxLinesValue = 1_000;
+            await UiWait.Until(() => owner.State.Settings.MaxLines == 1_000);
+            await owner.OpenPathsCommand.Execute([path]);
+            var file = owner.SelectedFile!;
+            var structured = new Line("k=v", new Dictionary<string, string> { ["k"] = "v" });
+            var lines = Enumerable.Range(0, 998).Select(i => new Line($"row {i}")).ToList();
+            lines.Add(structured);
+            lines.Add(new Line("last"));
+            file.Model.Buffer.Append(lines);
+            file.SyncViews();
+            owner.State.SelectLine(file.Model, structured);
+            owner.Inspector.Sync();
+            var field = owner.Inspector.Fields[0];
+            owner.Inspector.Error = "copy failed";
+            Assert.Equal("Line 999", owner.Inspector.Title);
+
+            file.Model.Buffer.Append(Enumerable.Range(0, 5).Select(i => new Line($"new {i}")));
+            owner.Inspector.Sync();
+
+            Assert.Same(field, owner.Inspector.Fields[0]);
+            Assert.Equal("Line 994", owner.Inspector.Title);
+            Assert.Equal("copy failed", owner.Inspector.Error);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task TurningContextOffAgainClearsTheRows()
     {
         var lines = Enumerable.Range(0, 5).Select(i => new Line($"row {i}")).ToArray();
@@ -279,7 +317,8 @@ public sealed class InspectorViewModelTests
             owner.Inspector.Sync();
             Assert.Equal(5, owner.Inspector.ContextRows.Count);
 
-            await owner.Inspector.ToggleContextCommand.Execute();
+            owner.Inspector.ContextOpen = false;
+            owner.Inspector.Sync();
 
             Assert.False(owner.Inspector.ContextOpen);
             Assert.Empty(owner.Inspector.ContextRows);

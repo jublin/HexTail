@@ -46,18 +46,10 @@ internal sealed class InspectorViewModel : ReactiveObject
             owner.Scheduler
         );
         ToggleBookmarkCommand = ReactiveCommand.Create(ToggleBookmarkOnSelection, owner.Scheduler);
-        ToggleContextCommand = ReactiveCommand.Create(
-            () =>
-            {
-                ContextOpen = !ContextOpen;
-            },
-            owner.Scheduler
-        );
     }
 
     internal MainWindowViewModel Owner => _owner;
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleContextCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleBookmarkCommand { get; }
     public ObservableCollection<InspectorFieldViewModel> Fields { get; } = [];
     public ObservableCollection<InspectorContextRowViewModel> ContextRows { get; } = [];
@@ -194,6 +186,16 @@ internal sealed class InspectorViewModel : ReactiveObject
         if (ReferenceEquals(line, _line) && index == _index)
         {
             // The neighbours can change under an unchanged selection (settings, appended lines).
+            RebuildContext();
+            return;
+        }
+
+        if (ReferenceEquals(line, _line) && line is not null)
+        {
+            // Same row, new index (older lines rolled out): keep the fields, their menus and any error.
+            _index = index;
+            _title = $"Line {index + 1:N0}";
+            this.RaisePropertyChanged(nameof(Title));
             RebuildContext();
             return;
         }

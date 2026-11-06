@@ -147,8 +147,10 @@ a `.jsonl` extension parse JSON object fields, flattening nested objects with
 dot-separated keys. All log lines remain displayed as raw text; malformed
 logfmt/JSONL lines and non-object JSONL values are treated as plain text.
 
-The default in-memory limit is 100,000 lines per file. It can be changed in
-`AppSettings.MaxLines` in the application code.
+The default in-memory limit is 100,000 lines per source. Change it in
+Settings → Limits → Maximum lines per source (1,000 to 1,000,000); the new
+limit applies to sources opened afterwards. Out-of-range values in a
+hand-edited session file are clamped to that range on load.
 
 ### Session data
 

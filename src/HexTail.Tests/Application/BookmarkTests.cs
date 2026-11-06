@@ -51,6 +51,25 @@ public sealed class BookmarkTests
     }
 
     [Fact]
+    public void AnIndexOnlyShiftKeepsTheVersionButADropBumpsIt()
+    {
+        var tab = Tab(3);
+        tab.Buffer.Append([new Line("a"), new Line("b"), new Line("c")]);
+        tab.ToggleBookmarkAt(2);
+        var version = tab.BookmarksVersion;
+
+        tab.Buffer.Append([new Line("d")]); // "a" rolls out; "c" moves to index 1
+
+        Assert.Equal([1], tab.Bookmarks);
+        Assert.Equal(version, tab.BookmarksVersion);
+
+        tab.Buffer.Append([new Line("e"), new Line("f")]); // "c" rolls out too
+
+        Assert.Empty(tab.Bookmarks);
+        Assert.True(tab.BookmarksVersion > version);
+    }
+
+    [Fact]
     public void ClearingTheBufferClearsTheBookmarks()
     {
         var tab = Tab(10);

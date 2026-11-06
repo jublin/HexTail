@@ -49,6 +49,7 @@ public sealed class LogSourceService : IAsyncDisposable
         return tailer;
     }
 
+    // TailerOptions.MaxInitialLines is overridden by maxInitialLines when AppState passes it.
     internal Elastic.ElasticTailer CreateElastic(
         Persistence.ElasticConnectionSettings connection,
         Persistence.ElasticViewSettings view,
