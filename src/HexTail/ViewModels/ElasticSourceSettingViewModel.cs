@@ -69,12 +69,6 @@ internal sealed class ElasticSourceSettingViewModel : ReactiveObject
         return true;
     }
 
-    internal void AbandonCount(int version)
-    {
-        if (version == _countVersion)
-            InvalidateCount();
-    }
-
     internal bool FailCount(int version)
     {
         if (version != _countVersion)

@@ -31,6 +31,12 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
     private string? _error;
     private bool _isBusy;
     private string _dataViewSearch = string.Empty;
+    private string _newFilterValue = string.Empty;
+    private string? _filterMessage;
+    private string? _selectedColumn;
+    private bool _advancedOpen;
+    private readonly BehaviorSubject<bool> _canMoveUp = new(false);
+    private readonly BehaviorSubject<bool> _canMoveDown = new(false);
 
     // The automatic connection test runs once the edits have stopped coming in. A DispatcherTimer
     // rather than Rx's Throttle on the owner scheduler: tests hand the owner an immediate
@@ -70,6 +76,43 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         GoToStepCommand = ReactiveCommand.CreateFromTask<ElasticSetupStepViewModel>(
             GoToStepAsync,
             _canGoTo,
+            owner.Scheduler
+        );
+        AddFilterValueCommand = ReactiveCommand.CreateFromTask(
+            () =>
+            {
+                Run(() => AddFilterText(NewFilterValue, keepRemainder: false));
+                return Task.CompletedTask;
+            },
+            null,
+            owner.Scheduler
+        );
+        RemoveFilterValueCommand = ReactiveCommand.CreateFromTask<ElasticSourceSettingViewModel>(
+            source =>
+            {
+                Run(() => View?.RemoveFilterValue(source));
+                return Task.CompletedTask;
+            },
+            null,
+            owner.Scheduler
+        );
+        MoveColumnUpCommand = ReactiveCommand.CreateFromTask(
+            () => MoveColumnAsync(-1),
+            _canMoveUp,
+            owner.Scheduler
+        );
+        MoveColumnDownCommand = ReactiveCommand.CreateFromTask(
+            () => MoveColumnAsync(1),
+            _canMoveDown,
+            owner.Scheduler
+        );
+        RemoveColumnCommand = ReactiveCommand.CreateFromTask<string>(
+            name =>
+            {
+                Run(() => RemoveColumn(name));
+                return Task.CompletedTask;
+            },
+            null,
             owner.Scheduler
         );
         Reevaluate();
@@ -141,12 +184,141 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
             if (ReferenceEquals(_view, value))
                 return;
             if (_view is not null)
+            {
                 _view.PropertyChanged -= EditorChanged;
+                _view.PreviewInputsChanged -= OnPreviewInputsChanged;
+                _view.SelectedOutputFields.CollectionChanged -= OnSelectedColumnsChanged;
+            }
             this.RaiseAndSetIfChanged(ref _view, value);
             if (value is not null)
+            {
                 value.PropertyChanged += EditorChanged;
+                value.PreviewInputsChanged += OnPreviewInputsChanged;
+                value.SelectedOutputFields.CollectionChanged += OnSelectedColumnsChanged;
+            }
+            _selectedColumn = null;
+            _newFilterValue = string.Empty;
+            _filterMessage = null;
+            this.RaisePropertyChanged(nameof(SelectedColumn));
+            this.RaisePropertyChanged(nameof(NewFilterValue));
+            this.RaisePropertyChanged(nameof(FilterMessage));
+            this.RaisePropertyChanged(nameof(SelectedSearchableField));
+            this.RaisePropertyChanged(nameof(Summary));
+            UpdateColumnMoves();
         }
     }
+
+    /// <summary>
+    /// What the filter box holds. A comma ends a value: everything before the last comma is added
+    /// as filter values and the text after it stays to be finished.
+    /// </summary>
+    public string NewFilterValue
+    {
+        get => _newFilterValue;
+        set
+        {
+            var raw = value ?? string.Empty;
+            var kept = raw;
+            var comma = raw.LastIndexOf(',');
+            if (comma >= 0)
+            {
+                // The setter is also reached from a text box; a failure must not escape into it.
+                Run(() => AddFilterText(raw[..comma], keepRemainder: true));
+                kept = raw[(comma + 1)..].TrimStart();
+            }
+            else if (!string.Equals(raw, _newFilterValue, StringComparison.Ordinal))
+                FilterMessage = null;
+            var changed = !string.Equals(_newFilterValue, kept, StringComparison.Ordinal);
+            _newFilterValue = kept;
+            // The box has to show what was kept even when the stored text did not change (the page
+            // also corrects the box itself, because a binding does not repeat a value it knows).
+            if (changed || !string.Equals(raw, kept, StringComparison.Ordinal))
+                this.RaisePropertyChanged();
+        }
+    }
+
+    /// <summary>A short note under the filter box, for instance that a value was already there.</summary>
+    public string? FilterMessage
+    {
+        get => _filterMessage;
+        private set => this.RaiseAndSetIfChanged(ref _filterMessage, value);
+    }
+
+    /// <summary>The filter field as one of the searchable options; picking one sets the field.</summary>
+    public ElasticFieldOptionViewModel? SelectedSearchableField
+    {
+        get =>
+            View is { } view
+                ? view.SearchableFields.FirstOrDefault(option =>
+                    string.Equals(option.Name, view.ServerField, StringComparison.Ordinal)
+                )
+                : null;
+        set
+        {
+            // A combo box clears its selection while its items are rebuilt; that is not a choice.
+            if (value is null || View is not { } view)
+                return;
+            view.ServerField = value.Name;
+        }
+    }
+
+    /// <summary>Whether the Advanced section (the saved namespace metadata) is expanded.</summary>
+    public bool AdvancedOpen
+    {
+        get => _advancedOpen;
+        set => this.RaiseAndSetIfChanged(ref _advancedOpen, value);
+    }
+
+    /// <summary>The column the Up/Down buttons act on.</summary>
+    public string? SelectedColumn
+    {
+        get => _selectedColumn;
+        set
+        {
+            // Moving a row makes the list let go of it while it rebuilds its rows. The column is
+            // still there, so that is not a choice (the page puts the selection back in the list).
+            if (
+                value is null
+                && _selectedColumn is { } current
+                && View?.SelectedOutputFields.Contains(current) == true
+            )
+                return;
+            if (string.Equals(_selectedColumn, value, StringComparison.Ordinal))
+                return;
+            this.RaiseAndSetIfChanged(ref _selectedColumn, value);
+            UpdateColumnMoves();
+        }
+    }
+
+    /// <summary>One line on the last step: where the logs come from and what the rows show.</summary>
+    public string Summary
+    {
+        get
+        {
+            if (View is not { } view)
+                return string.Empty;
+            var count = view.Sources.Count(source =>
+                !string.IsNullOrWhiteSpace(source.ServerValue)
+            );
+            var parts = new List<string>();
+            if (
+                Connection?.Name is { } connectionName
+                && !string.IsNullOrWhiteSpace(connectionName)
+            )
+                parts.Add(connectionName);
+            if (!string.IsNullOrWhiteSpace(view.DataViewTitle))
+                parts.Add(view.DataViewTitle);
+            parts.Add(count == 1 ? "1 source" : $"{count} sources");
+            parts.Add($"columns: {string.Join(" → ", view.SelectedOutputFields)}");
+            return string.Join(" · ", parts);
+        }
+    }
+
+    public ReactiveCommand<Unit, Unit> AddFilterValueCommand { get; }
+    public ReactiveCommand<ElasticSourceSettingViewModel, Unit> RemoveFilterValueCommand { get; }
+    public ReactiveCommand<Unit, Unit> MoveColumnUpCommand { get; }
+    public ReactiveCommand<Unit, Unit> MoveColumnDownCommand { get; }
+    public ReactiveCommand<string, Unit> RemoveColumnCommand { get; }
 
     public bool CanGoBack => IsOpen && Step > ElasticSetupStep.Connection;
 
@@ -314,6 +486,7 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         _testStartedStamp = 0;
         _createdConnection = false;
         DataViewSearch = string.Empty;
+        AdvancedOpen = false;
         OpenNow = true;
         Error = null;
         IsOpen = true;
@@ -341,9 +514,128 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(IsFilterStep));
         this.RaisePropertyChanged(nameof(IsColumnsStep));
         this.RaisePropertyChanged(nameof(IsFinishStep));
+        this.RaisePropertyChanged(nameof(Summary));
         Reevaluate();
         if (step != ElasticSetupStep.Connection)
             EnsureMetadataLoaded();
+        if (step == ElasticSetupStep.Filter && View is { } filterView)
+            // Saved namespace metadata has no other home, so it must not hide behind a closed section.
+            AdvancedOpen =
+                !string.IsNullOrWhiteSpace(filterView.NamespaceField)
+                || filterView.Sources.Any(source =>
+                    !string.IsNullOrWhiteSpace(source.NamespaceValue)
+                );
+        RefreshCurrentStep();
+    }
+
+    /// <summary>
+    /// The filter step shows a count per value and the columns step a preview, and both go stale
+    /// whenever the step is left, so entering one fetches them again. A view that is still waiting
+    /// for its metadata does it when the load ends instead.
+    /// </summary>
+    private void RefreshCurrentStep()
+    {
+        if (
+            !IsOpen
+            || View
+                is not { IsLoading: false, IsMetadataLoaded: true, IsSelectionResolved: true } view
+        )
+            return;
+        if (Step == ElasticSetupStep.Filter)
+        {
+            if (view.Sources.Any(source => !string.IsNullOrWhiteSpace(source.ServerValue)))
+                view.RefreshCountsCommand.Execute().Subscribe(_ => { }, ReportBackgroundFailure);
+        }
+        else if (Step == ElasticSetupStep.Columns)
+            view.RefreshPreviewCommand.Execute().Subscribe(_ => { }, ReportBackgroundFailure);
+    }
+
+    private void OnPreviewInputsChanged(object? sender, EventArgs args)
+    {
+        if (
+            IsOpen
+            && Step == ElasticSetupStep.Columns
+            && View is { IsLoading: false } view
+            && ReferenceEquals(sender, view)
+        )
+            view.RefreshPreviewCommand.Execute().Subscribe(_ => { }, ReportBackgroundFailure);
+    }
+
+    private void OnSelectedColumnsChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    {
+        if (
+            _selectedColumn is not null
+            && View?.SelectedOutputFields.Contains(_selectedColumn) != true
+        )
+        {
+            _selectedColumn = null;
+            this.RaisePropertyChanged(nameof(SelectedColumn));
+        }
+        UpdateColumnMoves();
+        this.RaisePropertyChanged(nameof(Summary));
+    }
+
+    private void UpdateColumnMoves()
+    {
+        var index =
+            _selectedColumn is null || View is null
+                ? -1
+                : View.SelectedOutputFields.IndexOf(_selectedColumn);
+        var count = View?.SelectedOutputFields.Count ?? 0;
+        _canMoveUp.OnNext(index > 0);
+        _canMoveDown.OnNext(index >= 0 && index < count - 1);
+    }
+
+    private Task MoveColumnAsync(int delta)
+    {
+        try
+        {
+            if (View is { } view && _selectedColumn is { } column)
+            {
+                var index = view.SelectedOutputFields.IndexOf(column);
+                view.MoveOutputField(index, index + delta);
+                this.RaisePropertyChanged(nameof(SelectedColumn));
+                UpdateColumnMoves();
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Error = ex.Message;
+        }
+        return Task.CompletedTask;
+    }
+
+    private void RemoveColumn(string name)
+    {
+        if (View is not { } view)
+            return;
+        // Unticking the field keeps the available list and the selection in step.
+        if (view.Fields.FirstOrDefault(field => field.Name == name) is { IsOutput: true } field)
+            field.IsOutput = false;
+        else
+            view.SelectedOutputFields.Remove(name);
+    }
+
+    private void AddFilterText(string text, bool keepRemainder)
+    {
+        if (View is not { } view)
+            return;
+        var duplicates = new List<string>();
+        foreach (
+            var value in text.Split(',').Select(part => part.Trim()).Where(part => part.Length > 0)
+        )
+            if (!view.AddFilterValue(value))
+                duplicates.Add(value);
+        FilterMessage = duplicates.Count switch
+        {
+            0 => null,
+            1 => $"{duplicates[0]} is already in the list.",
+            _ => $"{string.Join(", ", duplicates)} are already in the list.",
+        };
+        if (keepRemainder)
+            return;
+        _newFilterValue = string.Empty;
+        this.RaisePropertyChanged(nameof(NewFilterValue));
     }
 
     /// <summary>
@@ -397,7 +689,31 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         )
             // Testing refreshes the titles of the data views in place.
             RebuildFilteredDataViews();
+        else if (ReferenceEquals(sender, View))
+            OnViewEdited(args.PropertyName);
         Reevaluate();
+    }
+
+    private void OnViewEdited(string? property)
+    {
+        switch (property)
+        {
+            case nameof(ElasticViewEditorViewModel.ServerField):
+                this.RaisePropertyChanged(nameof(SelectedSearchableField));
+                break;
+            case nameof(ElasticViewEditorViewModel.SearchableFields):
+                this.RaisePropertyChanged(nameof(SelectedSearchableField));
+                break;
+            case nameof(ElasticViewEditorViewModel.IsLoading) when View is { IsLoading: false }:
+                // The data view finished (re)loading, which dropped what was fetched before it.
+                RefreshCurrentStep();
+                break;
+            case nameof(ElasticViewEditorViewModel.SelectedFieldsSummary)
+            or nameof(ElasticViewEditorViewModel.SuggestedName)
+            or nameof(ElasticViewEditorViewModel.DataViewTitle):
+                this.RaisePropertyChanged(nameof(Summary));
+                break;
+        }
     }
 
     private void OnConnectionEdited(object? sender, EventArgs args)

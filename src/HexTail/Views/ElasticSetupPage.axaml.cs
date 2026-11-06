@@ -15,6 +15,11 @@ public partial class ElasticSetupPage : UserControl
     public ElasticSetupPage()
     {
         InitializeComponent();
+        this.FindControl<TextBox>("FilterValueInput")!.TextChanged += OnFilterValueTextChanged;
+        this.FindControl<ListBox>("SelectedFieldsList")!.SelectionChanged +=
+            OnSelectedFieldsSelectionChanged;
+        this.FindControl<ComboBox>("FilterFieldBox")!.SelectionChanged +=
+            OnFilterFieldSelectionChanged;
         DataContextChanged += (_, _) =>
         {
             if (_viewModel is not null)
@@ -65,6 +70,67 @@ public partial class ElasticSetupPage : UserControl
         );
     }
 
+    // The view model cuts a comma-separated entry down to what is still being typed. A binding does
+    // not push a value it believes it already sent, so the box is corrected here once it settled.
+    private void OnFilterValueTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (sender is not TextBox box)
+            return;
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                if (_viewModel is not { } viewModel)
+                    return;
+                var kept = viewModel.NewFilterValue;
+                if (!string.Equals(box.Text ?? string.Empty, kept, StringComparison.Ordinal))
+                {
+                    box.Text = kept;
+                    box.CaretIndex = kept.Length;
+                }
+            },
+            DispatcherPriority.Background
+        );
+    }
+
+    // Moving a column rebuilds the rows and the list lets go of the selected one; the view model
+    // keeps it, so the list is told again which one it is.
+    private void OnSelectedFieldsSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not ListBox list)
+            return;
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                if (
+                    _viewModel?.SelectedColumn is { } column
+                    && !string.Equals(list.SelectedItem as string, column, StringComparison.Ordinal)
+                    && _viewModel.View?.SelectedOutputFields.Contains(column) == true
+                )
+                    list.SelectedItem = column;
+            },
+            DispatcherPriority.Background
+        );
+    }
+
+    // The combo box clears its choice whenever its items are rebuilt (the field list was reloaded);
+    // the view model still knows the field, so the box is told again which option it is.
+    private void OnFilterFieldSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not ComboBox box)
+            return;
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                if (
+                    _viewModel?.SelectedSearchableField is { } option
+                    && !ReferenceEquals(box.SelectedItem, option)
+                )
+                    box.SelectedItem = option;
+            },
+            DispatcherPriority.Background
+        );
+    }
+
     private void FocusStartingControl()
     {
         if (_viewModel is not { IsOpen: true } viewModel)
@@ -73,7 +139,9 @@ public partial class ElasticSetupPage : UserControl
         {
             ElasticSetupStep.Connection => "ConnectionNameBox",
             ElasticSetupStep.DataView => "DataViewSearchBox",
-            // The later steps have no field of their own yet; the buttons are the way on.
+            ElasticSetupStep.Filter => "FilterValueInput",
+            ElasticSetupStep.Columns => "FieldSearchBox",
+            ElasticSetupStep.Finish => "ViewNameBox",
             _ => "SetupNextButton",
         };
         foreach (var name in new[] { first, "SetupNextButton", "SetupCloseButton" })

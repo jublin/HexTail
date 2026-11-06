@@ -1350,4 +1350,256 @@ public sealed class ElasticSetupViewModelTests
             connection.AuthModeChoices.Select(choice => choice.Mode)
         );
     }
+
+    private static ElasticHit PreviewHit(string raw) =>
+        new(
+            raw,
+            DateTimeOffset.UtcNow,
+            new HexTail.Domain.Line(raw),
+            Array.Empty<System.Text.Json.JsonElement>()
+        );
+
+    private static async Task WalkToColumnsAsync(Harness harness)
+    {
+        harness.Setup.StartNew();
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        await harness.ResolveDataViewAsync();
+        await harness.NextAsync();
+        harness.FillFilter();
+        await harness.NextAsync();
+        Assert.Equal(ElasticSetupStep.Columns, harness.Setup.Step);
+    }
+
+    [AvaloniaFact]
+    public async Task EnteringTheColumnsStep_RefreshesThePreview()
+    {
+        await using var harness = await CreateAsync();
+        var calls = new List<string>();
+        harness.Client.PreviewHandler = fields =>
+        {
+            calls.Add(string.Join(",", fields));
+            return Task.FromResult<IReadOnlyList<ElasticHit>>([PreviewHit("a line")]);
+        };
+
+        await WalkToColumnsAsync(harness);
+
+        Assert.Single(calls);
+        Assert.Equal(["a line"], harness.Setup.View!.PreviewRows.Select(row => row.Text));
+    }
+
+    [AvaloniaFact]
+    public async Task OnTheColumnsStep_ChangingColumnsOrFilterValuesRefreshesThePreviewAgain()
+    {
+        await using var harness = await CreateAsync();
+        var calls = new List<string>();
+        harness.Client.PreviewHandler = fields =>
+        {
+            calls.Add(string.Join(",", fields));
+            return Task.FromResult<IReadOnlyList<ElasticHit>>([PreviewHit("row")]);
+        };
+        await WalkToColumnsAsync(harness);
+        var view = harness.Setup.View!;
+        var baseline = calls.Count;
+
+        view.Fields.Single(field => field.Name == "message").IsOutput = true;
+        Assert.Equal(baseline + 1, calls.Count);
+        Assert.Equal("message", calls[^1]);
+
+        view.Fields.Single(field => field.Name == "@timestamp").IsOutput = true;
+        Assert.Equal(baseline + 2, calls.Count);
+        view.MoveOutputField(1, 0);
+        Assert.Equal(baseline + 3, calls.Count);
+        Assert.Equal("@timestamp,message", calls[^1]);
+
+        view.Sources[0].ServerValue = "other";
+        Assert.Equal(baseline + 4, calls.Count);
+        view.AddFilterValue("third");
+        Assert.Equal(baseline + 5, calls.Count);
+        view.ServerField = "message";
+        Assert.Equal(baseline + 6, calls.Count);
+        Assert.Equal(["row"], view.PreviewRows.Select(row => row.Text));
+    }
+
+    [AvaloniaFact]
+    public async Task OffTheColumnsStep_ChangingColumnsDoesNotQueryThePreview()
+    {
+        await using var harness = await CreateAsync();
+        var calls = 0;
+        harness.Client.PreviewHandler = _ =>
+        {
+            calls++;
+            return Task.FromResult<IReadOnlyList<ElasticHit>>([]);
+        };
+        await WalkToColumnsAsync(harness);
+        await harness.Setup.BackCommand.Execute();
+        Assert.Equal(ElasticSetupStep.Filter, harness.Setup.Step);
+        var baseline = calls;
+
+        harness.Setup.View!.Fields.Single(field => field.Name == "message").IsOutput = true;
+        harness.Setup.View.AddFilterValue("more");
+
+        Assert.Equal(baseline, calls);
+    }
+
+    [AvaloniaFact]
+    public async Task EnteringTheFilterStep_CountsTheValuesThatAreThere()
+    {
+        await using var harness = await CreateAsync();
+        harness.Client.CountHandler = _ => Task.FromResult(7L);
+        await WalkToColumnsAsync(harness);
+        var view = harness.Setup.View!;
+        await WaitForAsync(() => view.Sources.All(source => source.CountText != "counting…"));
+        harness.Client.Counts.Clear();
+        foreach (var source in view.Sources)
+            source.InvalidateCount();
+
+        await harness.Setup.BackCommand.Execute();
+
+        Assert.Equal(ElasticSetupStep.Filter, harness.Setup.Step);
+        await WaitForAsync(() => view.Sources.All(source => source.CountText.StartsWith('~')));
+        Assert.Equal(
+            new[] { ("service", "api"), ("service", "web") },
+            harness.Client.Counts.OrderBy(count => count.Value)
+        );
+        Assert.All(view.Sources, source => Assert.Equal("~7 docs · 15 min", source.CountText));
+    }
+
+    [AvaloniaFact]
+    public async Task EnteringTheFilterStepWithoutValues_CountsNothing()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        await harness.ResolveDataViewAsync();
+
+        await harness.NextAsync();
+
+        Assert.Equal(ElasticSetupStep.Filter, harness.Setup.Step);
+        Assert.Empty(harness.Client.Counts);
+    }
+
+    [AvaloniaFact]
+    public async Task EditView_CountsTheValuesOnceTheMetadataHasLoaded()
+    {
+        await using var harness = await CreateAsync(null, SavedWithDataView("logs"));
+        harness.Client.CountHandler = _ => Task.FromResult(7L);
+
+        harness.Setup.EditView("c1", "c1-view");
+        var view = harness.Setup.View!;
+        await WaitForAsync(() => view.IsMetadataLoaded);
+
+        var source = Assert.Single(view.Sources);
+        await WaitForAsync(() => source.CountText.StartsWith('~'));
+        Assert.Equal("~7 docs · 15 min", source.CountText);
+    }
+
+    [AvaloniaFact]
+    public async Task FilterInput_ACommaAddsTheValuesBeforeItAndKeepsTheRest()
+    {
+        await using var harness = await CreateAsync();
+        await WalkToFilterAsync(harness);
+        var setup = harness.Setup;
+        var view = setup.View!;
+
+        setup.NewFilterValue = "  one , two ,three";
+
+        Assert.Equal(["one", "two"], view.Sources.Select(source => source.ServerValue));
+        Assert.Equal("three", setup.NewFilterValue);
+
+        setup.NewFilterValue = "three,";
+
+        Assert.Equal(["one", "two", "three"], view.Sources.Select(source => source.ServerValue));
+        Assert.Equal(string.Empty, setup.NewFilterValue);
+        Assert.Null(setup.FilterMessage);
+    }
+
+    [AvaloniaFact]
+    public async Task FilterInput_TheCommandAddsEverySegmentIgnoresDuplicatesAndSaysSo()
+    {
+        await using var harness = await CreateAsync();
+        await WalkToFilterAsync(harness);
+        var setup = harness.Setup;
+        var view = setup.View!;
+
+        setup.NewFilterValue = " a ";
+        await setup.AddFilterValueCommand.Execute();
+        Assert.Equal(["a"], view.Sources.Select(source => source.ServerValue));
+        Assert.Equal(string.Empty, setup.NewFilterValue);
+        Assert.Null(setup.FilterMessage);
+
+        setup.NewFilterValue = "a";
+        await setup.AddFilterValueCommand.Execute();
+        Assert.Single(view.Sources);
+        Assert.Contains("a", setup.FilterMessage);
+        Assert.Contains("already", setup.FilterMessage);
+        Assert.Equal(string.Empty, setup.NewFilterValue);
+
+        // The note goes away with the next edit, and blank input is not an error.
+        setup.NewFilterValue = "b";
+        Assert.Null(setup.FilterMessage);
+        setup.NewFilterValue = "  ";
+        await setup.AddFilterValueCommand.Execute();
+        Assert.Null(setup.FilterMessage);
+        Assert.Single(view.Sources);
+    }
+
+    [AvaloniaFact]
+    public async Task SelectedSearchableField_MapsTheFilterFieldAndIgnoresNull()
+    {
+        await using var harness = await CreateAsync();
+        await WalkToFilterAsync(harness);
+        var setup = harness.Setup;
+        var view = setup.View!;
+        var service = view.SearchableFields.Single(field => field.Name == "service");
+
+        setup.SelectedSearchableField = service;
+
+        Assert.Equal("service", view.ServerField);
+        // A combo box clears its selection while its items are rebuilt; that must not wipe the field.
+        setup.SelectedSearchableField = null;
+        Assert.Equal("service", view.ServerField);
+        Assert.Same(service, setup.SelectedSearchableField);
+
+        view.ServerField = "message";
+        Assert.Equal("message", setup.SelectedSearchableField!.Name);
+    }
+
+    [AvaloniaFact]
+    public async Task MoveColumnCommands_MoveTheSelectedColumnAndKeepItSelected()
+    {
+        await using var harness = await CreateAsync();
+        await WalkToColumnsAsync(harness);
+        var setup = harness.Setup;
+        var view = setup.View!;
+        harness.ChooseColumns();
+        Assert.Equal(["message", "@timestamp"], view.SelectedOutputFields);
+        Assert.False(await setup.MoveColumnUpCommand.CanExecute.FirstAsync());
+
+        setup.SelectedColumn = "@timestamp";
+        Assert.True(await setup.MoveColumnUpCommand.CanExecute.FirstAsync());
+        Assert.False(await setup.MoveColumnDownCommand.CanExecute.FirstAsync());
+        await setup.MoveColumnUpCommand.Execute();
+
+        Assert.Equal(["@timestamp", "message"], view.SelectedOutputFields);
+        Assert.Equal("@timestamp", setup.SelectedColumn);
+        Assert.False(await setup.MoveColumnUpCommand.CanExecute.FirstAsync());
+        await setup.MoveColumnDownCommand.Execute();
+        Assert.Equal(["message", "@timestamp"], view.SelectedOutputFields);
+
+        await setup.RemoveColumnCommand.Execute("message");
+        Assert.Equal(["@timestamp"], view.SelectedOutputFields);
+        Assert.False(view.Fields.Single(field => field.Name == "message").IsOutput);
+    }
+
+    private static async Task WalkToFilterAsync(Harness harness)
+    {
+        harness.Setup.StartNew();
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        await harness.ResolveDataViewAsync();
+        await harness.NextAsync();
+        Assert.Equal(ElasticSetupStep.Filter, harness.Setup.Step);
+    }
 }

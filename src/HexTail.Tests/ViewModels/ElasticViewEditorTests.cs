@@ -315,10 +315,19 @@ public sealed class ElasticViewEditorTests
         await using var harness = await CreateAsync(sourceValues: ["api"]);
         var view = harness.View;
 
-        view.Sync(view.ToSettings());
+        harness.Client.CountHandler = _ => Task.FromResult(4L);
+        var settings = view.ToSettings() with { ServerField = "host" };
 
+        view.Sync(settings);
+
+        // The field really changed, and still nothing was counted.
+        Assert.Equal("host", view.ServerField);
         Assert.Empty(harness.Client.Counts);
         Assert.All(view.Sources, source => Assert.Equal(string.Empty, source.CountText));
+
+        // A change made after the sync counts again, which proves the counter is not just broken.
+        view.ServerField = "service";
+        Assert.Equal(new[] { ("service", "api") }, harness.Client.Counts);
     }
 
     [AvaloniaFact]
@@ -394,7 +403,7 @@ public sealed class ElasticViewEditorTests
         await view.RefreshPreviewCommand.Execute();
 
         Assert.Empty(view.PreviewRows);
-        Assert.Equal("No documents in the last 15 minutes", view.PreviewMessage);
+        Assert.Equal("No documents returned.", view.PreviewMessage);
 
         harness.Client.PreviewHandler = _ => throw new InvalidOperationException("kaput");
         await view.RefreshPreviewCommand.Execute();
@@ -437,5 +446,236 @@ public sealed class ElasticViewEditorTests
         Assert.True(view.AddFilterValue("checkout"));
 
         Assert.Equal("logs-* · checkout", view.SuggestedName);
+    }
+
+    [AvaloniaFact]
+    public async Task Count_ATimeoutCancellationIsAFailureNotABlankChip()
+    {
+        await using var harness = await CreateAsync();
+        var view = harness.View;
+        harness.Client.CountHandler = _ =>
+            Task.FromException<long>(new TaskCanceledException("The request timed out."));
+
+        Assert.True(view.AddFilterValue("slow"));
+        var source = view.Sources.Single(s => s.ServerValue == "slow");
+        await WaitForAsync(() => source.CountText != "counting…");
+
+        Assert.Equal("count failed", source.CountText);
+        Assert.False(source.IsZeroCount);
+
+        harness.Client.CountHandler = _ => throw new OperationCanceledException();
+        await view.RefreshCountsCommand.Execute();
+
+        Assert.Equal("count failed", source.CountText);
+    }
+
+    [AvaloniaFact]
+    public async Task Count_AStaleCancellationIsDroppedSilently()
+    {
+        await using var harness = await CreateAsync();
+        var view = harness.View;
+        var pending = Pending<long>();
+        harness.Client.CountHandler = _ => pending.Task;
+        Assert.True(view.AddFilterValue("web"));
+        var source = view.Sources.Single(s => s.ServerValue == "web");
+
+        source.ServerValue = "web2";
+        pending.SetException(new TaskCanceledException());
+        await Task.Delay(50);
+
+        Assert.Equal(string.Empty, source.CountText);
+    }
+
+    [AvaloniaFact]
+    public async Task Count_RemovingTheSourceDuringTheCountLeavesNothingBehind()
+    {
+        await using var harness = await CreateAsync(sourceValues: ["api", "web"]);
+        var view = harness.View;
+        var pending = Pending<long>();
+        harness.Client.CountHandler = _ => pending.Task;
+        var refresh = view.RefreshCountsCommand.Execute().FirstAsync().ToTask();
+        var removed = view.Sources[0];
+        Assert.Equal("counting…", removed.CountText);
+
+        view.RemoveFilterValue(removed);
+        pending.SetResult(42);
+        await refresh;
+
+        Assert.Equal(string.Empty, removed.CountText);
+        Assert.Equal(["web"], view.Sources.Select(s => s.ServerValue));
+        Assert.Equal("~42 docs · 15 min", view.Sources[0].CountText);
+    }
+
+    [AvaloniaFact]
+    public async Task AddFilterValue_IsCaseSensitive()
+    {
+        await using var harness = await CreateAsync();
+        var view = harness.View;
+        harness.Client.CountHandler = _ => Task.FromResult(1L);
+
+        Assert.True(view.AddFilterValue("api"));
+        Assert.True(view.AddFilterValue("API"));
+        Assert.False(view.AddFilterValue(" api "));
+
+        Assert.Equal(["api", "API"], view.Sources.Select(s => s.ServerValue));
+    }
+
+    [AvaloniaFact]
+    public async Task ReloadingTheDataView_KeepsTheOrderOfTheSelectedFields()
+    {
+        await using var harness = await CreateAsync(["service", "@timestamp"]);
+        var view = harness.View;
+
+        await view.RefreshFieldsCommand.Execute();
+        await WaitForAsync(() => view.IsSelectionResolved && !view.IsLoading);
+
+        Assert.Equal(["service", "@timestamp"], view.SelectedOutputFields);
+        Assert.Equal(["service", "@timestamp"], view.ToSettings().OutputFields);
+    }
+
+    [AvaloniaFact]
+    public async Task RefreshPreview_ATimeoutCancellationShowsAnErrorNotABlankPreview()
+    {
+        await using var harness = await CreateAsync();
+        var view = harness.View;
+        harness.Client.PreviewHandler = _ =>
+            Task.FromException<IReadOnlyList<ElasticHit>>(new TaskCanceledException("timed out"));
+
+        await view.RefreshPreviewCommand.Execute();
+
+        Assert.Empty(view.PreviewRows);
+        Assert.False(string.IsNullOrWhiteSpace(view.PreviewMessage));
+        Assert.NotEqual("Loading preview…", view.PreviewMessage);
+    }
+
+    [AvaloniaFact]
+    public async Task RefreshPreview_AStaleCancellationIsDroppedSilently()
+    {
+        await using var harness = await CreateAsync();
+        var view = harness.View;
+        var first = Pending<IReadOnlyList<ElasticHit>>();
+        var second = Pending<IReadOnlyList<ElasticHit>>();
+        var calls = 0;
+        harness.Client.PreviewHandler = _ => ++calls == 1 ? first.Task : second.Task;
+
+        var firstRun = view.RefreshPreviewCommand.Execute().FirstAsync().ToTask();
+        var secondRun = view.RefreshPreviewCommand.Execute().FirstAsync().ToTask();
+        first.SetException(new TaskCanceledException());
+        await firstRun;
+
+        Assert.Equal("Loading preview…", view.PreviewMessage);
+        second.SetResult([Hit("kept")]);
+        await secondRun;
+        Assert.Equal(["kept"], view.PreviewRows.Select(row => row.Text));
+    }
+
+    private static async Task<(
+        Task Run,
+        TaskCompletionSource<IReadOnlyList<ElasticHit>> Pending
+    )> StartPendingPreviewAsync(Harness harness)
+    {
+        var pending = Pending<IReadOnlyList<ElasticHit>>();
+        harness.Client.PreviewHandler = _ => pending.Task;
+        var run = harness.View.RefreshPreviewCommand.Execute().FirstAsync().ToTask();
+        Assert.Equal("Loading preview…", harness.View.PreviewMessage);
+        await Task.Yield();
+        return (run, pending);
+    }
+
+    [AvaloniaFact]
+    public async Task ChangingTheOutputFields_DropsAnInFlightPreview()
+    {
+        await using var harness = await CreateAsync(["@timestamp", "message"]);
+        var view = harness.View;
+        var (run, pending) = await StartPendingPreviewAsync(harness);
+
+        view.MoveOutputField(0, 1);
+        pending.SetResult([Hit("old columns")]);
+        await run;
+
+        Assert.Empty(view.PreviewRows);
+        Assert.Null(view.PreviewMessage);
+
+        var (run2, pending2) = await StartPendingPreviewAsync(harness);
+        view.Fields.Single(field => field.Name == "service").IsOutput = true;
+        pending2.SetResult([Hit("older columns")]);
+        await run2;
+
+        Assert.Empty(view.PreviewRows);
+    }
+
+    [AvaloniaFact]
+    public async Task ChangingTheServerField_DropsAnInFlightPreviewAndCount()
+    {
+        await using var harness = await CreateAsync(sourceValues: ["api"]);
+        var view = harness.View;
+        var count = Pending<long>();
+        harness.Client.CountHandler = _ => count.Task;
+        var counts = view.RefreshCountsCommand.Execute().FirstAsync().ToTask();
+        var (run, pending) = await StartPendingPreviewAsync(harness);
+        var source = view.Sources.Single();
+
+        view.ServerField = "host";
+        // The recount for the new field is the one still waiting; the old results must not land.
+        pending.SetResult([Hit("old field")]);
+        await run;
+        Assert.Empty(view.PreviewRows);
+        Assert.Null(view.PreviewMessage);
+        Assert.Equal("counting…", source.CountText);
+
+        count.SetResult(5);
+        await counts;
+        await WaitForAsync(() => source.CountText != "counting…");
+        Assert.Equal("~5 docs · 15 min", source.CountText);
+    }
+
+    [AvaloniaFact]
+    public async Task ChangingAFilterValue_DropsAnInFlightPreview()
+    {
+        await using var harness = await CreateAsync(sourceValues: ["api"]);
+        var view = harness.View;
+        harness.Client.CountHandler = _ => Task.FromResult(1L);
+        var (run, pending) = await StartPendingPreviewAsync(harness);
+
+        Assert.True(view.AddFilterValue("web"));
+        pending.SetResult([Hit("old value")]);
+        await run;
+
+        Assert.Empty(view.PreviewRows);
+        Assert.Null(view.PreviewMessage);
+
+        var (run2, pending2) = await StartPendingPreviewAsync(harness);
+        view.Sources[0].ServerValue = "other";
+        pending2.SetResult([Hit("older value")]);
+        await run2;
+
+        Assert.Empty(view.PreviewRows);
+    }
+
+    [AvaloniaFact]
+    public async Task ReloadingTheDataView_DropsInFlightCountsAndPreviews()
+    {
+        await using var harness = await CreateAsync(sourceValues: ["api"]);
+        var view = harness.View;
+        var count = Pending<long>();
+        harness.Client.CountHandler = _ => count.Task;
+        var counts = view.RefreshCountsCommand.Execute().FirstAsync().ToTask();
+        var (run, pending) = await StartPendingPreviewAsync(harness);
+        var source = view.Sources.Single();
+        Assert.Equal("counting…", source.CountText);
+
+        await view.RefreshFieldsCommand.Execute();
+        await WaitForAsync(() => view.IsSelectionResolved && !view.IsLoading);
+
+        Assert.Equal(string.Empty, source.CountText);
+        count.SetResult(99);
+        pending.SetResult([Hit("old metadata")]);
+        await counts;
+        await run;
+        await Task.Delay(30);
+
+        Assert.Equal(string.Empty, source.CountText);
+        Assert.Empty(view.PreviewRows);
+        Assert.Null(view.PreviewMessage);
     }
 }

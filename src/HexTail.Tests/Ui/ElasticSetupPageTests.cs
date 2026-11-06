@@ -8,7 +8,10 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Avalonia.Xaml.Interactivity;
 using HexTail.Application;
+using HexTail.Behaviors;
+using HexTail.Domain;
 using HexTail.Elastic;
 using HexTail.Persistence;
 using HexTail.Tailing;
@@ -794,5 +797,380 @@ public sealed class ElasticSetupPageTests
         await UiWait.Until(() =>
             ReferenceEquals(Focused(fixture), fixture.Find<TextBox>("ConnectionNameBox"))
         );
+    }
+
+    private static async Task WalkToFilterStepAsync(Fixture fixture)
+    {
+        fixture.Setup.StartNew();
+        fixture.Pump();
+        await WalkToDataViewStepAsync(fixture);
+        fixture.Find<ListBox>("DataViewList").SelectedItem = fixture.Setup.FilteredDataViews[0];
+        await UiWait.Until(() => fixture.Setup.View!.IsSelectionResolved);
+        fixture.Pump();
+        fixture.Find<Button>("SetupNextButton").Command!.Execute(null);
+        await UiWait.Until(() => fixture.Setup.Step == ElasticSetupStep.Filter);
+        fixture.Pump();
+    }
+
+    private static async Task WalkToColumnsStepAsync(Fixture fixture, params string[] values)
+    {
+        await WalkToFilterStepAsync(fixture);
+        var view = fixture.Setup.View!;
+        view.ServerField = "service";
+        foreach (var value in values)
+            view.AddFilterValue(value);
+        fixture.Pump();
+        fixture.Find<Button>("SetupNextButton").Command!.Execute(null);
+        await UiWait.Until(() => fixture.Setup.Step == ElasticSetupStep.Columns);
+        fixture.Pump();
+    }
+
+    private static ElasticHit Hit(string raw) =>
+        new(raw, DateTimeOffset.UtcNow, new Line(raw), Array.Empty<System.Text.Json.JsonElement>());
+
+    private static void PressEnter(Fixture fixture, Control control)
+    {
+        Assert.True(control.Focus());
+        fixture.Window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        fixture.Pump();
+    }
+
+    private static Border[] Chips(Fixture fixture) =>
+        fixture
+            .Find<ItemsControl>("FilterChips")
+            .GetVisualDescendants()
+            .OfType<Border>()
+            .Where(border => border.Classes.Contains("filter-chip") && border.IsEffectivelyVisible)
+            .ToArray();
+
+    private static string[] TextsIn(Visual root) =>
+        root.GetVisualDescendants()
+            .OfType<TextBlock>()
+            .Where(text => text.IsEffectivelyVisible && !string.IsNullOrEmpty(text.Text))
+            .Select(text => text.Text!)
+            .ToArray();
+
+    [AvaloniaFact]
+    public async Task TheFilterStepAddsValuesAsChipsWithTheirCounts()
+    {
+        await using var fixture = await CreateAsync();
+        fixture.Client.DataViewFields =
+        [
+            new("@timestamp", "date", true),
+            new("message", "text", true),
+            new("service", "keyword", true),
+            new("bytes", "long", false),
+        ];
+        fixture.Client.CountHandler = args => Task.FromResult(args.Value == "empty" ? 0L : 3200L);
+        await WalkToFilterStepAsync(fixture);
+        var view = fixture.Setup.View!;
+
+        var combo = fixture.Find<ComboBox>("FilterFieldBox");
+        var options = combo.Items.Cast<ElasticFieldOptionViewModel>().ToArray();
+        Assert.Equal(["@timestamp", "message", "service"], options.Select(option => option.Name));
+        combo.SelectedItem = options.Single(option => option.Name == "service");
+        fixture.Pump();
+        Assert.Equal("service", view.ServerField);
+        Assert.Contains("service · keyword", TextsIn(combo));
+        Assert.Empty(Chips(fixture));
+
+        var input = fixture.Find<TextBox>("FilterValueInput");
+        input.Text = "checkout";
+        PressEnter(fixture, input);
+        await UiWait.Until(() => view.Sources.Any(source => source.CountText.StartsWith('~')));
+        fixture.Pump();
+
+        var chip = Assert.Single(Chips(fixture));
+        Assert.Contains("checkout", TextsIn(chip));
+        Assert.Contains("~3.2k docs · 15 min", TextsIn(chip));
+        Assert.Equal(string.Empty, input.Text);
+        Assert.DoesNotContain("zero-count", chip.Classes);
+
+        input.Text = "a,b,";
+        fixture.Pump();
+        await UiWait.Until(() => view.Sources.All(source => source.CountText.StartsWith('~')));
+        fixture.Pump();
+        Assert.Equal(["checkout", "a", "b"], Chips(fixture).Select(border => TextsIn(border)[0]));
+        Assert.Equal(string.Empty, input.Text);
+
+        // A duplicate is ignored with a short note.
+        input.Text = "a";
+        PressEnter(fixture, input);
+        Assert.Equal(3, Chips(fixture).Length);
+        Assert.Contains(
+            fixture.Page.GetVisualDescendants().OfType<TextBlock>(),
+            text => text.Name == "FilterMessage" && text.IsEffectivelyVisible
+        );
+
+        input.Text = "empty";
+        PressEnter(fixture, input);
+        await UiWait.Until(() => view.Sources.Any(source => source.IsZeroCount));
+        fixture.Pump();
+        var zero = Chips(fixture).Single(border => border.Classes.Contains("zero-count"));
+        Assert.Contains("0 docs · 15 min", TextsIn(zero));
+
+        var remove = zero.GetVisualDescendants()
+            .OfType<Button>()
+            .Single(button => button.IsEffectivelyVisible);
+        Assert.Equal("Remove value empty", AutomationProperties.GetName(remove));
+        remove.Command!.Execute(remove.CommandParameter);
+        fixture.Pump();
+        Assert.Equal(["checkout", "a", "b"], view.Sources.Select(source => source.ServerValue));
+        Assert.Equal(3, Chips(fixture).Length);
+    }
+
+    [AvaloniaFact]
+    public async Task TheFilterFieldSurvivesTheFieldListBeingReloaded()
+    {
+        await using var fixture = await CreateAsync();
+        await WalkToFilterStepAsync(fixture);
+        var view = fixture.Setup.View!;
+        var combo = fixture.Find<ComboBox>("FilterFieldBox");
+        combo.SelectedItem = combo
+            .Items.Cast<ElasticFieldOptionViewModel>()
+            .Single(option => option.Name == "service");
+        fixture.Pump();
+        Assert.Equal("service", view.ServerField);
+
+        await view.RefreshFieldsCommand.Execute();
+        await UiWait.Until(() => view.IsSelectionResolved && !view.IsLoading);
+        fixture.Pump();
+        await UiWait.Until(() =>
+            (combo.SelectedItem as ElasticFieldOptionViewModel)?.Name == "service"
+        );
+
+        Assert.Equal("service", view.ServerField);
+        Assert.Contains("service · keyword", TextsIn(combo));
+    }
+
+    [AvaloniaFact]
+    public async Task TheLegacyNamespaceInputsLiveInTheAdvancedExpander()
+    {
+        await using var fixture = await CreateAsync();
+        await WalkToFilterStepAsync(fixture);
+        fixture.Setup.View!.AddFilterValue("api");
+        fixture.Pump();
+
+        var expander = fixture.Find<Expander>("AdvancedExpander");
+        Assert.False(expander.IsExpanded);
+        Assert.DoesNotContain(
+            fixture.Page.GetVisualDescendants().OfType<TextBlock>(),
+            text => text.Text?.Contains("not queried", StringComparison.OrdinalIgnoreCase) is true
+        );
+        Assert.DoesNotContain(
+            fixture.Page.GetVisualDescendants().OfType<TextBox>(),
+            box => box.Text?.Contains("not queried", StringComparison.OrdinalIgnoreCase) is true
+        );
+        expander.IsExpanded = true;
+        fixture.Pump();
+        var namespaceBox = fixture.Find<Control>("NamespaceFieldBox");
+        Assert.True(namespaceBox.IsEffectivelyVisible);
+        Assert.Contains(expander, namespaceBox.GetVisualAncestors());
+        Assert.DoesNotContain(
+            fixture.Page.GetVisualDescendants().OfType<TextBlock>(),
+            text => text.Text?.Contains("not queried", StringComparison.OrdinalIgnoreCase) is true
+        );
+        fixture.Find<TextBox>("NamespaceFieldBox").Text = "tenant";
+        fixture.Pump();
+        Assert.Equal("tenant", fixture.Setup.View.NamespaceField);
+    }
+
+    [AvaloniaFact]
+    public async Task TheColumnsStepTicksReordersAndPreviewsTheFields()
+    {
+        await using var fixture = await CreateAsync();
+        var hits = Enumerable.Range(1, 7).Select(index => Hit($"row {index}")).ToArray();
+        fixture.Client.PreviewHandler = _ => Task.FromResult<IReadOnlyList<ElasticHit>>(hits);
+        await WalkToColumnsStepAsync(fixture, "api");
+        var view = fixture.Setup.View!;
+        var available = fixture.Find<ItemsControl>("AvailableFieldsList");
+        var selected = fixture.Find<ListBox>("SelectedFieldsList");
+
+        void Tick(string name)
+        {
+            var box = available
+                .GetVisualDescendants()
+                .OfType<CheckBox>()
+                .First(check => AutomationProperties.GetName(check) == $"Display field {name}");
+            box.IsChecked = true;
+            fixture.Pump();
+        }
+
+        Tick("message");
+        Tick("service");
+        Tick("@timestamp");
+        Assert.Equal(["message", "service", "@timestamp"], selected.Items.Cast<string>());
+        Assert.DoesNotContain(
+            available.GetVisualDescendants().OfType<CheckBox>(),
+            check => check.IsChecked == true
+        );
+
+        selected.SelectedItem = "@timestamp";
+        fixture.Pump();
+        fixture.Find<Button>("MoveFieldUpButton").Command!.Execute(null);
+        fixture.Pump();
+        Assert.Equal(["message", "@timestamp", "service"], view.ToSettings().OutputFields);
+        Assert.Equal(["message", "@timestamp", "service"], selected.Items.Cast<string>());
+        Assert.Equal("@timestamp", fixture.Setup.SelectedColumn);
+        Assert.Equal("@timestamp", selected.SelectedItem);
+        fixture.Find<Button>("MoveFieldDownButton").Command!.Execute(null);
+        fixture.Pump();
+        Assert.Equal(["message", "service", "@timestamp"], view.ToSettings().OutputFields);
+        Assert.Equal("@timestamp", selected.SelectedItem);
+
+        Assert.Single(Interaction.GetBehaviors(selected).OfType<ListReorderBehavior>());
+
+        await UiWait.Until(() => view.PreviewRows.Count == 5);
+        fixture.Pump();
+        var preview = fixture.Find<ItemsControl>("PreviewList");
+        Assert.Equal(5, preview.ItemCount);
+        Assert.Contains("row 1", TextsIn(preview));
+
+        fixture.Client.PreviewHandler = _ => Task.FromResult<IReadOnlyList<ElasticHit>>([]);
+        fixture.Find<Button>("RefreshPreviewButton").Command!.Execute(null);
+        await UiWait.Until(() => view.PreviewMessage == "No documents returned.");
+        fixture.Pump();
+        Assert.Equal(0, preview.ItemCount);
+        Assert.Contains(
+            fixture.Page.GetVisualDescendants().OfType<TextBlock>(),
+            text => text.Text == "No documents returned." && text.IsEffectivelyVisible
+        );
+    }
+
+    [AvaloniaFact]
+    public async Task TheColumnsStepRemovesASelectedFieldAndSearchesTheRest()
+    {
+        await using var fixture = await CreateAsync();
+        await WalkToColumnsStepAsync(fixture, "api");
+        var view = fixture.Setup.View!;
+        view.Fields.Single(field => field.Name == "message").IsOutput = true;
+        fixture.Pump();
+        var selected = fixture.Find<ListBox>("SelectedFieldsList");
+        var available = fixture.Find<ItemsControl>("AvailableFieldsList");
+
+        var remove = selected
+            .GetVisualDescendants()
+            .OfType<Button>()
+            .Single(button => AutomationProperties.GetName(button) == "Remove column message");
+        remove.Command!.Execute(remove.CommandParameter);
+        fixture.Pump();
+        Assert.Empty(selected.Items.Cast<string>());
+        Assert.False(view.Fields.Single(field => field.Name == "message").IsOutput);
+
+        fixture.Find<TextBox>("FieldSearchBox").Text = "serv";
+        await UiWait.Until(() => available.ItemCount == 1);
+        fixture.Pump();
+        Assert.Equal(
+            "service",
+            Assert.IsType<ElasticFieldOptionViewModel>(Assert.Single(available.Items)).Name
+        );
+    }
+
+    [AvaloniaFact]
+    public async Task TheFinishStepPrefillsTheNameAndSavesAndOpensTheSources()
+    {
+        await using var fixture = await CreateAsync();
+        await WalkToColumnsStepAsync(fixture, "api", "web");
+        var view = fixture.Setup.View!;
+        view.Fields.Single(field => field.Name == "message").IsOutput = true;
+        fixture.Find<Button>("SetupNextButton").Command!.Execute(null);
+        await UiWait.Until(() => fixture.Setup.Step == ElasticSetupStep.Finish);
+        fixture.Pump();
+
+        var name = fixture.Find<TextBox>("ViewNameBox");
+        Assert.Equal("logs-* · api", name.Text);
+        Assert.Equal(view.SuggestedName, name.Text);
+        var open = fixture.Find<CheckBox>("OpenNowCheck");
+        Assert.True(open.IsChecked);
+        var next = fixture.Find<Button>("SetupNextButton");
+        Assert.Equal("Save & open", next.Content);
+        var summary = string.Join(" | ", TextsIn(fixture.Find<Control>("SetupFinishPanel")));
+        Assert.Contains("2 sources", summary);
+        Assert.Contains("message", summary);
+
+        open.IsChecked = false;
+        fixture.Pump();
+        Assert.Equal("Save", next.Content);
+        open.IsChecked = true;
+        fixture.Pump();
+        Assert.Equal("Save & open", next.Content);
+
+        name.Text = "Checkout logs";
+        fixture.Pump();
+        Assert.Equal("Checkout logs", view.Name);
+
+        next.Command!.Execute(null);
+        await UiWait.Until(() => !fixture.Setup.IsOpen);
+        fixture.Pump();
+
+        Assert.False(fixture.Page.IsEffectivelyVisible);
+        var saved = Assert.Single(
+            Assert.Single(fixture.Persistence.Config!.Settings.ElasticConnections).Views
+        );
+        Assert.Equal("Checkout logs", saved.Name);
+        Assert.Equal(2, fixture.Owner.State.Files.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task TheLaterStepsHaveAccessibleNamesAndFitTheMinimumWindow()
+    {
+        await using var fixture = await CreateAsync();
+        fixture.Window.Width = 720;
+        fixture.Window.Height = 720;
+        fixture.Client.PreviewHandler = _ =>
+            Task.FromResult<IReadOnlyList<ElasticHit>>([Hit("one")]);
+        await WalkToColumnsStepAsync(fixture, "api", "web");
+        fixture.Setup.View!.Fields.Single(field => field.Name == "message").IsOutput = true;
+
+        void Check(string stage)
+        {
+            fixture.Pump();
+            foreach (
+                var control in fixture
+                    .Page.GetVisualDescendants()
+                    .OfType<Control>()
+                    .Where(control => control.TemplatedParent is null)
+                    .Where(control =>
+                        control
+                            is Button
+                                or TextBox
+                                or ComboBox
+                                or ListBox
+                                or AutoCompleteBox
+                                or CheckBox
+                    )
+            )
+                Assert.False(
+                    string.IsNullOrWhiteSpace(AutomationProperties.GetName(control)),
+                    $"{stage}: {control.GetType().Name} {control.Name} has no AutomationProperties.Name"
+                );
+            Assert.True(fixture.Page.Bounds.Width <= 720.5, stage);
+            foreach (var name in new[] { "SetupNextButton", "SetupBackButton", "SetupCloseButton" })
+            {
+                var button = fixture.Find<Button>(name);
+                var topLeft = button.TranslatePoint(default, fixture.Window)!.Value;
+                Assert.True(
+                    topLeft.X >= 0 && topLeft.X + button.Bounds.Width <= 720.5,
+                    $"{stage} {name}"
+                );
+                Assert.True(
+                    topLeft.Y >= 0 && topLeft.Y + button.Bounds.Height <= 720.5,
+                    $"{stage} {name}"
+                );
+            }
+        }
+
+        Check("columns step");
+        fixture.Find<Button>("SetupBackButton").Command!.Execute(null);
+        await UiWait.Until(() => fixture.Setup.Step == ElasticSetupStep.Filter);
+        Check("filter step");
+        fixture.Setup.View.AddFilterValue("third");
+        fixture.Find<Expander>("AdvancedExpander").IsExpanded = true;
+        Check("filter step with chips");
+        fixture.Find<Button>("SetupNextButton").Command!.Execute(null);
+        await UiWait.Until(() => fixture.Setup.Step == ElasticSetupStep.Columns);
+        fixture.Find<Button>("SetupNextButton").Command!.Execute(null);
+        await UiWait.Until(() => fixture.Setup.Step == ElasticSetupStep.Finish);
+        Check("finish step");
     }
 }
