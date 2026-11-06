@@ -611,6 +611,25 @@ internal sealed class SettingsViewModel : ReactiveObject
             SelectedElasticConnection = ElasticConnections.FirstOrDefault();
     }
 
+    /// <summary>
+    /// Replaces an editor holding abandoned edits (fields, views, a typed secret) with a fresh one
+    /// built from the persisted settings. Does nothing while the editor is saving or when the
+    /// connection was never saved.
+    /// </summary>
+    internal void RevertElasticConnection(ElasticConnectionEditorViewModel editor)
+    {
+        if (editor.IsSaving)
+            return;
+        var index = ElasticConnections.IndexOf(editor);
+        if (index < 0 || SavedConnection(editor.Id) is not { } saved)
+            return;
+        var fresh = new ElasticConnectionEditorViewModel(this, editor.Id);
+        fresh.Sync(saved);
+        ElasticConnections[index] = fresh;
+        if (ReferenceEquals(SelectedElasticConnection, editor))
+            SelectedElasticConnection = fresh;
+    }
+
     private Task RemoveElasticConnectionAsync(ElasticConnectionEditorViewModel editor)
     {
         CloseConfirmationVisible = false;

@@ -17,6 +17,7 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
     private readonly BehaviorSubject<bool> _canNext = new(false);
     private readonly BehaviorSubject<bool> _canBack = new(false);
     private readonly BehaviorSubject<bool> _canGoTo = new(false);
+    private readonly BehaviorSubject<bool> _canClose = new(true);
     private bool _isOpen;
     private ElasticSetupStep _step;
     private int _furthest;
@@ -46,10 +47,13 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         CloseCommand = ReactiveCommand.CreateFromTask(
             () =>
             {
-                Close();
+                // Closing mid-save would leave the editor out of step with what was saved.
+                if (!IsBusy)
+                    Close();
                 return Task.CompletedTask;
             },
-            outputScheduler: owner.Scheduler
+            _canClose,
+            owner.Scheduler
         );
         GoToStepCommand = ReactiveCommand.CreateFromTask<ElasticSetupStepViewModel>(
             GoToStepAsync,
@@ -110,7 +114,8 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
                 && !string.IsNullOrWhiteSpace(id),
             ElasticSetupStep.Filter => View is { FilterFieldError: null, FilterValueError: null },
             ElasticSetupStep.Columns => View is { OutputFieldsError: null },
-            ElasticSetupStep.Finish => View is { CanSave: true },
+            ElasticSetupStep.Finish => View is { CanSave: true }
+                && Connection is { CanSaveConnectionOnly: true },
             _ => false,
         };
 
@@ -124,8 +129,10 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         get => _openNow;
         set
         {
-            if (!this.RaiseAndSetIfChanged(ref _openNow, value))
+            // RaiseAndSetIfChanged returns the new value, not whether it changed.
+            if (_openNow == value)
                 return;
+            this.RaiseAndSetIfChanged(ref _openNow, value);
             Reevaluate();
         }
     }
@@ -141,8 +148,9 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         get => _isBusy;
         private set
         {
-            if (!this.RaiseAndSetIfChanged(ref _isBusy, value))
+            if (_isBusy == value)
                 return;
+            this.RaiseAndSetIfChanged(ref _isBusy, value);
             Reevaluate();
         }
     }
@@ -151,6 +159,22 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> BackCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
     public ReactiveCommand<ElasticSetupStepViewModel, Unit> GoToStepCommand { get; }
+
+    /// <summary>
+    /// Runs a flow entry point from a command or the palette so that a failure lands in
+    /// <see cref="Error"/> instead of escaping into the command's unobserved exception stream.
+    /// </summary>
+    internal void Run(Action start)
+    {
+        try
+        {
+            start();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Error = ex.Message;
+        }
+    }
 
     /// <summary>Starts a brand new connection at the first step.</summary>
     internal void StartNew()
@@ -197,8 +221,10 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
     }
 
     /// <summary>
-    /// Ends the flow. What is saved stays saved; a connection that was never saved and any view
-    /// that is not in the saved settings are dropped. Nothing asks for confirmation.
+    /// Ends the flow. What is saved stays saved; a connection that was never saved, any view that
+    /// is not in the saved settings and any other unsaved edit are dropped. Nothing asks for
+    /// confirmation. The close command refuses to run while a save is pending; this method itself
+    /// is also used by the finish step and by starting a new flow.
     /// </summary>
     internal void Close()
     {
@@ -213,6 +239,10 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
                 connection.Views.Remove(view);
             if (_createdConnection)
                 _owner.Settings.DiscardUnsavedElasticConnection(connection);
+            // Whatever was changed on a saved connection (fields, views, a typed secret) and not
+            // saved is abandoned with the flow.
+            if (connection.IsSaved && connection.IsDirty)
+                _owner.Settings.RevertElasticConnection(connection);
         }
         _createdConnection = false;
         Connection = null;
@@ -275,6 +305,7 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         _canNext.OnNext(canNext && !IsBusy);
         _canBack.OnNext(CanGoBack && !IsBusy);
         _canGoTo.OnNext(IsOpen && !IsBusy);
+        _canClose.OnNext(!IsBusy);
     }
 
     private async Task NextAsync()
@@ -320,7 +351,7 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
                 break;
             case ElasticSetupStep.Finish:
                 var view = View!;
-                if (!await connection.SaveDraftAsync())
+                if (!await connection.SaveViewAsync(view))
                 {
                     if (session == _session)
                         Error = connection.Error ?? "Fix the highlighted fields before saving.";

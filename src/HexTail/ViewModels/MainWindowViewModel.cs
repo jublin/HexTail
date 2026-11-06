@@ -94,7 +94,10 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             },
             _scheduler
         );
-        SetUpElasticCommand = ReactiveCommand.Create(ElasticSetup.StartNew, _scheduler);
+        SetUpElasticCommand = ReactiveCommand.Create(
+            () => ElasticSetup.Run(ElasticSetup.StartNew),
+            outputScheduler: _scheduler
+        );
         ToggleSidebarCommand = ReactiveCommand.Create(
             () =>
             {
@@ -744,7 +747,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 null,
                 () =>
                 {
-                    ElasticSetup.AddSource(connectionId);
+                    ElasticSetup.Run(() => ElasticSetup.AddSource(connectionId));
                     return Task.CompletedTask;
                 }
             );

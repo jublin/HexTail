@@ -171,6 +171,10 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             _ => true,
         };
     public bool IsSaved => SavedConnection is not null;
+
+    /// <summary>What saving the connection on its own needs: valid endpoints and no save running.</summary>
+    internal bool CanSaveConnectionOnly =>
+        !IsSaving && KibanaUrlError is null && ElasticsearchUrlError is null;
     private ElasticConnectionSettings? SavedConnection => _owner.SavedConnection(Id);
     private bool NeedsSecret => AuthMode is ElasticAuthMode.Basic or ElasticAuthMode.ApiKey;
     private bool HasStoredSecret =>
@@ -561,7 +565,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     /// </summary>
     internal async Task<bool> SaveConnectionOnlyAsync()
     {
-        if (IsSaving || KibanaUrlError is not null || ElasticsearchUrlError is not null)
+        if (!CanSaveConnectionOnly)
             return false;
         var secret = Secret;
         _saveFailed = false;
@@ -594,7 +598,53 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         }
     }
 
-    private void UpdateSavedConnectionSnapshot()
+    /// <summary>
+    /// Persists the connection and one finished view, together with the views that were already
+    /// saved. Other views still being edited are left out, so they can neither be written
+    /// half-done nor make this save fail.
+    /// </summary>
+    internal async Task<bool> SaveViewAsync(ElasticViewEditorViewModel view)
+    {
+        if (!CanSaveConnectionOnly || !view.CanSave)
+            return false;
+        var secret = Secret;
+        _saveFailed = false;
+        IsSaving = true;
+        try
+        {
+            var viewSettings = view.ToSettings();
+            var views = _owner.SavedViews(Id);
+            var existing = views.FindIndex(item => item.Id == viewSettings.Id);
+            if (existing >= 0)
+                views[existing] = viewSettings;
+            else
+                views.Add(viewSettings);
+            var connection = ToSettings(includeViews: false) with { Views = views };
+            await _owner.SaveElasticConnectionAsync(connection, secret);
+            if (Secret == secret)
+            {
+                _secret = string.Empty;
+                this.RaisePropertyChanged(nameof(Secret));
+            }
+            UpdateSavedConnectionSnapshot(view.Id);
+            if (_credentialsTested)
+                ShowCredentialsResult();
+            Error = null;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _saveFailed = true;
+            Error = exception.Message;
+            return false;
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+
+    private void UpdateSavedConnectionSnapshot(string? savedViewId = null)
     {
         // Only the connection fields were written; the views part keeps describing what is saved.
         var current = JsonNode.Parse(DraftSnapshot())!.AsObject();
@@ -606,6 +656,23 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         else
             foreach (var key in ConnectionSnapshotKeys)
                 saved[key] = current[key]?.DeepClone();
+        if (
+            savedViewId is not null
+            && saved["Views"] is JsonArray savedViews
+            && current["Views"] is JsonArray currentViews
+            && currentViews.FirstOrDefault(node => node?["Id"]?.GetValue<string>() == savedViewId)
+                is { } currentView
+        )
+        {
+            var index = -1;
+            for (var position = 0; position < savedViews.Count; position++)
+                if (savedViews[position]?["Id"]?.GetValue<string>() == savedViewId)
+                    index = position;
+            if (index >= 0)
+                savedViews[index] = currentView.DeepClone();
+            else
+                savedViews.Add(currentView.DeepClone());
+        }
         _savedSnapshot = saved.ToJsonString();
     }
 

@@ -5,6 +5,7 @@ using Avalonia.Headless.XUnit;
 using HexTail.Application;
 using HexTail.Elastic;
 using HexTail.Persistence;
+using HexTail.Security;
 using HexTail.Tailing;
 using HexTail.Tests.Support;
 using HexTail.ViewModels;
@@ -72,8 +73,14 @@ public sealed class ElasticSetupViewModelTests
         public ValueTask DisposeAsync() => owner.DisposeAsync();
     }
 
-    private static async Task<Harness> CreateAsync(
+    private static Task<Harness> CreateAsync(
         TestPersistence? persistence = null,
+        params ElasticConnectionSettings[] saved
+    ) => BuildAsync(persistence, new InMemoryCredentialVault(), saved);
+
+    private static async Task<Harness> BuildAsync(
+        TestPersistence? persistence,
+        ICredentialVault vault,
         params ElasticConnectionSettings[] saved
     )
     {
@@ -99,12 +106,7 @@ public sealed class ElasticSetupViewModelTests
             );
         persistence ??= ElasticFixtures.Persistence(saved);
         var owner = new MainWindowViewModel(
-            new AppState(
-                new LogSourceService(),
-                persistence,
-                credentials: new InMemoryCredentialVault(),
-                elastic: client
-            ),
+            new AppState(new LogSourceService(), persistence, credentials: vault, elastic: client),
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
@@ -546,17 +548,18 @@ public sealed class ElasticSetupViewModelTests
         }
     }
 
-    [AvaloniaFact]
-    public async Task Next_IsNotReentrantAndCloseDuringASaveStopsTheFlow()
+    private static async Task<(
+        MainWindowViewModel Owner,
+        GatedPersistence Persistence
+    )> GatedAsync()
     {
         var persistence = new GatedPersistence();
-        var client = new FakeElasticApiClient { DataViews = [new("logs", "logs-*")] };
-        await using var owner = new MainWindowViewModel(
+        var owner = new MainWindowViewModel(
             new AppState(
                 new LogSourceService(),
                 persistence,
                 credentials: new InMemoryCredentialVault(),
-                elastic: client
+                elastic: new FakeElasticApiClient { DataViews = [new("logs", "logs-*")] }
             ),
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
@@ -567,6 +570,15 @@ public sealed class ElasticSetupViewModelTests
         setup.Connection!.KibanaUrl = "https://kibana.example/";
         setup.Connection.ElasticsearchUrl = "https://elastic.example/";
         await setup.Connection.TestConnectionCommand.Execute();
+        return (owner, persistence);
+    }
+
+    [AvaloniaFact]
+    public async Task Next_IsNotReentrantAndCloseDuringASaveStopsTheFlow()
+    {
+        var (owner, persistence) = await GatedAsync();
+        await using var _ = owner;
+        var setup = owner.ElasticSetup;
         var savesBefore = persistence.SaveCount;
         persistence.HoldNextSave();
 
@@ -574,24 +586,246 @@ public sealed class ElasticSetupViewModelTests
         Assert.True(setup.IsBusy);
         Assert.False(await setup.NextCommand.CanExecute.FirstAsync());
         Assert.False(await setup.BackCommand.CanExecute.FirstAsync());
-        // A second press while busy is ignored rather than saving twice.
+        // A second press while busy is ignored by NextAsync's guard, so it never saves twice.
         var second = setup.NextCommand.Execute().ToTask();
         setup.Close();
         persistence.Release();
         await first;
-        try
-        {
-            await second;
-        }
-        catch (InvalidOperationException)
-        {
-            // Not executable while busy is also acceptable.
-        }
+        await second;
 
         Assert.Equal(savesBefore + 1, persistence.SaveCount);
         Assert.False(setup.IsOpen);
         Assert.False(setup.IsBusy);
         Assert.Equal(ElasticSetupStep.Connection, setup.Step);
         Assert.Null(setup.View);
+    }
+
+    [AvaloniaFact]
+    public async Task CloseCommand_CannotRunWhileASaveIsPending()
+    {
+        var (owner, persistence) = await GatedAsync();
+        await using var _ = owner;
+        var setup = owner.ElasticSetup;
+        Assert.True(await setup.CloseCommand.CanExecute.FirstAsync());
+        persistence.HoldNextSave();
+
+        var first = setup.NextCommand.Execute().ToTask();
+
+        Assert.True(setup.IsBusy);
+        Assert.False(await setup.CloseCommand.CanExecute.FirstAsync());
+        persistence.Release();
+        await first;
+        Assert.False(setup.IsBusy);
+        Assert.True(setup.IsOpen);
+        Assert.True(await setup.CloseCommand.CanExecute.FirstAsync());
+        // The buttons come back too once the save is over.
+        Assert.True(await setup.BackCommand.CanExecute.FirstAsync());
+    }
+
+    [AvaloniaFact]
+    public async Task CloseCommand_ClosesTheFlow()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+
+        await harness.Setup.CloseCommand.Execute();
+
+        Assert.False(harness.Setup.IsOpen);
+        Assert.Null(harness.Setup.Connection);
+        Assert.Empty(harness.Owner.Settings.ElasticConnections);
+    }
+
+    [AvaloniaFact]
+    public async Task Close_RevertsEditsToASavedConnectionAndItsTypedSecret()
+    {
+        var vault = new InMemoryCredentialVault();
+        var persistence = ElasticFixtures.Persistence(
+            ElasticFixtures.Connection("c1", "Ops", "api")
+        );
+        await using var harness = await BuildAsync(persistence, vault);
+        harness.Setup.EditConnection("c1");
+        var edited = harness.Setup.Connection!;
+        harness.Owner.Settings.SelectedElasticConnection = edited;
+        edited.Name = "Abandoned";
+        edited.KibanaUrl = "https://abandoned.example/";
+        edited.Secret = "typed-secret";
+        Assert.True(harness.Owner.Settings.HasElasticDrafts);
+
+        harness.Setup.Close();
+
+        Assert.False(harness.Owner.Settings.HasElasticDrafts);
+        Assert.DoesNotContain(edited, harness.Owner.Settings.ElasticConnections);
+        Assert.Same(
+            harness.Owner.Settings.EditorFor("c1"),
+            harness.Owner.Settings.SelectedElasticConnection
+        );
+        harness.Setup.EditConnection("c1");
+        Assert.Equal("Ops", harness.Setup.Connection!.Name);
+        Assert.Equal("https://kibana/", harness.Setup.Connection.KibanaUrl);
+        Assert.Equal(string.Empty, harness.Setup.Connection.Secret);
+        Assert.False(harness.Setup.Connection.IsDirty);
+        Assert.Equal("Ops", harness.SavedConnection.Name);
+        Assert.Equal("https://kibana/", harness.SavedConnection.KibanaUrl);
+        Assert.Equal("c1-view", Assert.Single(harness.SavedConnection.Views).Id);
+        Assert.Null(vault.Get("c1"));
+    }
+
+    [AvaloniaFact]
+    public async Task Close_RevertsEditsToASavedView()
+    {
+        var saved = ElasticFixtures.Connection("c1", "Ops", "api");
+        await using var harness = await CreateAsync(null, saved);
+        harness.Setup.EditView("c1", "c1-view");
+        harness.Setup.View!.FilterValue = "abandoned";
+        Assert.True(harness.Setup.Connection!.IsDirty);
+
+        harness.Setup.Close();
+
+        Assert.False(harness.Owner.Settings.HasElasticDrafts);
+        harness.Setup.EditView("c1", "c1-view");
+        Assert.Equal("api", harness.Setup.View!.FilterValue);
+        Assert.False(harness.Setup.Connection!.IsDirty);
+        Assert.Equal("api", harness.SavedConnection.Views.Single().Sources.Single().ServerValue);
+    }
+
+    [AvaloniaFact]
+    public async Task Close_AfterANewConnectionWasSavedKeepsItAndLeavesNoDrafts()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        harness.Setup.Connection!.Name = "Renamed after saving";
+
+        harness.Setup.Close();
+
+        Assert.False(harness.Owner.Settings.HasElasticDrafts);
+        var editor = Assert.Single(harness.Owner.Settings.ElasticConnections);
+        Assert.Equal("Ops", editor.Name);
+        Assert.Equal("Ops", harness.SavedConnection.Name);
+    }
+
+    private static ElasticViewEditorViewModel AddIncompleteView(ElasticSetupViewModel setup)
+    {
+        var view = setup.Connection!.AddNewView(string.Empty);
+        view.Name = "Unfinished";
+        return view;
+    }
+
+    [AvaloniaFact]
+    public async Task Finish_SavesOnlyTheFinishedViewNotUnfinishedSiblings()
+    {
+        var saved = ElasticFixtures.Connection("c1", "Ops", "api");
+        await using var harness = await CreateAsync(null, saved);
+        harness.Setup.AddSource("c1");
+        var unfinished = AddIncompleteView(harness.Setup);
+        var finished = harness.Setup.View!;
+        await harness.ResolveDataViewAsync();
+        await harness.NextAsync();
+        harness.FillFilter();
+        await harness.NextAsync();
+        harness.ChooseColumns();
+        await harness.NextAsync();
+        Assert.Equal(ElasticSetupStep.Finish, harness.Setup.Step);
+        Assert.False(harness.Setup.Connection!.CanSave);
+        Assert.True(harness.Setup.CanGoNext);
+        harness.Setup.OpenNow = false;
+
+        await harness.NextAsync();
+
+        Assert.Null(harness.Setup.Error);
+        Assert.False(harness.Setup.IsOpen);
+        Assert.Equal(
+            ["c1-view", finished.Id],
+            harness.SavedConnection.Views.Select(view => view.Id)
+        );
+        Assert.DoesNotContain(unfinished.Id, harness.SavedConnection.Views.Select(view => view.Id));
+    }
+
+    [AvaloniaFact]
+    public async Task Finish_OpenFailureKeepsTheFlowOpenAndARetryWorks()
+    {
+        var vault = new DroppingVault();
+        await using var harness = await BuildAsync(null, vault);
+        harness.Setup.StartNew();
+        harness.Setup.Connection!.Name = "Ops";
+        harness.Setup.Connection.KibanaUrl = "https://kibana.example/";
+        harness.Setup.Connection.ElasticsearchUrl = "https://elastic.example/";
+        harness.Setup.Connection.AuthMode = ElasticAuthMode.Basic;
+        harness.Setup.Connection.Username = "elastic";
+        harness.Setup.Connection.Secret = "pw";
+        await harness.Setup.Connection.TestConnectionCommand.Execute();
+        await harness.NextAsync();
+        await harness.ResolveDataViewAsync();
+        await harness.NextAsync();
+        harness.FillFilter();
+        await harness.NextAsync();
+        harness.ChooseColumns();
+        await harness.NextAsync();
+        vault.ForgetOnSet = true;
+
+        await harness.NextAsync();
+
+        Assert.True(harness.Setup.IsOpen);
+        Assert.Equal(ElasticSetupStep.Finish, harness.Setup.Step);
+        Assert.Contains("credential", harness.Setup.Error);
+        Assert.False(harness.Setup.IsBusy);
+        Assert.Empty(harness.Owner.State.Files);
+        Assert.Single(harness.SavedConnection.Views);
+
+        vault.ForgetOnSet = false;
+        harness.Setup.Connection.Secret = "pw";
+        await harness.NextAsync();
+
+        Assert.Null(harness.Setup.Error);
+        Assert.False(harness.Setup.IsOpen);
+        Assert.Equal(2, harness.Owner.State.Files.Count);
+    }
+
+    private sealed class DroppingVault : ICredentialVault
+    {
+        private readonly Dictionary<string, string> _secrets = new(StringComparer.Ordinal);
+        public bool ForgetOnSet { get; set; }
+
+        public string? Get(string connectionId) => _secrets.GetValueOrDefault(connectionId);
+
+        public void Set(string connectionId, string secret)
+        {
+            if (ForgetOnSet)
+                _secrets.Remove(connectionId);
+            else
+                _secrets[connectionId] = secret;
+        }
+
+        public void Delete(string connectionId) => _secrets.Remove(connectionId);
+    }
+
+    [AvaloniaFact]
+    public async Task PaletteAddElasticSource_StartsAddSourceAtTheDataView()
+    {
+        var saved = ElasticFixtures.Connection("c1", "Ops", "api");
+        await using var harness = await CreateAsync(null, saved);
+
+        var item = Assert.Single(
+            harness.Owner.BuildPaletteItems(),
+            item => item.Title == "Add Elastic source"
+        );
+        await item.Execute();
+
+        Assert.True(harness.Setup.IsOpen);
+        Assert.Equal(ElasticSetupStep.DataView, harness.Setup.Step);
+        Assert.Equal("c1", harness.Setup.Connection!.Id);
+        Assert.Equal(2, harness.Setup.Connection.Views.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task PaletteAddElasticSource_IsAbsentWithoutAConnection()
+    {
+        await using var harness = await CreateAsync();
+
+        var titles = harness.Owner.BuildPaletteItems().Select(item => item.Title).ToList();
+
+        Assert.Contains("Set up Elastic", titles);
+        Assert.DoesNotContain("Add Elastic source", titles);
     }
 }
