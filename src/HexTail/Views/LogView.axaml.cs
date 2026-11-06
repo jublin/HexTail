@@ -103,7 +103,14 @@ public partial class LogView : UserControl
     private void OnSelectionMoved(LogLineViewModel row)
     {
         // Keyboard selection never touches the list itself, so select the row here and bring it
-        // into view; a click already scrolls the list on its own.
+        // into view; a click already scrolls the list on its own. Landing anywhere but the last
+        // row means the user left the tail: stop following first, so that neither a pending
+        // scroll-to-end nor the next appended line pulls the selection out of view again.
+        if (
+            _viewModel is { Lines.Count: > 0 } viewModel
+            && !ReferenceEquals(viewModel.Lines[^1], row)
+        )
+            viewModel.IsFollowing = false;
         LogList.SelectedItem = row;
         LogList.ScrollIntoView(row);
     }

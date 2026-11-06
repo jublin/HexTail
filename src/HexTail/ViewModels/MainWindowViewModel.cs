@@ -1001,7 +1001,10 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 .SequenceEqual(SavedFilters.Select(row => (row.Name, row.Summary)))
         )
             return;
+        var retired = SavedFilters.ToList();
         SavedFilters.Clear();
+        foreach (var row in retired)
+            row.Dispose();
         foreach (var filter in filters)
             SavedFilters.Add(new SavedFilterViewModel(this, filter));
     }

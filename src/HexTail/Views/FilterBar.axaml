@@ -208,6 +208,13 @@
                           <KeyBinding Gesture="Escape" Command="{Binding CancelCommand}" />
                         </TextBox.KeyBindings>
                       </TextBox>
+                      <CheckBox
+                        Name="DraftEnabledCheck"
+                        Content="Enabled"
+                        IsChecked="{Binding Draft.Enabled, Mode=TwoWay}"
+                        ToolTip.Tip="A disabled rule is kept but has no effect"
+                        AutomationProperties.Name="Rule enabled"
+                      />
                       <StackPanel Orientation="Horizontal" Spacing="4">
                         <ComboBox
                           Name="DraftModePicker"

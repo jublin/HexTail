@@ -1,5 +1,6 @@
 using System.Reactive;
 using Avalonia.Media;
+using HexTail.Application;
 using HexTail.Domain;
 using ReactiveUI;
 using ReactiveUI.Reactive;
@@ -12,9 +13,10 @@ internal sealed class RuleChipViewModel : ReactiveObject
     private RuleDraftViewModel? _draft;
     private bool _isEditorOpen;
 
-    internal RuleChipViewModel(FilterBarViewModel owner, ViewRule rule)
+    internal RuleChipViewModel(FilterBarViewModel owner, FileTabState file, ViewRule rule)
     {
         _owner = owner;
+        File = file;
         Rule = rule;
         Pattern = rule.Pattern;
         ToggleEnabledCommand = ReactiveCommand.CreateFromTask(
@@ -39,9 +41,10 @@ internal sealed class RuleChipViewModel : ReactiveObject
         );
     }
 
-    internal RuleChipViewModel(FilterBarViewModel owner, Search search)
+    internal RuleChipViewModel(FilterBarViewModel owner, FileTabState file, Search search)
         : this(
             owner,
+            file,
             new ViewRule
             {
                 Pattern = search.Query.Query,
@@ -50,6 +53,9 @@ internal sealed class RuleChipViewModel : ReactiveObject
                 Color = search.Color,
             }
         ) => PinnedSearch = search;
+
+    /// <summary>The source this chip was created for; every action targets it, whatever is selected later.</summary>
+    internal FileTabState File { get; }
 
     /// <summary>The stored rule. Synthetic (built from <see cref="PinnedSearch"/>) when a pinned tab is set: use <see cref="IsRuleChip"/> before editing it.</summary>
     public ViewRule Rule { get; }

@@ -147,16 +147,8 @@ public partial class FilterBar : UserControl
             && (e.Source as Control)?.DataContext is RuleChipViewModel chip
         )
         {
-            var bar = DataContext as FilterBarViewModel;
-            chip.ToggleEnabledCommand.Execute()
-                .Subscribe(
-                    _ => { },
-                    ex =>
-                    {
-                        if (bar is not null)
-                            bar.Error = ex.Message;
-                    }
-                );
+            // ToggleAsync reports a failed save on the bar itself, so the command never throws.
+            chip.ToggleEnabledCommand.Execute().Subscribe();
             e.Handled = true;
         }
     }

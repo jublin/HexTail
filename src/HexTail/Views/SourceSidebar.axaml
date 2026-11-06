@@ -192,7 +192,7 @@
       <ItemsControl x:Name="SavedFilterList" ItemsSource="{Binding SavedFilters}">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:SavedFilterViewModel">
-            <Border Classes="source-row" ToolTip.Tip="Merge into the selected source">
+            <Border Classes="source-row" ToolTip.Tip="{Binding ApplyToolTip}">
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
                 <Button
                   Classes="source-select"

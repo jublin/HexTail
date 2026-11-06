@@ -24,6 +24,22 @@ public sealed class RuleDraftTests
     }
 
     [Fact]
+    public void EnabledStartsFromTheRuleAndRoundTripsThroughToRule()
+    {
+        var draft = new RuleDraftViewModel(TestRules.Source("x"));
+        Assert.True(draft.Enabled);
+        Assert.True(draft.ToRule().Enabled);
+
+        draft.Enabled = false;
+        Assert.False(draft.ToRule().Enabled);
+
+        var disabled = new RuleDraftViewModel(TestRules.Source("x") with { Enabled = false });
+        Assert.False(disabled.Enabled);
+        disabled.Enabled = true;
+        Assert.True(disabled.ToRule().Enabled);
+    }
+
+    [Fact]
     public void PinningIsOnlyOfferedToGlobalNonHideRules()
     {
         var draft = new RuleDraftViewModel(TestRules.Source("x"));

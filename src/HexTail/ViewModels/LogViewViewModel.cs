@@ -138,11 +138,13 @@ internal sealed class LogViewViewModel : ReactiveObject
     internal void MoveToMatch(int direction)
     {
         var rules = File.EffectiveRules(Settings);
-        for (
-            var index = CurrentRowIndex() + direction;
-            index >= 0 && index < Lines.Count;
-            index += direction
-        )
+        var current = CurrentRowIndex();
+        // With no (visible) selected row, start from the edge the direction heads away from.
+        var first =
+            current >= 0 ? current + direction
+            : direction > 0 ? 0
+            : Lines.Count - 1;
+        for (var index = first; index >= 0 && index < Lines.Count; index += direction)
         {
             if (_file.HighlightSpans.Get(Lines[index].Line, File.Searches, rules).Count > 0)
             {

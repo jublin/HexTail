@@ -334,6 +334,44 @@ public sealed class SidebarTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task ApplyNeedsASelectedSourceAndTheRowSaysSo()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            window.Width = 1280;
+            window.Show();
+            await viewModel.OpenPathsCommand.Execute([path]);
+            var file = viewModel.SelectedFile!;
+            await viewModel.State.SetSourceRulesAsync(file.Model, [TestRules.Source("boom")]);
+            viewModel.FilterBar.NewFilterName = "mine";
+            await viewModel.FilterBar.SaveFilterCommand.Execute();
+            await UiWait.Until(() => viewModel.SavedFilters.Count == 1);
+            Dispatcher.UIThread.RunJobs();
+            var saved = Assert.Single(viewModel.SavedFilters);
+
+            Assert.True(await saved.ApplyCommand.CanExecute.FirstAsync());
+            Assert.True(SelectButton(window, saved).IsEffectivelyEnabled);
+            Assert.Equal("Merge into the selected source", ToolTip.GetTip(Row(window, saved)));
+
+            await viewModel.CloseFileCommand.Execute(file);
+            await UiWait.Until(() => viewModel.SelectedFile is null);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Same(saved, Assert.Single(viewModel.SavedFilters));
+            Assert.False(await saved.ApplyCommand.CanExecute.FirstAsync());
+            Assert.False(SelectButton(window, saved).IsEffectivelyEnabled);
+            Assert.Equal("Select a source to apply", ToolTip.GetTip(Row(window, saved)));
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static async Task ResizeAsync(Window window, double width)
     {
         window.Width = width;

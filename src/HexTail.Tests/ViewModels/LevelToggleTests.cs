@@ -51,6 +51,45 @@ public sealed class LevelToggleTests
     }
 
     [AvaloniaFact]
+    public async Task SaveFailureOnToggleSetsTheBarErrorWithoutAnUnobservedException()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var persistence = new TestPersistence();
+            var window = TestWindow.Create(persistence, out var owner);
+            await owner.InitializeAsync();
+            await owner.OpenPathsCommand.Execute([path]);
+            var model = owner.SelectedFile!.Model;
+            owner.FilterBar.Sync();
+            var debug = owner.FilterBar.LevelToggles.Single(t => t.Level == LogLevels.Debug);
+            var thrown = new List<Exception>();
+            debug.ToggleCommand.ThrownExceptions.Subscribe(thrown.Add);
+            persistence.SaveError = new IOException("disk full");
+
+            await debug.ToggleCommand.Execute();
+
+            Assert.Empty(thrown);
+            Assert.Equal("disk full", owner.FilterBar.Error);
+            // The mask changed in memory and the control shows it; only the save failed.
+            Assert.Equal(LogLevels.All & ~LogLevels.Debug, model.Levels);
+            owner.FilterBar.Sync();
+            Assert.False(debug.IsOn);
+
+            persistence.SaveError = null;
+            await debug.ToggleCommand.Execute();
+            Assert.Null(owner.FilterBar.Error);
+            Assert.Equal(LogLevels.All, model.Levels);
+            window.Close();
+            await owner.DisposeAsync();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task TheLastEnabledLevelCannotBeCleared()
     {
         var path = Path.GetTempFileName();

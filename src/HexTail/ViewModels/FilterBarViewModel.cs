@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Concurrency;
+using HexTail.Application;
 using HexTail.Domain;
 using ReactiveUI;
 using ReactiveUI.Reactive;
@@ -137,8 +138,10 @@ internal sealed class FilterBarViewModel : ReactiveObject
         internal set => this.RaiseAndSetIfChanged(ref _saveFlyoutOpen, value);
     }
 
-    // ViewRule compares by value, Search by reference: that keeps Sync cheap and stable.
-    private readonly record struct ChipKey(ViewRule? Rule, Search? Search);
+    // ViewRule compares by value, Search and FileTabState by reference: that keeps Sync cheap and
+    // stable, and rebuilds every chip when the selected source changes so a chip never acts on
+    // a file it was not created for.
+    private readonly record struct ChipKey(ViewRule? Rule, Search? Search, FileTabState File);
 
     internal bool IsLevelOn(LogLevels level) =>
         _owner.SelectedFile is { } file && (file.Model.Levels & level) != 0;
@@ -155,7 +158,18 @@ internal sealed class FilterBarViewModel : ReactiveObject
             toggle.Refresh();
             return;
         }
-        await _owner.State.SetLevelsAsync(file, next);
+        Error = null;
+        try
+        {
+            await _owner.State.SetLevelsAsync(file, next);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The mask is already changed in memory; only the save failed. Report it on the bar
+            // instead of letting the command's unobserved exception reach the UI thread.
+            Error = ex.Message;
+            toggle.Refresh();
+        }
     }
 
     internal void Sync()
@@ -174,11 +188,15 @@ internal sealed class FilterBarViewModel : ReactiveObject
         var keys = new List<ChipKey>();
         if (file is not null)
         {
-            keys.AddRange(_owner.State.Settings.Rules.Select(rule => new ChipKey(rule, null)));
-            keys.AddRange(file.Model.Rules.Select(rule => new ChipKey(rule, null)));
+            var model = file.Model;
             keys.AddRange(
-                file.Model.Searches.Where(search => !search.IsGlobalRule)
-                    .Select(search => new ChipKey(null, search))
+                _owner.State.Settings.Rules.Select(rule => new ChipKey(rule, null, model))
+            );
+            keys.AddRange(model.Rules.Select(rule => new ChipKey(rule, null, model)));
+            keys.AddRange(
+                model
+                    .Searches.Where(search => !search.IsGlobalRule)
+                    .Select(search => new ChipKey(null, search, model))
             );
         }
         if (keys.SequenceEqual(_entries.Select(entry => entry.Key)))
@@ -201,8 +219,8 @@ internal sealed class FilterBarViewModel : ReactiveObject
                     (
                         key,
                         key.Search is { } search
-                            ? new RuleChipViewModel(this, search)
-                            : new RuleChipViewModel(this, key.Rule!)
+                            ? new RuleChipViewModel(this, key.File, search)
+                            : new RuleChipViewModel(this, key.File, key.Rule!)
                     )
                 );
         }
@@ -304,30 +322,45 @@ internal sealed class FilterBarViewModel : ReactiveObject
         }
     }
 
-    internal Task ToggleAsync(RuleChipViewModel chip) =>
-        chip.IsRuleChip
-            ? _owner
-                .State.ReplaceRuleAsync(
-                    _owner.SelectedFile?.Model,
-                    chip.Rule,
-                    chip.Rule with
-                    {
-                        Enabled = !chip.Rule.Enabled,
-                    }
-                )
-                .AsTask()
-            : Task.CompletedTask;
+    internal async Task ToggleAsync(RuleChipViewModel chip)
+    {
+        if (!chip.IsRuleChip)
+            return;
+        Error = null;
+        try
+        {
+            await _owner.State.ReplaceRuleAsync(
+                chip.File,
+                chip.Rule,
+                chip.Rule with
+                {
+                    Enabled = !chip.Rule.Enabled,
+                }
+            );
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Error = ex.Message;
+        }
+    }
 
     internal async Task RemoveAsync(RuleChipViewModel chip)
     {
-        var file = _owner.SelectedFile?.Model;
-        if (chip.PinnedSearch is { } search)
+        Error = null;
+        try
         {
-            if (file is not null)
-                await _owner.State.RemoveSearchAsync(file, search);
-            return;
+            if (chip.PinnedSearch is { } search)
+            {
+                await _owner.State.RemoveSearchAsync(chip.File, search);
+                return;
+            }
+            await _owner.State.RemoveRuleAsync(chip.File, chip.Rule);
         }
-        await _owner.State.RemoveRuleAsync(file, chip.Rule);
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The rule is already gone in memory; only the save failed.
+            Error = ex.Message;
+        }
         // Removing from inside the editor must also dismiss its flyout.
         chip.IsEditorOpen = false;
     }
@@ -340,11 +373,7 @@ internal sealed class FilterBarViewModel : ReactiveObject
         Error = null;
         try
         {
-            await _owner.State.ReplaceRuleAsync(
-                _owner.SelectedFile?.Model,
-                chip.Rule,
-                draft.ToRule()
-            );
+            await _owner.State.ReplaceRuleAsync(chip.File, chip.Rule, draft.ToRule());
             chip.IsEditorOpen = false;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

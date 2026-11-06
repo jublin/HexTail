@@ -73,7 +73,10 @@ public partial class MainWindow : Window
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         ViewModel.FilterBar.FocusRequested += (_, _) =>
             Dispatcher.UIThread.Post(() =>
-                this.GetVisualDescendants().OfType<FilterBar>().FirstOrDefault()?.FocusQuery()
+                this.GetVisualDescendants()
+                    .OfType<FilterBar>()
+                    .FirstOrDefault(bar => bar.IsEffectivelyVisible)
+                    ?.FocusQuery()
             );
     }
 

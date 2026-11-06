@@ -19,6 +19,7 @@ internal sealed class RuleDraftViewModel : ReactiveObject
     private bool _allSources;
     private string _color;
     private bool _pinnedAsTab;
+    private bool _enabled;
     private string? _saveError;
 
     internal RuleDraftViewModel(ViewRule original, IScheduler? scheduler = null)
@@ -31,6 +32,7 @@ internal sealed class RuleDraftViewModel : ReactiveObject
         _allSources = original.Scope == RuleScope.Global;
         _color = original.Color;
         _pinnedAsTab = original.PinnedAsTab;
+        _enabled = original.Enabled;
         SwatchOptions = MainWindowViewModel
             .Swatches.Select(color => new SwatchOption(color))
             .ToList();
@@ -147,6 +149,17 @@ internal sealed class RuleDraftViewModel : ReactiveObject
         set => Color = $"#{value.R:X2}{value.G:X2}{value.B:X2}";
     }
 
+    /// <summary>A disabled rule is kept but has no effect; the keyboard way to what a middle-click on the chip does.</summary>
+    public bool Enabled
+    {
+        get => _enabled;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _enabled, value);
+            SaveError = null;
+        }
+    }
+
     public bool PinnedAsTab
     {
         get => _pinnedAsTab;
@@ -174,6 +187,7 @@ internal sealed class RuleDraftViewModel : ReactiveObject
             Action = Action,
             Scope = AllSources ? RuleScope.Global : RuleScope.Source,
             Color = Color,
+            Enabled = Enabled,
             PinnedAsTab = CanPin && PinnedAsTab,
         };
 

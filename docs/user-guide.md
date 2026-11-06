@@ -83,8 +83,8 @@ The bookmark toggle, **Pin as tab**, changes what a plain `Enter` does: instead 
 - A **dashed** outline marks a global rule (applies to every source); a **solid** outline marks a rule for this source only.
 - A chip with a bookmark icon is a pinned search tab of this source. Click it to select its tab and use its **x** to remove the tab. It has no editor.
 - A disabled rule is dimmed with struck-through text and has no effect until enabled again.
-- **Click** a chip to edit it in a popover: pattern, Literal/Regex, **Aa**, action (Highlight, Show only, Hide), an **All sources** switch, a color (five swatches or a custom color; hide rules have no color) and, for a global rule that is not Hide, **Show as a tab in every file**. **Apply** (or `Enter`) saves, **Cancel** (or `Esc`) discards, and **Remove** deletes the rule. An invalid pattern disables **Apply** and shows why.
-- **Middle-click** a chip to disable it, and again to enable it.
+- **Click** a chip to edit it in a popover: pattern, an **Enabled** checkbox, Literal/Regex, **Aa**, action (Highlight, Show only, Hide), an **All sources** switch, a color (five swatches or a custom color; hide rules have no color) and, for a global rule that is not Hide, **Show as a tab in every file**. **Apply** (or `Enter`) saves, **Cancel** (or `Esc`) discards, and **Remove** deletes the rule. An invalid pattern disables **Apply** and shows why.
+- **Middle-click** a chip to disable it, and again to enable it. The popover's **Enabled** checkbox does the same from the keyboard: it takes effect when you **Apply**.
 - The **x** on a chip removes the rule.
 - **All sources** in the popover turns a source rule into a global rule, and back. Global rules are listed on the bar of every open source, so they can only be edited while a source is open.
 

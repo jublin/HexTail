@@ -132,6 +132,37 @@ public sealed class FilterBarTests
     }
 
     [AvaloniaFact]
+    public async Task TheEditorsEnabledCheckboxDisablesTheRuleOnApply()
+    {
+        var (window, owner, path) = await OpenWithRuleAsync();
+        try
+        {
+            var file = owner.SelectedFile!.Model;
+            Click(window, FindChipBody(window)!);
+            var enabled = await FindFlyoutControlAsync<CheckBox>(window, "DraftEnabledCheck");
+            Assert.True(enabled.IsChecked);
+            Assert.Equal("Rule enabled", AutomationProperties.GetName(enabled));
+            Assert.True(enabled.Focusable);
+
+            Click(window, enabled);
+            Assert.False(enabled.IsChecked);
+            Assert.True(file.Rules.Single().Enabled);
+            Click(window, await FindFlyoutControlAsync<Button>(window, "DraftApplyButton"));
+            await UiWait.Until(() => !file.Rules.Single().Enabled);
+            await UiWait.Until(() => !EditorIsOpen(window));
+
+            owner.FilterBar.Sync();
+            Assert.True(owner.FilterBar.Chips.Single().IsDisabled);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task ChipEditorColorPickerAndComboBoxesAreTemplatedAndOpen()
     {
         var (window, owner, path) = await OpenWithRuleAsync();
