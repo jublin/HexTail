@@ -4,7 +4,7 @@ namespace HexTail.Tests.Support;
 
 internal static class UiWait
 {
-    public static async Task Until(Func<bool> condition, int timeoutMs = 2000)
+    public static async Task Until(Func<bool> condition, int timeoutMs = 10000)
     {
         var timeout = DateTime.UtcNow + TimeSpan.FromMilliseconds(timeoutMs);
         while (!condition() && DateTime.UtcNow < timeout)

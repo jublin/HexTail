@@ -56,8 +56,12 @@ internal sealed class SampleLogWriter : IAsyncDisposable
         SampleLogWriter? writer = null;
         try
         {
+            var path = System.IO.Path.Combine(directory.FullName, FileName);
+            // Windows follows a dangling link on create, so refuse any planted link up front.
+            if (new FileInfo(path).LinkTarget is not null)
+                throw new IOException($"Refusing to write through a link at '{path}'.");
             stream = new FileStream(
-                System.IO.Path.Combine(directory.FullName, FileName),
+                path,
                 new FileStreamOptions
                 {
                     Mode = FileMode.CreateNew,

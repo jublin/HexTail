@@ -28,9 +28,21 @@ internal sealed class OsCredentialVault : ICredentialVault
             connectionId,
             () =>
             {
-                OsSecretVault.DeleteSecret(ServiceName, Account(connectionId));
+                try
+                {
+                    OsSecretVault.DeleteSecret(ServiceName, Account(connectionId));
+                }
+                catch (InvalidOperationException exception) when (IsNotFound(exception))
+                {
+                    // Deleting a secret that was never stored is a no-op.
+                }
             }
         );
+
+    // Windows reports a missing credential as ERROR_NOT_FOUND (1168) from DeleteCredential.
+    private static bool IsNotFound(InvalidOperationException exception) =>
+        OperatingSystem.IsWindows()
+        && exception.Message.Contains("error code 1168", StringComparison.Ordinal);
 
     private static string? Execute(string connectionId, Func<string?> action)
     {

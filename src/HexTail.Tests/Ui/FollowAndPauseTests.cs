@@ -29,6 +29,7 @@ public sealed class FollowAndPauseTests
             await UiWait.Until(() =>
             {
                 viewModel.State.DrainTailerEvents();
+                view.Sync();
                 return view.UnseenCount == 3;
             });
             Assert.Equal("↓ 3 new lines", view.UnseenLabel);
@@ -67,6 +68,7 @@ public sealed class FollowAndPauseTests
             await UiWait.Until(() =>
             {
                 viewModel.State.DrainTailerEvents();
+                view.Sync();
                 return viewModel.SelectedFile!.Model.Buffer.Count == 12;
             });
             Assert.Equal(10, view.Lines.Count);
@@ -175,6 +177,7 @@ public sealed class FollowAndPauseTests
             await UiWait.Until(() =>
             {
                 viewModel.State.DrainTailerEvents();
+                view.Sync();
                 return viewModel.SelectedFile!.Model.Buffer.Count == 12;
             });
             Assert.Equal(2, view.UnseenCount);
@@ -194,6 +197,7 @@ public sealed class FollowAndPauseTests
             await UiWait.Until(() =>
             {
                 viewModel.State.DrainTailerEvents();
+                view.Sync();
                 return viewModel.SelectedFile!.Model.Buffer.Count == 13;
             });
             Assert.Equal(1, view.UnseenCount);
