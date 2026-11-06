@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Concurrency;
 using Avalonia;
-using Avalonia.Media;
 using HexTail.Domain;
 using HexTail.Elastic;
 using HexTail.Persistence;
@@ -16,14 +15,7 @@ internal sealed class SettingsViewModel : ReactiveObject
     private readonly MainWindowViewModel _owner;
     private UiDensity _density;
     private LogFontSize _fontSize;
-    private string _newLabelText = string.Empty;
-    private Color _newLabelColor = Color.Parse("#F59E0B");
-    private string _newExclusionText = string.Empty;
-    private MatchMode _newLabelMode;
-    private MatchMode _newExclusionMode;
-    private string? _newLabelError;
-    private string? _newExclusionError;
-    private string _section = "labels";
+    private string _section = "appearance";
     private string? _saveError;
     private int _sectionIndex;
     private bool _isSaving;
@@ -38,13 +30,6 @@ internal sealed class SettingsViewModel : ReactiveObject
     internal SettingsViewModel(MainWindowViewModel owner, IScheduler scheduler)
     {
         _owner = owner;
-        AddLabelCommand = ReactiveCommand.Create(AddLabel, scheduler);
-        RemoveLabelCommand = ReactiveCommand.Create<LabelSettingViewModel>(RemoveLabel, scheduler);
-        AddExclusionCommand = ReactiveCommand.Create(AddExclusion, scheduler);
-        RemoveExclusionCommand = ReactiveCommand.Create<ExclusionSettingViewModel>(
-            RemoveExclusion,
-            scheduler
-        );
         AddElasticConnectionCommand = ReactiveCommand.Create(AddElasticConnection, scheduler);
         RemoveElasticConnectionCommand =
             ReactiveCommand.CreateFromTask<ElasticConnectionEditorViewModel>(
@@ -69,8 +54,6 @@ internal sealed class SettingsViewModel : ReactiveObject
         _selectedTheme = ThemeOptions[0];
     }
 
-    public ObservableCollection<LabelSettingViewModel> Labels { get; } = [];
-    public ObservableCollection<ExclusionSettingViewModel> Exclusions { get; } = [];
     public ObservableCollection<ElasticConnectionEditorViewModel> ElasticConnections { get; } = [];
     public ReactiveCommand<Unit, Unit> SaveDraftsAndCloseCommand { get; }
     public ReactiveCommand<Unit, Unit> DiscardDraftsAndCloseCommand { get; }
@@ -152,15 +135,10 @@ internal sealed class SettingsViewModel : ReactiveObject
     [LogFontSize.Small, LogFontSize.Medium, LogFontSize.Large, LogFontSize.ExtraLarge];
     public IReadOnlyList<AppTimeZoneMode> TimeZoneModes { get; } =
         Enum.GetValues<AppTimeZoneMode>();
-    public IReadOnlyList<MatchMode> MatchModes { get; } = Enum.GetValues<MatchMode>();
     public IReadOnlyList<ThemeOption> ThemeOptions { get; } =
         ThemeCatalog
             .Names.Select(id => new ThemeOption(id, ThemeCatalog.DisplayNames[id]))
             .ToArray();
-    public ReactiveCommand<Unit, Unit> AddLabelCommand { get; }
-    public ReactiveCommand<LabelSettingViewModel, Unit> RemoveLabelCommand { get; }
-    public ReactiveCommand<Unit, Unit> AddExclusionCommand { get; }
-    public ReactiveCommand<ExclusionSettingViewModel, Unit> RemoveExclusionCommand { get; }
     public ReactiveCommand<Unit, Unit> AddElasticConnectionCommand { get; }
     public ReactiveCommand<
         ElasticConnectionEditorViewModel,
@@ -184,15 +162,14 @@ internal sealed class SettingsViewModel : ReactiveObject
         get => _sectionIndex;
         set
         {
-            var index = Math.Clamp(value, 0, 2);
+            var index = Math.Clamp(value, 0, 1);
             if (_sectionIndex == index)
                 return;
             this.RaiseAndSetIfChanged(ref _sectionIndex, index);
             _section = index switch
             {
-                1 => "appearance",
-                2 => "elastic",
-                _ => "labels",
+                1 => "elastic",
+                _ => "appearance",
             };
         }
     }
@@ -347,94 +324,6 @@ internal sealed class SettingsViewModel : ReactiveObject
         }
     }
 
-    public string NewLabelText
-    {
-        get => _newLabelText;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref _newLabelText, value);
-            ValidateNewLabel();
-        }
-    }
-
-    public MatchMode NewLabelMode
-    {
-        get => _newLabelMode;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref _newLabelMode, value);
-            ValidateNewLabel();
-        }
-    }
-
-    public string? NewLabelError
-    {
-        get => _newLabelError;
-        private set
-        {
-            this.RaiseAndSetIfChanged(ref _newLabelError, value);
-            this.RaisePropertyChanged(nameof(HasNewLabelError));
-        }
-    }
-
-    public bool HasNewLabelError => NewLabelError is not null;
-    public bool CanAddLabel => !string.IsNullOrWhiteSpace(NewLabelText) && !HasNewLabelError;
-
-    private void ValidateNewLabel()
-    {
-        NewLabelError = ValidateRule(NewLabelText, NewLabelMode);
-        this.RaisePropertyChanged(nameof(CanAddLabel));
-    }
-
-    public Color NewLabelColor
-    {
-        get => _newLabelColor;
-        set => this.RaiseAndSetIfChanged(ref _newLabelColor, value);
-    }
-
-    public string NewExclusionText
-    {
-        get => _newExclusionText;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref _newExclusionText, value);
-            ValidateNewExclusion();
-        }
-    }
-
-    public MatchMode NewExclusionMode
-    {
-        get => _newExclusionMode;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref _newExclusionMode, value);
-            ValidateNewExclusion();
-        }
-    }
-
-    public string? NewExclusionError
-    {
-        get => _newExclusionError;
-        private set
-        {
-            this.RaiseAndSetIfChanged(ref _newExclusionError, value);
-            this.RaisePropertyChanged(nameof(HasNewExclusionError));
-        }
-    }
-
-    public bool HasNewExclusionError => NewExclusionError is not null;
-    public bool CanAddExclusion =>
-        !string.IsNullOrWhiteSpace(NewExclusionText) && !HasNewExclusionError;
-
-    private void ValidateNewExclusion()
-    {
-        NewExclusionError = ValidateRule(NewExclusionText, NewExclusionMode);
-        this.RaisePropertyChanged(nameof(CanAddExclusion));
-    }
-
-    internal static string? ValidateRule(string text, MatchMode mode) =>
-        RuleValidation.Validate(text, mode);
-
     internal void Sync(AppSettings settings)
     {
         _syncing = true;
@@ -450,26 +339,6 @@ internal sealed class SettingsViewModel : ReactiveObject
         finally
         {
             _syncing = false;
-        }
-
-        var labelRules = settings.Rules.Where(IsLabelRule).ToList();
-        while (Labels.Count > labelRules.Count)
-            Labels.RemoveAt(Labels.Count - 1);
-        for (var index = 0; index < labelRules.Count; index++)
-        {
-            if (index == Labels.Count)
-                Labels.Add(new LabelSettingViewModel(this, index));
-            Labels[index].Sync(labelRules[index]);
-        }
-
-        var exclusionRules = settings.Rules.Where(IsExclusionRule).ToList();
-        while (Exclusions.Count > exclusionRules.Count)
-            Exclusions.RemoveAt(Exclusions.Count - 1);
-        for (var index = 0; index < exclusionRules.Count; index++)
-        {
-            if (index == Exclusions.Count)
-                Exclusions.Add(new ExclusionSettingViewModel(this, index));
-            Exclusions[index].Sync(exclusionRules[index].Pattern, exclusionRules[index].Mode);
         }
 
         var persistedConnectionIds = settings
@@ -497,118 +366,6 @@ internal sealed class SettingsViewModel : ReactiveObject
             || !ElasticConnections.Contains(SelectedElasticConnection)
         )
             SelectedElasticConnection = ElasticConnections.FirstOrDefault();
-    }
-
-    private static bool IsLabelRule(ViewRule rule) => rule.Action == RuleAction.Highlight;
-
-    private static bool IsExclusionRule(ViewRule rule) => rule.Action == RuleAction.Hide;
-
-    private static int AbsoluteIndex(
-        IReadOnlyList<ViewRule> rules,
-        Func<ViewRule, bool> kind,
-        int index
-    )
-    {
-        var seen = -1;
-        for (var position = 0; position < rules.Count; position++)
-            if (kind(rules[position]) && ++seen == index)
-                return position;
-        return -1;
-    }
-
-    internal Task CommitLabelAsync(
-        int index,
-        string text,
-        Color color,
-        bool showInOpenFile,
-        MatchMode mode
-    )
-    {
-        var rules = _owner.State.Settings.Rules.ToList();
-        var at = AbsoluteIndex(rules, IsLabelRule, index);
-        if (at < 0)
-            return Task.CompletedTask;
-        rules[at] = rules[at] with
-        {
-            Pattern = text,
-            Mode = mode,
-            Color = ColorToHex(color),
-            PinnedAsTab = showInOpenFile,
-        };
-        return CommitAsync(_owner.State.Settings with { Rules = rules });
-    }
-
-    internal Task CommitExclusionAsync(int index, string text, MatchMode mode)
-    {
-        var rules = _owner.State.Settings.Rules.ToList();
-        var at = AbsoluteIndex(rules, IsExclusionRule, index);
-        if (at < 0)
-            return Task.CompletedTask;
-        rules[at] = rules[at] with { Pattern = text, Mode = mode };
-        return CommitAsync(_owner.State.Settings with { Rules = rules });
-    }
-
-    private void AddLabel()
-    {
-        if (!CanAddLabel)
-            return;
-        _ = CommitAsync(
-            _owner.State.Settings with
-            {
-                Rules =
-                [
-                    .. _owner.State.Settings.Rules,
-                    new ViewRule
-                    {
-                        Pattern = NewLabelText,
-                        Mode = NewLabelMode,
-                        Color = ColorToHex(NewLabelColor),
-                        Action = RuleAction.Highlight,
-                        Scope = RuleScope.Global,
-                        PinnedAsTab = true,
-                    },
-                ],
-            }
-        );
-        NewLabelText = string.Empty;
-    }
-
-    private void RemoveLabel(LabelSettingViewModel item) => RemoveRule(IsLabelRule, item.Index);
-
-    private void AddExclusion()
-    {
-        if (!CanAddExclusion)
-            return;
-        _ = CommitAsync(
-            _owner.State.Settings with
-            {
-                Rules =
-                [
-                    .. _owner.State.Settings.Rules,
-                    new ViewRule
-                    {
-                        Pattern = NewExclusionText,
-                        Mode = NewExclusionMode,
-                        Action = RuleAction.Hide,
-                        Scope = RuleScope.Global,
-                    },
-                ],
-            }
-        );
-        NewExclusionText = string.Empty;
-    }
-
-    private void RemoveExclusion(ExclusionSettingViewModel item) =>
-        RemoveRule(IsExclusionRule, item.Index);
-
-    private void RemoveRule(Func<ViewRule, bool> kind, int index)
-    {
-        var rules = _owner.State.Settings.Rules.ToList();
-        var at = AbsoluteIndex(rules, kind, index);
-        if (at < 0)
-            return;
-        rules.RemoveAt(at);
-        _ = CommitAsync(_owner.State.Settings with { Rules = rules });
     }
 
     internal async Task CommitAsync(AppSettings settings)
@@ -699,199 +456,5 @@ internal sealed class SettingsViewModel : ReactiveObject
         {
             SaveError = exception.Message;
         }
-    }
-
-    private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
-}
-
-internal sealed class LabelSettingViewModel : ReactiveObject
-{
-    private readonly SettingsViewModel _owner;
-    private string _text = string.Empty;
-    private Color _color = Color.Parse("#F59E0B");
-    private bool _showInOpenFile = true;
-    private bool _syncing;
-    private MatchMode _mode;
-    private string? _validationError;
-    private string? _persistedText;
-
-    internal LabelSettingViewModel(SettingsViewModel owner, int index)
-    {
-        _owner = owner;
-        Index = index;
-    }
-
-    public int Index { get; }
-    public IReadOnlyList<MatchMode> MatchModes => _owner.MatchModes;
-
-    public MatchMode Mode
-    {
-        get => _mode;
-        set
-        {
-            if (_mode == value)
-                return;
-            this.RaiseAndSetIfChanged(ref _mode, value);
-            Commit();
-        }
-    }
-
-    public string? ValidationError
-    {
-        get => _validationError;
-        private set
-        {
-            this.RaiseAndSetIfChanged(ref _validationError, value);
-            this.RaisePropertyChanged(nameof(HasValidationError));
-        }
-    }
-
-    public bool HasValidationError => ValidationError is not null;
-
-    public string Text
-    {
-        get => _text;
-        set
-        {
-            if (string.Equals(_text, value, StringComparison.Ordinal))
-                return;
-            this.RaiseAndSetIfChanged(ref _text, value);
-            Commit();
-        }
-    }
-
-    public Color Color
-    {
-        get => _color;
-        set
-        {
-            if (_color == value)
-                return;
-            this.RaiseAndSetIfChanged(ref _color, value);
-            Commit();
-        }
-    }
-
-    public bool ShowInOpenFile
-    {
-        get => _showInOpenFile;
-        set
-        {
-            if (_showInOpenFile == value)
-                return;
-            this.RaiseAndSetIfChanged(ref _showInOpenFile, value);
-            Commit();
-        }
-    }
-
-    internal void Sync(ViewRule rule)
-    {
-        if (HasValidationError && rule.Pattern == _persistedText)
-            return;
-        _persistedText = rule.Pattern;
-        _syncing = true;
-        try
-        {
-            Text = rule.Pattern;
-            Mode = rule.Mode;
-            Color = Avalonia.Media.Color.Parse(rule.Color);
-            ShowInOpenFile = rule.PinnedAsTab;
-        }
-        finally
-        {
-            _syncing = false;
-        }
-        ValidationError = SettingsViewModel.ValidateRule(Text, Mode);
-    }
-
-    private void Commit()
-    {
-        if (_syncing)
-            return;
-        ValidationError = SettingsViewModel.ValidateRule(Text, Mode);
-        if (!HasValidationError)
-            _ = _owner.CommitLabelAsync(Index, Text, Color, ShowInOpenFile, Mode);
-    }
-}
-
-internal sealed class ExclusionSettingViewModel : ReactiveObject
-{
-    private readonly SettingsViewModel _owner;
-    private string _text = string.Empty;
-    private bool _syncing;
-    private MatchMode _mode;
-    private string? _validationError;
-    private string? _persistedText;
-
-    internal ExclusionSettingViewModel(SettingsViewModel owner, int index)
-    {
-        _owner = owner;
-        Index = index;
-    }
-
-    public int Index { get; }
-    public IReadOnlyList<MatchMode> MatchModes => _owner.MatchModes;
-
-    public MatchMode Mode
-    {
-        get => _mode;
-        set
-        {
-            if (_mode == value)
-                return;
-            this.RaiseAndSetIfChanged(ref _mode, value);
-            Commit();
-        }
-    }
-
-    public string? ValidationError
-    {
-        get => _validationError;
-        private set
-        {
-            this.RaiseAndSetIfChanged(ref _validationError, value);
-            this.RaisePropertyChanged(nameof(HasValidationError));
-        }
-    }
-
-    public bool HasValidationError => ValidationError is not null;
-
-    public string Text
-    {
-        get => _text;
-        set
-        {
-            if (string.Equals(_text, value, StringComparison.Ordinal))
-                return;
-            this.RaiseAndSetIfChanged(ref _text, value);
-            Commit();
-        }
-    }
-
-    internal void Sync(string text, MatchMode mode)
-    {
-        if (HasValidationError && text == _persistedText)
-            return;
-        _persistedText = text;
-        _syncing = true;
-        try
-        {
-            Text = text;
-            Mode = mode;
-        }
-        finally
-        {
-            _syncing = false;
-        }
-        ValidationError = SettingsViewModel.ValidateRule(Text, Mode);
-    }
-
-    private void Commit()
-    {
-        if (_syncing)
-            return;
-        ValidationError = SettingsViewModel.ValidateRule(Text, Mode);
-        if (!HasValidationError)
-            _ = _owner.CommitExclusionAsync(Index, Text, Mode);
     }
 }

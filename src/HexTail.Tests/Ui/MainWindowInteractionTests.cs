@@ -366,9 +366,6 @@ public sealed class MainWindowInteractionTests
         var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
         Assert.True(viewModel.SettingsOpen);
         Dispatcher.UIThread.RunJobs();
-        var colorPickers = panel.GetVisualDescendants().OfType<ColorPicker>().ToArray();
-        Assert.NotEmpty(colorPickers);
-        Assert.All(colorPickers, picker => Assert.NotNull(picker.Template));
         foreach (var name in new[] { "DensityBox", "FontSizeBox" })
         {
             var combo = FindVisual<ComboBox>(window, name);
@@ -392,6 +389,8 @@ public sealed class MainWindowInteractionTests
     {
         var window = TestWindow.Create(out var viewModel);
         viewModel.SettingsOpen = true;
+        viewModel.Settings.SectionIndex = 1;
+        viewModel.Settings.AddElasticConnectionCommand.Execute().Subscribe();
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
@@ -469,10 +468,8 @@ public sealed class MainWindowInteractionTests
         window.Show();
 
         var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
-        var labels = panel.FindControl<ScrollViewer>("LabelsSettingsScrollViewer");
+        viewModel.Settings.SectionIndex = 1;
         var elastic = panel.FindControl<ScrollViewer>("ElasticSettingsScrollViewer");
-        Assert.Equal(ScrollBarVisibility.Disabled, labels!.HorizontalScrollBarVisibility);
-        Assert.Equal(ScrollBarVisibility.Auto, labels.VerticalScrollBarVisibility);
         Assert.Equal(ScrollBarVisibility.Disabled, elastic!.HorizontalScrollBarVisibility);
         Assert.Equal(ScrollBarVisibility.Auto, elastic.VerticalScrollBarVisibility);
 
@@ -484,7 +481,7 @@ public sealed class MainWindowInteractionTests
     {
         var window = TestWindow.Create(out var viewModel);
         viewModel.SettingsOpen = true;
-        viewModel.Settings.SectionIndex = 2;
+        viewModel.Settings.SectionIndex = 1;
         window.Show();
 
         Assert.NotNull(FindVisual<Button>(window, "AddElasticServerButton"));
@@ -525,7 +522,7 @@ public sealed class MainWindowInteractionTests
         var window = TestWindow.Create(persistence, out var viewModel);
         await viewModel.InitializeAsync();
         viewModel.SettingsOpen = true;
-        viewModel.Settings.SectionIndex = 1;
+        viewModel.Settings.SectionIndex = 0;
         window.Show();
 
         var theme = viewModel.Settings.ThemeOptions.Single(option => option.Id == "spotify");
@@ -536,71 +533,29 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
-    public async Task LabelsAndExclusionsAddEditAndRemove()
+    public void SettingsHasNoLabelsOrExclusionsSection()
     {
-        var persistence = new TestPersistence();
-        var window = TestWindow.Create(persistence, out var viewModel);
-        await viewModel.InitializeAsync();
+        var window = TestWindow.Create(out var viewModel);
         viewModel.SettingsOpen = true;
         window.Show();
-
-        viewModel.Settings.NewLabelText = "ERROR";
-        viewModel.Settings.NewLabelColor = Colors.Magenta;
-        Click(FindVisual<Button>(window, "AddLabelButton"));
-        Assert.Equal(string.Empty, viewModel.Settings.NewLabelText);
-        await WaitFor(() => viewModel.Settings.Labels.Count == 1);
-        var label = Assert.Single(viewModel.Settings.Labels);
         Dispatcher.UIThread.RunJobs();
-        var labelControls = window
-            .GetVisualDescendants()
-            .Where(control => ReferenceEquals(control.DataContext, label))
-            .ToArray();
-        labelControls
-            .OfType<TextBox>()
-            .Single(textBox => textBox.PlaceholderText == "Text to highlight")
-            .Text = "WARN";
-        await WaitFor(() =>
-            viewModel.State.Settings.Rules.Any(rule =>
-                rule.Action == RuleAction.Highlight && rule.Pattern == "WARN"
-            )
-        );
-        Click(
-            labelControls
-                .OfType<Button>()
-                .Single(button =>
-                    ReferenceEquals(button.Command, viewModel.Settings.RemoveLabelCommand)
-                )
-        );
-        await WaitFor(() => viewModel.Settings.Labels.Count == 0);
 
-        viewModel.Settings.NewExclusionText = "healthcheck";
-        Click(FindVisual<Button>(window, "AddExclusionButton"));
-        await WaitFor(() => viewModel.Settings.Exclusions.Count == 1);
-        var exclusion = Assert.Single(viewModel.Settings.Exclusions);
-        Dispatcher.UIThread.RunJobs();
-        var exclusionControls = window
-            .GetVisualDescendants()
-            .Where(control => ReferenceEquals(control.DataContext, exclusion))
-            .ToArray();
-        exclusionControls
-            .OfType<TextBox>()
-            .Single(textBox => textBox.PlaceholderText == "Text to hide")
-            .Text = "probe";
-        await WaitFor(() =>
-            viewModel.State.Settings.Rules.Any(rule =>
-                rule.Action == RuleAction.Hide && rule.Pattern == "probe"
-            )
-        );
-        Click(
-            exclusionControls
-                .OfType<Button>()
-                .Single(button =>
-                    ReferenceEquals(button.Command, viewModel.Settings.RemoveExclusionCommand)
-                )
-        );
-        await WaitFor(() => viewModel.Settings.Exclusions.Count == 0);
-
-        Assert.True(persistence.SaveCount >= 6);
+        var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
+        var tabs = panel.GetVisualDescendants().OfType<TabControl>().Single();
+        Assert.Equal(2, tabs.ItemCount);
+        for (var section = 0; section < 2; section++)
+        {
+            viewModel.Settings.SectionIndex = section;
+            Dispatcher.UIThread.RunJobs();
+            var names = panel
+                .GetVisualDescendants()
+                .OfType<Control>()
+                .Select(control => control.Name)
+                .ToArray();
+            Assert.DoesNotContain("AddLabelButton", names);
+            Assert.DoesNotContain("AddExclusionButton", names);
+            Assert.DoesNotContain("LabelsSettingsScrollViewer", names);
+        }
         window.Close();
     }
 

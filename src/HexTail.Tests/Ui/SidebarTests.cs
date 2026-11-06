@@ -272,7 +272,7 @@ public sealed class SidebarTests
         var setup = sidebar.FindControl<Button>("SidebarElasticSetupButton")!;
         setup.Command!.Execute(null);
         Assert.True(viewModel.SettingsOpen);
-        Assert.Equal(2, viewModel.Settings.SectionIndex);
+        Assert.Equal(1, viewModel.Settings.SectionIndex);
         window.Close();
     }
 

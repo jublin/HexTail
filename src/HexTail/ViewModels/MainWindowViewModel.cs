@@ -95,7 +95,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         SetUpElasticCommand = ReactiveCommand.Create(
             () =>
             {
-                Settings.SectionIndex = 2;
+                Settings.SectionIndex = 1;
                 SettingsOpen = true;
             },
             _scheduler

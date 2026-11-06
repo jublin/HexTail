@@ -78,7 +78,7 @@ public sealed class SettingsReflowTests
         window.Height = 720;
         try
         {
-            for (var section = 0; section < 3; section++)
+            for (var section = 0; section < 2; section++)
             {
                 owner.Settings.SectionIndex = section;
                 window.Width = 1280;
@@ -121,9 +121,7 @@ public sealed class SettingsReflowTests
                         .OfType<ScrollViewer>()
                         .Where(scroll =>
                             scroll.IsEffectivelyVisible
-                            && scroll.Name
-                                is "LabelsSettingsScrollViewer"
-                                    or "ElasticSettingsScrollViewer"
+                            && scroll.Name is "ElasticSettingsScrollViewer"
                         )
                 )
                     Assert.True(
@@ -169,7 +167,7 @@ public sealed class SettingsReflowTests
             window.Width = 720;
             owner.Settings.SectionIndex = 0;
             Settle(window);
-            owner.Settings.SectionIndex = 2;
+            owner.Settings.SectionIndex = 1;
             Settle(window);
             Assert.All(
                 panel
