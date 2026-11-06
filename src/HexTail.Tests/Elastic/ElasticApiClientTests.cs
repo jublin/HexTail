@@ -256,4 +256,213 @@ public sealed class ElasticApiClientTests
         Assert.Contains("https://kibana/api/data_views", exception.Message);
         Assert.Contains("Elasticsearch URL", exception.Message);
     }
+
+    private static ElasticConnectionSettings CountPreviewConnection() =>
+        new()
+        {
+            Id = "c1",
+            Name = "ops",
+            KibanaUrl = "https://kibana.example/",
+            ElasticsearchUrl = "https://elastic.example/",
+        };
+
+    [Fact]
+    public async Task CountAsync_PostsFilteredCountAndReturnsCount()
+    {
+        string? requestBody = null;
+        var handler = new RecordingHttpMessageHandler(request =>
+        {
+            requestBody = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"count": 3200}""",
+                    Encoding.UTF8,
+                    "application/json"
+                ),
+            };
+        });
+        var client = new ElasticApiClient(new HttpClient(handler));
+        var from = DateTimeOffset.Parse("2026-08-25T12:00:00Z");
+        var to = DateTimeOffset.Parse("2026-08-25T12:05:00Z");
+
+        var count = await client.CountAsync(
+            CountPreviewConnection(),
+            null,
+            "logs-*,metrics-*",
+            "@timestamp",
+            "service.name",
+            "api",
+            from,
+            to,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(3200, count);
+        var sent = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Post, sent.Method);
+        Assert.Equal("elastic.example", sent.RequestUri!.Host);
+        Assert.EndsWith("/_count", sent.RequestUri.AbsolutePath);
+        // Elasticsearch decodes the path segment, so it must round-trip to the original pattern.
+        Assert.Equal(
+            "/logs-*,metrics-*/_count",
+            Uri.UnescapeDataString(sent.RequestUri.AbsolutePath)
+        );
+        using var body = JsonDocument.Parse(requestBody!);
+        var filters = body
+            .RootElement.GetProperty("query")
+            .GetProperty("bool")
+            .GetProperty("filter");
+        Assert.Equal(2, filters.GetArrayLength());
+        Assert.Equal(
+            "api",
+            filters[0].GetProperty("match_phrase").GetProperty("service.name").GetString()
+        );
+        var range = filters[1].GetProperty("range").GetProperty("@timestamp");
+        Assert.Equal(from, range.GetProperty("gte").GetDateTimeOffset());
+        Assert.Equal(to, range.GetProperty("lte").GetDateTimeOffset());
+    }
+
+    [Fact]
+    public async Task CountAsync_MapsUnauthorizedResponse()
+    {
+        var handler = new RecordingHttpMessageHandler(_ => new HttpResponseMessage(
+            HttpStatusCode.Unauthorized
+        ));
+        var client = new ElasticApiClient(new HttpClient(handler));
+
+        await Assert.ThrowsAsync<ElasticUnauthorizedException>(() =>
+            client.CountAsync(
+                CountPreviewConnection(),
+                null,
+                "logs-*",
+                "@timestamp",
+                "service.name",
+                "api",
+                DateTimeOffset.UnixEpoch,
+                DateTimeOffset.UnixEpoch.AddMinutes(1),
+                TestContext.Current.CancellationToken
+            )
+        );
+    }
+
+    private const string PreviewResponse = """
+        {
+          "hits": {
+            "hits": [
+              {
+                "_id": "doc-1",
+                "_source": { "@timestamp": "2026-08-25T12:00:00Z", "message": "hello", "service": { "name": "api" } },
+                "fields": { "level": ["warn"] },
+                "sort": [1787659200000]
+              }
+            ]
+          }
+        }
+        """;
+
+    [Fact]
+    public async Task PreviewAsync_SearchesWithoutPitAndMapsHits()
+    {
+        string? requestBody = null;
+        var handler = new RecordingHttpMessageHandler(request =>
+        {
+            requestBody = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(PreviewResponse, Encoding.UTF8, "application/json"),
+            };
+        });
+        var client = new ElasticApiClient(new HttpClient(handler));
+
+        var hits = await client.PreviewAsync(
+            CountPreviewConnection(),
+            null,
+            "logs-*,metrics-*",
+            "@timestamp",
+            "service.name",
+            "api",
+            ["level", "message"],
+            25,
+            TestContext.Current.CancellationToken
+        );
+
+        var sent = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Post, sent.Method);
+        Assert.EndsWith("/_search", sent.RequestUri!.AbsolutePath);
+        Assert.Equal(
+            "/logs-*,metrics-*/_search",
+            Uri.UnescapeDataString(sent.RequestUri.AbsolutePath)
+        );
+        using var body = JsonDocument.Parse(requestBody!);
+        Assert.Equal(25, body.RootElement.GetProperty("size").GetInt32());
+        Assert.False(body.RootElement.TryGetProperty("pit", out _));
+        Assert.Equal(
+            "desc",
+            body.RootElement.GetProperty("sort")[0].GetProperty("@timestamp").GetString()
+        );
+        Assert.Equal(
+            ["level", "message"],
+            body.RootElement.GetProperty("fields").EnumerateArray().Select(e => e.GetString())
+        );
+        var filters = body
+            .RootElement.GetProperty("query")
+            .GetProperty("bool")
+            .GetProperty("filter");
+        var filter = Assert.Single(filters.EnumerateArray());
+        Assert.Equal(
+            "api",
+            filter.GetProperty("match_phrase").GetProperty("service.name").GetString()
+        );
+        var hit = Assert.Single(hits);
+        Assert.Equal("doc-1", hit.Id);
+        Assert.Equal(DateTimeOffset.Parse("2026-08-25T12:00:00Z"), hit.Timestamp);
+        Assert.Equal("warn hello", hit.Line.Raw);
+        Assert.Equal("api", hit.Line.ParsedFields!["service.name"]);
+        Assert.Equal("hello", hit.Line.ParsedFields["message"]);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("service.name", null)]
+    [InlineData("", "api")]
+    [InlineData("  ", "  ")]
+    public async Task PreviewAsync_WithoutCompleteFilter_SendsNoMatchPhrase(
+        string? field,
+        string? value
+    )
+    {
+        string? requestBody = null;
+        var handler = new RecordingHttpMessageHandler(request =>
+        {
+            requestBody = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(PreviewResponse, Encoding.UTF8, "application/json"),
+            };
+        });
+        var client = new ElasticApiClient(new HttpClient(handler));
+
+        await client.PreviewAsync(
+            CountPreviewConnection(),
+            null,
+            "logs-*",
+            "@timestamp",
+            field,
+            value,
+            ["message"],
+            10,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.DoesNotContain("match_phrase", requestBody);
+        using var body = JsonDocument.Parse(requestBody!);
+        Assert.Equal(
+            0,
+            body.RootElement.GetProperty("query")
+                .GetProperty("bool")
+                .GetProperty("filter")
+                .GetArrayLength()
+        );
+    }
 }

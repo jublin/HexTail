@@ -530,6 +530,51 @@ internal sealed class SettingsViewModel : ReactiveObject
         string? secret = null
     ) => _owner.State.GetDataViewAsync(connection, dataViewId, secret);
 
+    private const int PreviewSize = 5;
+    private static readonly TimeSpan CountWindow = TimeSpan.FromMinutes(15);
+
+    internal Task<long> CountAsync(
+        ElasticConnectionSettings connection,
+        string title,
+        string timeField,
+        string field,
+        string value,
+        string? secret = null
+    )
+    {
+        var to = DateTimeOffset.UtcNow;
+        return _owner.State.CountAsync(
+            connection,
+            title,
+            timeField,
+            field,
+            value,
+            to - CountWindow,
+            to,
+            secret
+        );
+    }
+
+    internal Task<IReadOnlyList<ElasticHit>> PreviewAsync(
+        ElasticConnectionSettings connection,
+        string title,
+        string timeField,
+        string? field,
+        string? value,
+        IReadOnlyList<string> outputFields,
+        string? secret = null
+    ) =>
+        _owner.State.PreviewAsync(
+            connection,
+            title,
+            timeField,
+            field,
+            value,
+            outputFields,
+            PreviewSize,
+            secret
+        );
+
     private void AddElasticConnection()
     {
         var editor = new ElasticConnectionEditorViewModel(this, Guid.NewGuid().ToString("N"));

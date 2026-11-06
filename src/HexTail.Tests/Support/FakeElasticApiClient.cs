@@ -9,6 +9,12 @@ internal sealed class FakeElasticApiClient : IElasticApiClient
     public Func<ElasticSearchRequest, Task<ElasticSearchPage>>? SearchHandler { get; set; }
     public Func<string, Task<ElasticDataView>>? DataViewHandler { get; set; }
     public Func<Task<IReadOnlyList<ElasticDataViewSummary>>>? DataViewsHandler { get; set; }
+    public Func<(string Field, string Value), Task<long>>? CountHandler { get; set; }
+    public Func<
+        IReadOnlyList<string>,
+        Task<IReadOnlyList<ElasticHit>>
+    >? PreviewHandler { get; set; }
+    public List<(string Field, string Value)> Counts { get; } = [];
     public Queue<ElasticSearchPage> Pages { get; } = [];
     public List<ElasticSearchRequest> Searches { get; } = [];
     public List<string> ClosedPitIds { get; } = [];
@@ -104,4 +110,32 @@ internal sealed class FakeElasticApiClient : IElasticApiClient
             throw HealthError;
         return Task.CompletedTask;
     }
+
+    public Task<long> CountAsync(
+        ElasticConnectionSettings c,
+        string? s,
+        string title,
+        string timeField,
+        string field,
+        string value,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken t = default
+    )
+    {
+        Counts.Add((field, value));
+        return CountHandler?.Invoke((field, value)) ?? Task.FromResult(0L);
+    }
+
+    public Task<IReadOnlyList<ElasticHit>> PreviewAsync(
+        ElasticConnectionSettings c,
+        string? s,
+        string title,
+        string timeField,
+        string? field,
+        string? value,
+        IReadOnlyList<string> outputFields,
+        int size,
+        CancellationToken t = default
+    ) => PreviewHandler?.Invoke(outputFields) ?? Task.FromResult<IReadOnlyList<ElasticHit>>([]);
 }

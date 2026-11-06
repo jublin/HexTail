@@ -301,6 +301,52 @@ public sealed class AppState : IAsyncDisposable
             cancellationToken
         );
 
+    public Task<long> CountAsync(
+        ElasticConnectionSettings connection,
+        string dataViewTitle,
+        string timeFieldName,
+        string filterField,
+        string filterValue,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        string? secret = null,
+        CancellationToken cancellationToken = default
+    ) =>
+        _elastic.CountAsync(
+            connection,
+            string.IsNullOrWhiteSpace(secret) ? SecretFor(connection) : secret,
+            dataViewTitle,
+            timeFieldName,
+            filterField,
+            filterValue,
+            from,
+            to,
+            cancellationToken
+        );
+
+    public Task<IReadOnlyList<ElasticHit>> PreviewAsync(
+        ElasticConnectionSettings connection,
+        string dataViewTitle,
+        string timeFieldName,
+        string? filterField,
+        string? filterValue,
+        IReadOnlyList<string> outputFields,
+        int size,
+        string? secret = null,
+        CancellationToken cancellationToken = default
+    ) =>
+        _elastic.PreviewAsync(
+            connection,
+            string.IsNullOrWhiteSpace(secret) ? SecretFor(connection) : secret,
+            dataViewTitle,
+            timeFieldName,
+            filterField,
+            filterValue,
+            outputFields,
+            size,
+            cancellationToken
+        );
+
     private static void Remember(List<string> list, string value, StringComparer comparer)
     {
         list.RemoveAll(item => comparer.Equals(item, value));
