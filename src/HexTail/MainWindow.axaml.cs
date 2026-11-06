@@ -371,6 +371,18 @@ public partial class MainWindow : Window
             case ShellAction.ScrollToBottom when file is not null:
                 file.SelectedView.IsFollowing = true;
                 break;
+            case ShellAction.NextRow when file is not null:
+                file.SelectedView.MoveSelection(1);
+                break;
+            case ShellAction.PreviousRow when file is not null:
+                file.SelectedView.MoveSelection(-1);
+                break;
+            case ShellAction.NextMatch when file is not null:
+                file.SelectedView.MoveToMatch(1);
+                break;
+            case ShellAction.PreviousMatch when file is not null:
+                file.SelectedView.MoveToMatch(-1);
+                break;
             case ShellAction.ScrollToTop:
                 this.GetVisualDescendants()
                     .OfType<LogView>()
