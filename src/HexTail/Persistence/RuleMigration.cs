@@ -21,23 +21,37 @@ internal static class RuleMigration
                 && value.TryGetValue<int>(out var version)
                 && version > CurrentVersion;
         }
-        catch (System.Text.Json.JsonException)
+        catch (Exception exception) when (IsUnreadableTree(exception))
         {
             return false;
         }
     }
 
+    /// <summary>
+    /// True when reading the JSON tree failed. <see cref="JsonObject"/> builds lazily, so a duplicate
+    /// key surfaces as an <see cref="ArgumentException"/> at first access, not at parse time.
+    /// </summary>
+    internal static bool IsUnreadableTree(Exception exception) =>
+        exception
+            is System.Text.Json.JsonException
+                or ArgumentException
+                or InvalidOperationException;
+
     internal static (string Json, bool Migrated) Apply(string json)
     {
-        JsonObject? root;
         try
         {
-            root = JsonNode.Parse(json) as JsonObject;
+            return ApplyCore(json);
         }
-        catch (System.Text.Json.JsonException)
+        catch (Exception exception) when (IsUnreadableTree(exception))
         {
             return (json, false);
         }
+    }
+
+    private static (string Json, bool Migrated) ApplyCore(string json)
+    {
+        var root = JsonNode.Parse(json) as JsonObject;
         if (root is null)
             return (json, false);
         if (

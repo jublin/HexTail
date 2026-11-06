@@ -177,6 +177,101 @@ public sealed class SessionToleranceTests
         Assert.Equal("/tmp/a.log", Assert.Single(loaded!.RecentFiles));
     }
 
+    private const string DuplicateKeys = """
+        { "version": 2,
+          "recentFiles": ["/tmp/keep.log"],
+          "settings": { "maxLines": 5000,
+            "rules": [{ "pattern": "first", "action": "Hide" }],
+            "rules": [{ "pattern": "last", "action": "Hide" }] } }
+        """;
+
+    [Fact]
+    public void DuplicateJsonKeys_LoadWithTheLastValueWinning()
+    {
+        var config = AppConfigJson.Deserialize(DuplicateKeys);
+
+        Assert.Equal("last", Assert.Single(config.Settings.Rules).Pattern);
+        Assert.Equal(5000, config.Settings.MaxLines);
+        Assert.False(RuleMigration.NeedsMigration(DuplicateKeys));
+        Assert.False(RuleMigration.IsFutureVersion(DuplicateKeys));
+    }
+
+    [Fact]
+    public async Task DuplicateJsonKeys_LoadThroughPersistenceWithoutLosingSettingsOrBackingUp()
+    {
+        using var directory = new Dir();
+        await File.WriteAllTextAsync(
+            directory.Session,
+            DuplicateKeys,
+            TestContext.Current.CancellationToken
+        );
+
+        var loaded = await new JsonFileAppPersistence(directory.Session).LoadAsync(
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.NotNull(loaded);
+        Assert.Equal("last", Assert.Single(loaded.Settings.Rules).Pattern);
+        Assert.Equal(5000, loaded.Settings.MaxLines);
+        Assert.Equal("/tmp/keep.log", Assert.Single(loaded.RecentFiles));
+        Assert.False(File.Exists(directory.Backup));
+    }
+
+    [Fact]
+    public async Task DuplicateKeysInAFileThatCannotBeDeserialized_AreBackedUpAndReportedUnreadable()
+    {
+        using var directory = new Dir();
+        const string broken =
+            """{ "version": 2, "settings": { "rules": [], "rules": [] }, "openFiles": 7 }""";
+        await File.WriteAllTextAsync(
+            directory.Session,
+            broken,
+            TestContext.Current.CancellationToken
+        );
+
+        var loaded = await new JsonFileAppPersistence(directory.Session).LoadAsync(
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Null(loaded);
+        Assert.Equal(
+            broken,
+            await File.ReadAllTextAsync(directory.Backup, TestContext.Current.CancellationToken)
+        );
+    }
+
+    [Fact]
+    public async Task ExistingBackupWithDifferentContent_IsKeptAndTheNewFileGetsASecondName()
+    {
+        using var directory = new Dir();
+        await File.WriteAllTextAsync(
+            directory.Backup,
+            "old incident",
+            TestContext.Current.CancellationToken
+        );
+        const string garbage = "{ \"version\": 2, \"settings\": ";
+        await File.WriteAllTextAsync(
+            directory.Session,
+            garbage,
+            TestContext.Current.CancellationToken
+        );
+        var persistence = new JsonFileAppPersistence(directory.Session);
+
+        await persistence.LoadAsync(TestContext.Current.CancellationToken);
+        await persistence.LoadAsync(TestContext.Current.CancellationToken); // same content: no duplicate
+
+        Assert.Equal(
+            "old incident",
+            await File.ReadAllTextAsync(directory.Backup, TestContext.Current.CancellationToken)
+        );
+        var extra = Assert.Single(directory.Backups, path => path != directory.Backup);
+        Assert.Equal(
+            garbage,
+            await File.ReadAllTextAsync(extra, TestContext.Current.CancellationToken)
+        );
+        Assert.Equal(2, directory.Backups.Length);
+    }
+
     private sealed class Dir : IDisposable
     {
         private readonly string _path = Directory
@@ -184,6 +279,8 @@ public sealed class SessionToleranceTests
             .FullName;
 
         public string Session => Path.Combine(_path, JsonFileAppPersistence.FileName);
+
+        public string[] Backups => Directory.GetFiles(_path, "session.unreadable*.bak");
 
         public string Backup => Path.Combine(_path, "session.unreadable.bak");
 

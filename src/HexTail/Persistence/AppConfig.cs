@@ -146,32 +146,31 @@ public static class AppConfigJson
     /// </summary>
     private static string Sanitize(string json)
     {
-        JsonObject? root;
         try
         {
-            root = JsonNode.Parse(json) as JsonObject;
-        }
-        catch (JsonException)
-        {
-            return json; // The real deserializer reports the malformed document.
-        }
-        if (root is null)
-            return json;
+            if (JsonNode.Parse(json) is not JsonObject root)
+                return json;
 
-        if (root["settings"] is JsonObject settings)
-            SanitizeRules(settings);
-        foreach (var tabs in new[] { root["openFiles"], root["openElasticTabs"] })
-            if (tabs is JsonArray array)
-                foreach (var tab in array.OfType<JsonObject>())
-                {
-                    SanitizeRules(tab);
-                    if (
-                        tab.ContainsKey("levels")
-                        && !(tab["levels"] is { } levels && Parses<LogLevels>(levels))
-                    )
-                        tab.Remove("levels");
-                }
-        return root.ToJsonString();
+            if (root["settings"] is JsonObject settings)
+                SanitizeRules(settings);
+            foreach (var tabs in new[] { root["openFiles"], root["openElasticTabs"] })
+                if (tabs is JsonArray array)
+                    foreach (var tab in array.OfType<JsonObject>())
+                    {
+                        SanitizeRules(tab);
+                        if (
+                            tab.ContainsKey("levels")
+                            && !(tab["levels"] is { } levels && Parses<LogLevels>(levels))
+                        )
+                            tab.Remove("levels");
+                    }
+            return root.ToJsonString();
+        }
+        catch (Exception exception) when (RuleMigration.IsUnreadableTree(exception))
+        {
+            // The real deserializer reports a malformed document (and accepts duplicate keys).
+            return json;
+        }
     }
 
     private static void SanitizeRules(JsonObject owner)

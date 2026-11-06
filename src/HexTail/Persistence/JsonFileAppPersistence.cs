@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace HexTail.Persistence;
@@ -35,7 +36,7 @@ public sealed class JsonFileAppPersistence : IAppPersistence
                 BackUp(UnreadableBackup);
             return AppConfigJson.Deserialize(json);
         }
-        catch (JsonException)
+        catch (Exception exception) when (RuleMigration.IsUnreadableTree(exception))
         {
             // Keep the unreadable file: the next save would otherwise overwrite it.
             if (json is not null)
@@ -52,13 +53,35 @@ public sealed class JsonFileAppPersistence : IAppPersistence
         }
     }
 
+    /// <summary>
+    /// Copies the session file next to itself without ever overwriting a backup: the plain name when
+    /// free, otherwise a timestamped name, and nothing when a backup with the same content exists.
+    /// </summary>
     private void BackUp(string fileName)
     {
-        var backup = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!, fileName);
         try
         {
-            if (!File.Exists(backup))
-                File.Copy(Path, backup);
+            var directory = System.IO.Path.GetDirectoryName(Path)!;
+            var stem = System.IO.Path.GetFileNameWithoutExtension(fileName);
+            var stamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
+            var content = File.ReadAllBytes(Path);
+            for (var attempt = 0; attempt < 100; attempt++)
+            {
+                var name = attempt switch
+                {
+                    0 => fileName,
+                    1 => $"{stem}.{stamp}.bak",
+                    _ => $"{stem}.{stamp}-{attempt}.bak",
+                };
+                var candidate = System.IO.Path.Combine(directory, name);
+                if (!File.Exists(candidate))
+                {
+                    File.Copy(Path, candidate);
+                    return;
+                }
+                if (File.ReadAllBytes(candidate).AsSpan().SequenceEqual(content))
+                    return;
+            }
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }

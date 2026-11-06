@@ -343,4 +343,43 @@ public sealed class SourceRulesTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public async Task RestoreSkippingAnInvalidPersistedSearch_KeepsFollowFlagsAligned()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var config = new AppConfig
+            {
+                OpenFiles =
+                [
+                    new PersistedFileTab
+                    {
+                        Path = path,
+                        Searches =
+                        [
+                            new PersistedSearch { Query = "(", Mode = MatchMode.Regex },
+                            new PersistedSearch { Query = "valid" },
+                        ],
+                        FollowSearches = [true, false],
+                    },
+                ],
+            };
+            await using var restored = new AppState(
+                NewTailers(),
+                new TestPersistence(config),
+                credentials: new InMemoryCredentialVault()
+            );
+            await restored.RestoreAsync(TestContext.Current.CancellationToken);
+
+            var tab = Assert.Single(restored.Files);
+            Assert.Equal("valid", Assert.Single(tab.Searches).Query.Query);
+            Assert.False(Assert.Single(tab.FollowSearches));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }
