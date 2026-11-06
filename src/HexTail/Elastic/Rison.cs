@@ -1,10 +1,11 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace HexTail.Elastic;
 
 /// <summary>Minimal Rison reader (objects, arrays, strings, !t !f !n, numbers, bare identifiers).</summary>
-public static class Rison
+public static partial class Rison
 {
     public static bool TryParse(string text, out object? value)
     {
@@ -21,9 +22,15 @@ public static class Rison
         return true;
     }
 
+    private const int MaxDepth = 64;
+
+    [GeneratedRegex(@"^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$")]
+    private static partial Regex RisonNumber();
+
     private sealed class Parser(string text)
     {
         private int _index;
+        private int _depth;
 
         public bool AtEnd => _index >= text.Length;
 
@@ -86,6 +93,8 @@ public static class Rison
                 return true;
             }
 
+            if (++_depth > MaxDepth)
+                return false;
             while (true)
             {
                 if (!TryReadValue(out var item))
@@ -96,6 +105,7 @@ public static class Rison
                 var next = text[_index++];
                 if (next == ')')
                 {
+                    _depth--;
                     value = list;
                     return true;
                 }
@@ -117,6 +127,8 @@ public static class Rison
                 return true;
             }
 
+            if (++_depth > MaxDepth)
+                return false;
             while (true)
             {
                 string key;
@@ -137,6 +149,7 @@ public static class Rison
                 var next = text[_index++];
                 if (next == ')')
                 {
+                    _depth--;
                     value = map;
                     return true;
                 }
@@ -191,16 +204,29 @@ public static class Rison
             value = null;
             if (!TryReadToken(out var token))
                 return false;
-            value = double.TryParse(
-                token,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out var number
-            )
-                ? number
-                : token;
+            value =
+                IsRisonNumber(token)
+                && double.TryParse(
+                    token,
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out var number
+                )
+                && double.IsFinite(number)
+                    ? number
+                    : token;
             return true;
         }
+
+        private static bool IsRisonNumber(string token) =>
+            RisonNumber().IsMatch(token)
+            // Plain integers beyond double's exact range would silently lose digits.
+            && (
+                token.Contains('.')
+                || token.Contains('e')
+                || token.Contains('E')
+                || token.Length <= 15
+            );
 
         private char Peek() => _index < text.Length ? text[_index] : '\0';
 

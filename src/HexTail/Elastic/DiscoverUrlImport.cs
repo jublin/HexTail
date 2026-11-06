@@ -31,34 +31,77 @@ public static partial class DiscoverUrlImport
         // Discover keeps its state in the fragment ("#/?_a=…&_g=…"); older links use the query string.
         var fragment = uri.Fragment.TrimStart('#');
         var questionMark = fragment.IndexOf('?');
-        var queryText =
-            questionMark >= 0 ? fragment[(questionMark + 1)..] : uri.Query.TrimStart('?');
-        var query = HttpUtility.ParseQueryString(queryText);
+        var fragmentPath = questionMark >= 0 ? fragment[..questionMark] : fragment;
+        var fragmentQuery = HttpUtility.ParseQueryString(
+            questionMark >= 0 ? fragment[(questionMark + 1)..] : ""
+        );
+        var uriQuery = HttpUtility.ParseQueryString(uri.Query.TrimStart('?'));
+        string? Param(string name) =>
+            fragmentQuery[name] is { Length: > 0 } fromFragment ? fromFragment
+            : uriQuery[name] is { Length: > 0 } fromQuery ? fromQuery
+            : null;
+
         if (
-            query["_a"] is not { Length: > 0 } appText
+            Param("_a") is not { } appText
             || !Rison.TryParse(appText, out var parsedApp)
             || parsedApp is not Dictionary<string, object?> app
         )
             return false;
 
         var ignored = new List<string>();
+        void Ignore(string what)
+        {
+            if (!ignored.Contains(what))
+                ignored.Add(what);
+        }
+
         if (
-            query["_g"] is { Length: > 0 } globalText
+            Param("_g") is { } globalText
             && Rison.TryParse(globalText, out var parsedGlobal)
             && parsedGlobal is Dictionary<string, object?> global
-            && global.ContainsKey("time")
         )
-            ignored.Add("time range");
+        {
+            if (global.ContainsKey("time"))
+                Ignore("time range");
+            if (
+                global.TryGetValue("filters", out var globalFilters)
+                && globalFilters is List<object?> { Count: > 0 }
+            )
+                Ignore("filters");
+            if (
+                global.TryGetValue("refreshInterval", out var refresh)
+                && refresh is Dictionary<string, object?> refreshMap
+                && !(refreshMap.TryGetValue("pause", out var paused) && paused is true)
+            )
+                Ignore("refresh interval");
+        }
+
+        if (fragmentPath.StartsWith("/view/", StringComparison.Ordinal))
+            Ignore("saved search");
+
+        Dictionary<string, object?>? queryMap = app.TryGetValue("query", out var rawQuery)
+            ? rawQuery as Dictionary<string, object?>
+            : null;
+        Dictionary<string, object?>? sourceMap = app.TryGetValue("dataSource", out var source)
+            ? source as Dictionary<string, object?>
+            : null;
+        var esql =
+            (
+                sourceMap is not null
+                && sourceMap.TryGetValue("type", out var sourceType)
+                && sourceType is "esql"
+            ) || (queryMap is not null && queryMap.ContainsKey("esql"));
+        if (esql)
+            Ignore("ES|QL");
 
         string? dataViewId = null;
-        if (
-            app.TryGetValue("dataSource", out var source)
-            && source is Dictionary<string, object?> sourceMap
-            && sourceMap.TryGetValue("dataViewId", out var id)
-        )
-            dataViewId = AsString(id);
-        if (dataViewId is null && app.TryGetValue("index", out var legacy))
-            dataViewId = AsString(legacy);
+        if (!esql)
+        {
+            if (sourceMap is not null && sourceMap.TryGetValue("dataViewId", out var id))
+                dataViewId = AsString(id);
+            if (dataViewId is null && app.TryGetValue("index", out var legacy))
+                dataViewId = AsString(legacy);
+        }
 
         var columns =
             app.TryGetValue("columns", out var rawColumns) && rawColumns is List<object?> list
@@ -68,38 +111,87 @@ public static partial class DiscoverUrlImport
         string? field = null;
         string? value = null;
         if (
-            app.TryGetValue("query", out var rawQuery)
-            && rawQuery is Dictionary<string, object?> queryMap
+            !esql
+            && queryMap is not null
             && queryMap.TryGetValue("query", out var rawText)
             && AsString(rawText) is { Length: > 0 } kql
         )
         {
+            var language = queryMap.TryGetValue("language", out var rawLanguage)
+                ? rawLanguage
+                : null;
             var match = SingleClause().Match(kql);
-            if (match.Success)
+            if (
+                language is (null or "kuery")
+                && match.Success
+                && IsPlainValue(match, out var plain)
+            )
             {
                 field = match.Groups[1].Value;
-                value = match.Groups[2].Success ? match.Groups[2].Value : match.Groups[3].Value;
+                value = plain;
             }
             else
-                ignored.Add("query");
+                Ignore("query");
         }
 
         foreach (var name in new[] { "sort", "filters" })
             if (app.TryGetValue(name, out var raw) && raw is List<object?> { Count: > 0 })
-                ignored.Add(name);
+                Ignore(name);
+
+        if (app.Keys.Any(key => !KnownAppKeys.Contains(key)))
+            Ignore("other state");
 
         var path = uri.AbsolutePath;
-        var appIndex = path.IndexOf("/app/", StringComparison.Ordinal);
-        var origin = uri.GetLeftPart(UriPartial.Authority) + (appIndex > 0 ? path[..appIndex] : "");
+        var appIndex = path.LastIndexOf("/app/", StringComparison.Ordinal);
+        var origin = $"{uri.Scheme}://{uri.Authority}" + (appIndex > 0 ? path[..appIndex] : "");
         import = new DiscoverImport(origin, dataViewId, columns, field, value, ignored);
         return true;
+    }
+
+    private static readonly HashSet<string> KnownAppKeys = new(StringComparer.Ordinal)
+    {
+        "columns",
+        "dataSource",
+        "index",
+        "query",
+        "sort",
+        "filters",
+        "interval",
+        "hideChart",
+        "grid",
+        "hideAggregatedPreview",
+        "viewMode",
+        "rowHeight",
+        "rowsPerPage",
+        "breakdownField",
+        "sampleSize",
+        "density",
+        "headerRowHeight",
+    };
+
+    /// <summary>
+    /// A clause is importable only when its value is a double-quoted string or a bare token with no
+    /// KQL wildcard/escape/range syntax and not a boolean keyword.
+    /// </summary>
+    private static bool IsPlainValue(Match match, out string value)
+    {
+        var quoted = match.Groups[2].Success;
+        value = quoted ? match.Groups[2].Value : match.Groups[3].Value;
+        if (value.Contains('\\'))
+            return false;
+        if (quoted)
+            return true;
+        return value.IndexOfAny(['*', ':', '~', '?', '^']) < 0
+            && !value.Equals("and", StringComparison.OrdinalIgnoreCase)
+            && !value.Equals("or", StringComparison.OrdinalIgnoreCase)
+            && !value.Equals("not", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? AsString(object? value) =>
         value switch
         {
             string text => text,
-            double number => number.ToString(CultureInfo.InvariantCulture),
+            double number => number.ToString("R", CultureInfo.InvariantCulture),
             _ => null,
         };
 }

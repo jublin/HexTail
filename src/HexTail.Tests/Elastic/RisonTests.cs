@@ -57,4 +57,53 @@ public sealed class RisonTests
     [InlineData("!(1,2")]
     [InlineData("'unterminated")]
     public void RejectsMalformedText(string text) => Assert.False(Rison.TryParse(text, out _));
+
+    [Theory]
+    [InlineData("!(")]
+    [InlineData("(a:")]
+    public void DeepNestingReturnsFalseInsteadOfOverflowing(string unit)
+    {
+        var text = string.Concat(Enumerable.Repeat(unit, 200_000));
+
+        Assert.False(Rison.TryParse(text, out var value));
+        Assert.Null(value);
+    }
+
+    [Fact]
+    public void ModerateNestingStillParses()
+    {
+        var text = string.Concat(Enumerable.Repeat("!(", 30)) + "1" + new string(')', 30);
+
+        Assert.True(Rison.TryParse(text, out _));
+    }
+
+    [Theory]
+    [InlineData("00123")]
+    [InlineData("+5")]
+    [InlineData("Infinity")]
+    [InlineData("NaN")]
+    [InlineData("12345678901234567890")]
+    [InlineData("1_000")]
+    [InlineData(".5")]
+    [InlineData("5.")]
+    [InlineData("0x10")]
+    public void NonRisonNumbersStayStrings(string token)
+    {
+        Assert.True(Rison.TryParse($"(a:{token})", out var value));
+
+        Assert.Equal(token, Assert.IsType<Dictionary<string, object?>>(value)["a"]);
+    }
+
+    [Theory]
+    [InlineData("0", 0d)]
+    [InlineData("-12", -12d)]
+    [InlineData("3.25", 3.25d)]
+    [InlineData("1e3", 1000d)]
+    [InlineData("-2.5E-1", -0.25d)]
+    public void RisonNumbersParseAsDoubles(string token, double expected)
+    {
+        Assert.True(Rison.TryParse($"(a:{token})", out var value));
+
+        Assert.Equal(expected, Assert.IsType<Dictionary<string, object?>>(value)["a"]);
+    }
 }
