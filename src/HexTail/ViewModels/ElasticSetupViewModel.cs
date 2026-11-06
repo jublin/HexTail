@@ -1,7 +1,10 @@
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Reactive;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using Avalonia.Threading;
 using ReactiveUI;
 using ReactiveUI.Reactive;
 
@@ -27,6 +30,15 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
     private bool _openNow = true;
     private string? _error;
     private bool _isBusy;
+    private string _dataViewSearch = string.Empty;
+
+    // The automatic connection test runs once the edits have stopped coming in. A DispatcherTimer
+    // rather than Rx's Throttle on the owner scheduler: tests hand the owner an immediate
+    // scheduler, on which a delayed Throttle would sleep inside every property setter.
+    private DispatcherTimer? _autoTestTimer;
+    private int _editStamp;
+    private int _testStartedStamp;
+    private bool _retestPending;
 
     // Bumped whenever a flow starts or ends, so work still running for an old flow stops quietly.
     private int _session;
@@ -70,6 +82,11 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
     }
 
     public ElasticSetupStep Step => _step;
+    public bool IsConnectionStep => _step == ElasticSetupStep.Connection;
+    public bool IsDataViewStep => _step == ElasticSetupStep.DataView;
+    public bool IsFilterStep => _step == ElasticSetupStep.Filter;
+    public bool IsColumnsStep => _step == ElasticSetupStep.Columns;
+    public bool IsFinishStep => _step == ElasticSetupStep.Finish;
     public IReadOnlyList<ElasticSetupStepViewModel> Steps { get; }
 
     public ElasticConnectionEditorViewModel? Connection
@@ -80,12 +97,41 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
             if (ReferenceEquals(_connection, value))
                 return;
             if (_connection is not null)
+            {
                 _connection.PropertyChanged -= EditorChanged;
+                _connection.ConnectionEdited -= OnConnectionEdited;
+                _connection.DataViews.CollectionChanged -= OnDataViewsChanged;
+            }
+            CancelAutoTest();
             this.RaiseAndSetIfChanged(ref _connection, value);
             if (value is not null)
+            {
                 value.PropertyChanged += EditorChanged;
+                value.ConnectionEdited += OnConnectionEdited;
+                value.DataViews.CollectionChanged += OnDataViewsChanged;
+            }
+            RebuildFilteredDataViews();
         }
     }
+
+    /// <summary>How long the connection fields stay unedited before the test runs by itself.</summary>
+    internal TimeSpan AutoTestDelay { get; set; } = TimeSpan.FromMilliseconds(700);
+
+    /// <summary>Filters <see cref="FilteredDataViews"/> by title, ignoring case.</summary>
+    public string DataViewSearch
+    {
+        get => _dataViewSearch;
+        set
+        {
+            value ??= string.Empty;
+            if (_dataViewSearch == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _dataViewSearch, value);
+            RebuildFilteredDataViews();
+        }
+    }
+
+    public ObservableCollection<ElasticDataViewChoiceViewModel> FilteredDataViews { get; } = [];
 
     public ElasticViewEditorViewModel? View
     {
@@ -229,6 +275,7 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
     internal void Close()
     {
         _session++;
+        CancelAutoTest();
         if (Connection is { } connection)
         {
             var saved = _owner
@@ -261,6 +308,7 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
             Close();
         _session++;
         _createdConnection = false;
+        DataViewSearch = string.Empty;
         OpenNow = true;
         Error = null;
         IsOpen = true;
@@ -283,10 +331,146 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         )
             view.Name = view.SuggestedName;
         this.RaisePropertyChanged(nameof(Step));
+        this.RaisePropertyChanged(nameof(IsConnectionStep));
+        this.RaisePropertyChanged(nameof(IsDataViewStep));
+        this.RaisePropertyChanged(nameof(IsFilterStep));
+        this.RaisePropertyChanged(nameof(IsColumnsStep));
+        this.RaisePropertyChanged(nameof(IsFinishStep));
+        Reevaluate();
+        if (step != ElasticSetupStep.Connection)
+            EnsureMetadataLoaded();
+    }
+
+    /// <summary>
+    /// A view that picked a data view but has no usable metadata yet (a saved view only holds its
+    /// output fields, a failed load left nothing) fetches it as soon as a step needs it.
+    /// </summary>
+    private void EnsureMetadataLoaded()
+    {
+        if (
+            View is not { IsLoading: false, IsMetadataLoaded: false } view
+            || string.IsNullOrWhiteSpace(view.SelectedDataViewId)
+        )
+            return;
+        view.RefreshFieldsCommand.Execute().Subscribe(_ => { }, ReportBackgroundFailure);
+    }
+
+    private void ReportBackgroundFailure(Exception exception)
+    {
+        if (exception is not OperationCanceledException)
+            Error = exception.Message;
+    }
+
+    private void EditorChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (
+            ReferenceEquals(sender, Connection)
+            && args.PropertyName == nameof(ElasticConnectionEditorViewModel.IsTesting)
+        )
+        {
+            if (Connection!.IsTesting)
+                _testStartedStamp = _editStamp;
+            else if (_retestPending)
+                Dispatcher.UIThread.Post(TryRunAutoTest);
+        }
+        else if (
+            ReferenceEquals(sender, Connection)
+            && args.PropertyName == nameof(ElasticConnectionEditorViewModel.Status)
+        )
+            // Testing refreshes the titles of the data views in place.
+            RebuildFilteredDataViews();
         Reevaluate();
     }
 
-    private void EditorChanged(object? sender, PropertyChangedEventArgs args) => Reevaluate();
+    private void OnConnectionEdited(object? sender, EventArgs args)
+    {
+        _editStamp++;
+        if (!IsOpen || Step != ElasticSetupStep.Connection)
+            return;
+        // Every edit restarts the wait, so a burst of typing ends in a single test.
+        _autoTestTimer ??= CreateAutoTestTimer();
+        _autoTestTimer.Stop();
+        _autoTestTimer.Interval = AutoTestDelay;
+        _autoTestTimer.Start();
+    }
+
+    private DispatcherTimer CreateAutoTestTimer()
+    {
+        var timer = new DispatcherTimer();
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            TryRunAutoTest();
+        };
+        return timer;
+    }
+
+    private void CancelAutoTest()
+    {
+        _retestPending = false;
+        _autoTestTimer?.Stop();
+    }
+
+    private void TryRunAutoTest()
+    {
+        if (
+            !IsOpen
+            || Step != ElasticSetupStep.Connection
+            || Connection is not { } connection
+            // Something (the button, an earlier edit's timer) already tested the latest edit.
+            || _testStartedStamp == _editStamp
+            || !connection.CanTestConnection
+        )
+        {
+            _retestPending = false;
+            return;
+        }
+        if (connection.IsTesting)
+        {
+            // The running test belongs to older edits; it retests when it is done.
+            _retestPending = true;
+            return;
+        }
+        _retestPending = false;
+        connection.TestConnectionCommand.Execute().Subscribe(_ => { }, ReportBackgroundFailure);
+    }
+
+    private void OnDataViewsChanged(object? sender, NotifyCollectionChangedEventArgs args) =>
+        RebuildFilteredDataViews();
+
+    private void RebuildFilteredDataViews()
+    {
+        var term = _dataViewSearch.Trim();
+        var wanted = (Connection?.DataViews ?? [])
+            .Where(choice =>
+                term.Length == 0 || choice.Title.Contains(term, StringComparison.OrdinalIgnoreCase)
+            )
+            .ToList();
+        var changed = false;
+        for (var index = FilteredDataViews.Count - 1; index >= 0; index--)
+            if (!wanted.Contains(FilteredDataViews[index]))
+            {
+                FilteredDataViews.RemoveAt(index);
+                changed = true;
+            }
+        for (var index = 0; index < wanted.Count; index++)
+        {
+            if (
+                index < FilteredDataViews.Count
+                && ReferenceEquals(FilteredDataViews[index], wanted[index])
+            )
+                continue;
+            var current = FilteredDataViews.IndexOf(wanted[index]);
+            if (current >= 0)
+                FilteredDataViews.Move(current, index);
+            else
+                FilteredDataViews.Insert(index, wanted[index]);
+            changed = true;
+        }
+        // The list control clears its selection while items come and go; say again what is selected.
+        if (changed)
+            View?.NotifyDataViewSelectionChanged();
+    }
 
     private void Reevaluate()
     {

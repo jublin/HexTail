@@ -316,6 +316,20 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
+        // A popup or completion list that used the key has marked it handled, so only a bare
+        // Escape on the page itself gets here.
+        if (
+            e.Key == Key.Escape
+            && !e.Handled
+            && !ViewModel.SettingsOpen
+            && !ViewModel.Palette.IsOpen
+            && ViewModel.ElasticSetup.IsOpen
+        )
+        {
+            ViewModel.ElasticSetup.CloseCommand.Execute().Subscribe();
+            e.Handled = true;
+            return;
+        }
         if (ViewModel.SettingsOpen || ViewModel.Palette.IsOpen || e.Handled)
             return;
 

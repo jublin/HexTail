@@ -1,0 +1,313 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTail.ViewModels"
+  x:Class="HexTail.Views.ElasticSetupPage"
+  x:DataType="vm:ElasticSetupViewModel"
+  KeyboardNavigation.TabNavigation="Cycle"
+  AutomationProperties.Name="Set up Elastic"
+>
+  <Grid ColumnDefinitions="220,*" Background="{DynamicResource SurfaceBrush}">
+    <Border
+      Background="{DynamicResource SurfaceAltBrush}"
+      BorderBrush="{DynamicResource BorderBrush}"
+      BorderThickness="0,0,1,0"
+      Padding="16"
+    >
+      <StackPanel Spacing="16">
+        <TextBlock Text="Set up Elastic" Classes="setup-title" />
+        <ItemsControl x:Name="SetupStepList" ItemsSource="{Binding Steps}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ElasticSetupStepViewModel">
+              <Button
+                Classes="source-select setup-step"
+                Classes.current="{Binding IsCurrent}"
+                Classes.done="{Binding IsDone}"
+                Command="{Binding $parent[UserControl].DataContext.GoToStepCommand}"
+                CommandParameter="{Binding}"
+                IsEnabled="{Binding IsReachable}"
+                AutomationProperties.Name="{Binding Title, StringFormat='Go to step: {0}'}"
+              >
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                  <Border Classes="step-badge" VerticalAlignment="Center">
+                    <Panel>
+                      <TextBlock
+                        Text="{Binding Number}"
+                        IsVisible="{Binding !IsDone}"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                      />
+                      <TextBlock
+                        Text="✓"
+                        IsVisible="{Binding IsDone}"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                      />
+                    </Panel>
+                  </Border>
+                  <TextBlock
+                    Grid.Column="1"
+                    Text="{Binding Title}"
+                    VerticalAlignment="Center"
+                    TextTrimming="CharacterEllipsis"
+                  />
+                </Grid>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Border>
+
+    <Grid Grid.Column="1" RowDefinitions="*,Auto">
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <Panel Margin="24" MaxWidth="560" HorizontalAlignment="Left">
+          <!-- Step 1: Connection -->
+          <StackPanel x:Name="SetupConnectionPanel" IsVisible="{Binding IsConnectionStep}">
+            <StackPanel DataContext="{Binding Connection}" Spacing="12">
+              <TextBlock Text="Connect to Elastic" Classes="setup-title" />
+              <TextBlock
+                Classes="hint"
+                Text="Paste an Elastic Cloud ID, or enter the Kibana and Elasticsearch addresses. The connection is tested automatically once you stop typing."
+              />
+              <StackPanel Spacing="4">
+                <TextBlock Text="Cloud ID" Classes="elastic-form-label" />
+                <TextBox
+                  x:Name="CloudIdBox"
+                  Text="{Binding CloudId, Mode=TwoWay}"
+                  PlaceholderText="Elastic Cloud ID (optional)"
+                  AutomationProperties.Name="Cloud ID"
+                />
+                <TextBlock
+                  x:Name="CloudIdError"
+                  Text="{Binding CloudIdError}"
+                  IsVisible="{Binding CloudIdError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                  Classes="error"
+                  TextWrapping="Wrap"
+                />
+              </StackPanel>
+              <StackPanel Spacing="4">
+                <TextBlock Text="Kibana URL" Classes="elastic-form-label" />
+                <TextBox
+                  x:Name="KibanaUrlBox"
+                  Text="{Binding KibanaUrl, Mode=TwoWay}"
+                  PlaceholderText="https://kibana.example.com"
+                  AutomationProperties.Name="Kibana URL"
+                  AutomationProperties.HelpText="{Binding KibanaUrlError}"
+                />
+                <TextBlock Text="{Binding KibanaUrlError}" Classes="error" TextWrapping="Wrap">
+                  <TextBlock.IsVisible>
+                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                      <Binding
+                        Path="KibanaUrlError"
+                        Converter="{x:Static ObjectConverters.IsNotNull}"
+                      />
+                      <Binding
+                        Path="KibanaUrl"
+                        Converter="{x:Static StringConverters.IsNotNullOrEmpty}"
+                      />
+                    </MultiBinding>
+                  </TextBlock.IsVisible>
+                </TextBlock>
+              </StackPanel>
+              <StackPanel Spacing="4">
+                <TextBlock Text="Elasticsearch URL" Classes="elastic-form-label" />
+                <TextBox
+                  x:Name="ElasticsearchUrlBox"
+                  Text="{Binding ElasticsearchUrl, Mode=TwoWay}"
+                  PlaceholderText="https://elastic.example.com"
+                  AutomationProperties.Name="Elasticsearch URL"
+                  AutomationProperties.HelpText="{Binding ElasticsearchUrlError}"
+                />
+                <TextBlock
+                  Text="{Binding ElasticsearchUrlError}"
+                  Classes="error"
+                  TextWrapping="Wrap"
+                >
+                  <TextBlock.IsVisible>
+                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                      <Binding
+                        Path="ElasticsearchUrlError"
+                        Converter="{x:Static ObjectConverters.IsNotNull}"
+                      />
+                      <Binding
+                        Path="ElasticsearchUrl"
+                        Converter="{x:Static StringConverters.IsNotNullOrEmpty}"
+                      />
+                    </MultiBinding>
+                  </TextBlock.IsVisible>
+                </TextBlock>
+              </StackPanel>
+              <StackPanel Spacing="4">
+                <TextBlock Text="Login method" Classes="elastic-form-label" />
+                <ComboBox
+                  x:Name="AuthModeBox"
+                  ItemsSource="{Binding AuthModes}"
+                  SelectedItem="{Binding AuthMode, Mode=TwoWay}"
+                  HorizontalContentAlignment="Left"
+                  AutomationProperties.Name="Login method"
+                />
+              </StackPanel>
+              <StackPanel Spacing="4" IsVisible="{Binding IsBasic}">
+                <TextBlock Text="Username" Classes="elastic-form-label" />
+                <TextBox
+                  x:Name="UsernameBox"
+                  Text="{Binding Username, Mode=TwoWay}"
+                  PlaceholderText="Username"
+                  AutomationProperties.Name="Username"
+                />
+              </StackPanel>
+              <StackPanel Spacing="4" IsVisible="{Binding IsAuthenticated}">
+                <TextBlock Text="Password or API key" Classes="elastic-form-label" />
+                <TextBox
+                  x:Name="SecretBox"
+                  Text="{Binding Secret, Mode=TwoWay}"
+                  PasswordChar="●"
+                  PlaceholderText="Password or API key"
+                  AutomationProperties.Name="Password or API key"
+                />
+              </StackPanel>
+              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                <Button
+                  x:Name="TestConnectionButton"
+                  Content="Test connection"
+                  Command="{Binding TestConnectionCommand}"
+                  IsEnabled="{Binding CanTestConnection}"
+                  Classes="primary"
+                  AutomationProperties.Name="Test connection"
+                />
+                <TextBlock
+                  Grid.Column="1"
+                  Text="{Binding Status}"
+                  Classes="status"
+                  TextWrapping="Wrap"
+                  AutomationProperties.LiveSetting="Polite"
+                />
+              </Grid>
+              <ItemsControl x:Name="EndpointResultsList" ItemsSource="{Binding EndpointResults}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ElasticEndpointResultViewModel">
+                    <Grid ColumnDefinitions="120,*" Margin="0,2">
+                      <TextBlock Text="{Binding Label}" Classes="muted" />
+                      <TextBlock
+                        Grid.Column="1"
+                        Text="{Binding Message}"
+                        Classes.status-live="{Binding IsOk}"
+                        Classes.error="{Binding IsFailed}"
+                        TextWrapping="Wrap"
+                        AutomationProperties.LiveSetting="Polite"
+                      />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </StackPanel>
+
+          <!-- Step 2: Data view -->
+          <StackPanel x:Name="SetupDataViewPanel" IsVisible="{Binding IsDataViewStep}" Spacing="12">
+            <TextBlock Text="Choose a data view" Classes="setup-title" />
+            <TextBlock
+              Classes="hint"
+              Text="A data view tells Kibana which indices hold your logs. Pick the one to read from."
+            />
+            <TextBox
+              x:Name="DataViewSearchBox"
+              Text="{Binding DataViewSearch, Mode=TwoWay}"
+              PlaceholderText="Search data views"
+              AutomationProperties.Name="Search data views"
+            />
+            <ListBox
+              x:Name="DataViewList"
+              ItemsSource="{Binding FilteredDataViews}"
+              SelectedItem="{Binding View.SelectedDataView, Mode=TwoWay}"
+              MaxHeight="320"
+              AutomationProperties.Name="Data views"
+            >
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ElasticDataViewChoiceViewModel">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <TextBlock
+                      Text="{Binding Title}"
+                      VerticalAlignment="Center"
+                      TextTrimming="CharacterEllipsis"
+                    />
+                    <TextBlock
+                      Grid.Column="1"
+                      Text="{Binding $parent[ListBox].DataContext.View.TimestampStatus}"
+                      IsVisible="{Binding $parent[ListBoxItem].IsSelected}"
+                      FontSize="12"
+                      Opacity="0.85"
+                      VerticalAlignment="Center"
+                      TextWrapping="NoWrap"
+                    />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock
+              Text="{Binding View.MetadataStatus}"
+              IsVisible="{Binding View.SelectedDataViewId, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+              Classes="hint"
+              AutomationProperties.LiveSetting="Polite"
+            />
+            <TextBlock
+              Text="{Binding View.Error}"
+              IsVisible="{Binding View.Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+              Classes="error"
+              TextWrapping="Wrap"
+              AutomationProperties.LiveSetting="Assertive"
+            />
+          </StackPanel>
+
+          <!-- Steps 3 to 5 (filter, columns, name and open) are filled in by the next task. -->
+          <StackPanel x:Name="SetupFilterPanel" IsVisible="{Binding IsFilterStep}" />
+          <StackPanel x:Name="SetupColumnsPanel" IsVisible="{Binding IsColumnsStep}" />
+          <StackPanel x:Name="SetupFinishPanel" IsVisible="{Binding IsFinishStep}" />
+        </Panel>
+      </ScrollViewer>
+
+      <Border
+        Grid.Row="1"
+        Background="{DynamicResource ToolbarBrush}"
+        BorderBrush="{DynamicResource BorderBrush}"
+        BorderThickness="0,1,0,0"
+        Padding="16,10"
+      >
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+          <Button
+            x:Name="SetupCloseButton"
+            Content="Close"
+            Command="{Binding CloseCommand}"
+            AutomationProperties.Name="Close setup"
+          />
+          <TextBlock
+            x:Name="SetupError"
+            Grid.Column="1"
+            Text="{Binding Error}"
+            IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+            Classes="error"
+            TextWrapping="Wrap"
+            VerticalAlignment="Center"
+            AutomationProperties.LiveSetting="Assertive"
+          />
+          <Button
+            x:Name="SetupBackButton"
+            Grid.Column="2"
+            Content="Back"
+            Command="{Binding BackCommand}"
+            AutomationProperties.Name="Previous step"
+          />
+          <Button
+            x:Name="SetupNextButton"
+            Grid.Column="3"
+            Content="{Binding NextLabel}"
+            Command="{Binding NextCommand}"
+            Classes="primary"
+            AutomationProperties.Name="{Binding NextLabel}"
+          />
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>

@@ -828,4 +828,257 @@ public sealed class ElasticSetupViewModelTests
         Assert.Contains("Set up Elastic", titles);
         Assert.DoesNotContain("Add Elastic source", titles);
     }
+
+    private static async Task PumpAsync(int milliseconds)
+    {
+        var until = DateTime.UtcNow + TimeSpan.FromMilliseconds(milliseconds);
+        while (DateTime.UtcNow < until)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            await Task.Delay(10);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Connection_ABurstOfEditsRunsOneAutomaticTest()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.AutoTestDelay = TimeSpan.FromMilliseconds(60);
+        setup.StartNew();
+        var connection = setup.Connection!;
+
+        connection.KibanaUrl = "https://kibana.example/";
+        connection.ElasticsearchUrl = "https://elastic.example/a";
+        connection.ElasticsearchUrl = "https://elastic.example/b";
+        connection.ElasticsearchUrl = "https://elastic.example/c";
+
+        // Nothing runs while the edits are still coming in.
+        Assert.Empty(harness.Client.DataViewSecrets);
+        await UiWait.Until(() => harness.Client.DataViewSecrets.Count == 1);
+        await UiWait.Until(() => setup.CanGoNext);
+        await PumpAsync(250);
+        Assert.Single(harness.Client.DataViewSecrets);
+        Assert.True(connection.EndpointsOk);
+    }
+
+    [AvaloniaFact]
+    public async Task Connection_AManualTestAfterTheLastEditIsNotRepeatedAutomatically()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.AutoTestDelay = TimeSpan.FromMilliseconds(60);
+        setup.StartNew();
+
+        await harness.ConnectAsync();
+        await PumpAsync(300);
+
+        Assert.Single(harness.Client.DataViewSecrets);
+        Assert.True(setup.CanGoNext);
+    }
+
+    [AvaloniaFact]
+    public async Task Connection_InvalidEditsOrAnotherStepDoNotTriggerAnAutomaticTest()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.AutoTestDelay = TimeSpan.FromMilliseconds(40);
+        setup.StartNew();
+        setup.Connection!.KibanaUrl = "https://kibana.example/";
+        setup.Connection.ElasticsearchUrl = "not a url";
+        await PumpAsync(250);
+        Assert.Empty(harness.Client.DataViewSecrets);
+
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        var tests = harness.Client.DataViewSecrets.Count;
+        setup.Connection.ElasticsearchUrl = "https://elastic.example/other";
+        await PumpAsync(250);
+
+        // The edit happened while another step was showing, so the connection page is not retested.
+        Assert.Equal(ElasticSetupStep.DataView, setup.Step);
+        Assert.Equal(tests, harness.Client.DataViewSecrets.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task Connection_ClosingTheFlowCancelsAPendingAutomaticTest()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.AutoTestDelay = TimeSpan.FromMilliseconds(60);
+        setup.StartNew();
+        setup.Connection!.KibanaUrl = "https://kibana.example/";
+        setup.Connection.ElasticsearchUrl = "https://elastic.example/";
+
+        setup.Close();
+        await PumpAsync(300);
+
+        Assert.Empty(harness.Client.DataViewSecrets);
+    }
+
+    [AvaloniaFact]
+    public async Task StepFlags_FollowTheCurrentStep()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        var raised = new List<string?>();
+        setup.PropertyChanged += (_, args) => raised.Add(args.PropertyName);
+
+        setup.StartNew();
+        Assert.Equal(
+            [true, false, false, false, false],
+            [
+                setup.IsConnectionStep,
+                setup.IsDataViewStep,
+                setup.IsFilterStep,
+                setup.IsColumnsStep,
+                setup.IsFinishStep,
+            ]
+        );
+
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        Assert.False(setup.IsConnectionStep);
+        Assert.True(setup.IsDataViewStep);
+        Assert.Contains(nameof(ElasticSetupViewModel.IsDataViewStep), raised);
+
+        await harness.ResolveDataViewAsync();
+        await harness.NextAsync();
+        Assert.True(setup.IsFilterStep);
+        harness.FillFilter();
+        await harness.NextAsync();
+        Assert.True(setup.IsColumnsStep);
+        harness.ChooseColumns();
+        await harness.NextAsync();
+        Assert.True(setup.IsFinishStep);
+        Assert.False(setup.IsColumnsStep);
+        Assert.Contains(nameof(ElasticSetupViewModel.IsFinishStep), raised);
+    }
+
+    [AvaloniaFact]
+    public async Task DataViewSearch_FiltersTheChoicesByTitleIgnoringCase()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.StartNew();
+        Assert.Empty(setup.FilteredDataViews);
+
+        await harness.ConnectAsync();
+        Assert.Equal(["logs-*", "metrics-*"], setup.FilteredDataViews.Select(c => c.Title));
+
+        setup.DataViewSearch = "LOG";
+        Assert.Equal(["logs-*"], setup.FilteredDataViews.Select(c => c.Title));
+
+        setup.DataViewSearch = "ric";
+        Assert.Equal(["metrics-*"], setup.FilteredDataViews.Select(c => c.Title));
+
+        setup.DataViewSearch = "nothing";
+        Assert.Empty(setup.FilteredDataViews);
+
+        // New choices from the connection follow the current search.
+        setup.Connection!.DataViews.Add(new ElasticDataViewChoiceViewModel("n", "NOTHING-new"));
+        Assert.Equal(["NOTHING-new"], setup.FilteredDataViews.Select(c => c.Title));
+
+        setup.DataViewSearch = string.Empty;
+        Assert.Equal(3, setup.FilteredDataViews.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task DataViewSearch_KeepsTheSameChoiceObjectsAndStartsEmptyForANewFlow()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.StartNew();
+        await harness.ConnectAsync();
+        var logs = setup.FilteredDataViews.Single(c => c.Id == "logs");
+
+        setup.DataViewSearch = "logs";
+        Assert.Same(logs, Assert.Single(setup.FilteredDataViews));
+
+        setup.StartNew();
+        Assert.Equal(string.Empty, setup.DataViewSearch);
+        Assert.Empty(setup.FilteredDataViews);
+    }
+
+    private static ElasticConnectionSettings SavedWithDataView(string dataViewId)
+    {
+        var saved = ElasticFixtures.Connection("c1", "Ops", "api");
+        return saved with
+        {
+            Views = [.. saved.Views.Select(view => view with { DataViewId = dataViewId })],
+        };
+    }
+
+    [AvaloniaFact]
+    public async Task EditView_LoadsTheMetadataOfASavedView()
+    {
+        await using var harness = await CreateAsync(null, SavedWithDataView("logs"));
+
+        harness.Setup.EditView("c1", "c1-view");
+        var view = harness.Setup.View!;
+
+        await WaitForAsync(() => view.IsMetadataLoaded);
+        Assert.True(view.IsMetadataLoaded);
+        Assert.False(view.IsLoading);
+        // Only the output field existed before; the rest of the data view's fields arrive now.
+        Assert.Contains(view.Fields, field => field.Name == "service");
+        Assert.Contains(view.Fields, field => field.Name == "bytes");
+        Assert.Equal(["message"], view.SelectedOutputFields);
+        Assert.Equal(ElasticSetupStep.Filter, harness.Setup.Step);
+    }
+
+    [AvaloniaFact]
+    public async Task EnteringDataView_ReloadsASelectionThatFailedToResolve()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.StartNew();
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        var original = harness.Client.DataViewHandler!;
+        harness.Client.DataViewHandler = _ => throw new IOException("kibana is down");
+        setup.View!.SelectedDataViewId = "logs";
+        await WaitForAsync(() => !setup.View.IsLoading);
+        Assert.False(setup.View.IsSelectionResolved);
+        Assert.Equal("kibana is down", setup.View.Error);
+        harness.Client.DataViewHandler = original;
+
+        await setup.BackCommand.Execute();
+        Assert.Equal(ElasticSetupStep.Connection, setup.Step);
+        await harness.NextAsync();
+
+        Assert.Equal(ElasticSetupStep.DataView, setup.Step);
+        await WaitForAsync(() => setup.View.IsSelectionResolved);
+        Assert.True(setup.View.IsSelectionResolved);
+        Assert.True(setup.View.IsMetadataLoaded);
+        Assert.Null(setup.View.Error);
+    }
+
+    [AvaloniaFact]
+    public async Task GoingBackToEarlierSteps_DoesNotReloadMetadataThatIsAlreadyThere()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.StartNew();
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        await harness.ResolveDataViewAsync();
+        await harness.NextAsync();
+        var loads = 0;
+        var original = harness.Client.DataViewHandler!;
+        harness.Client.DataViewHandler = id =>
+        {
+            loads++;
+            return original(id);
+        };
+
+        harness.FillFilter();
+        await harness.NextAsync();
+        await setup.BackCommand.Execute();
+        await setup.BackCommand.Execute();
+
+        Assert.Equal(ElasticSetupStep.DataView, setup.Step);
+        await PumpAsync(100);
+        Assert.Equal(0, loads);
+    }
 }

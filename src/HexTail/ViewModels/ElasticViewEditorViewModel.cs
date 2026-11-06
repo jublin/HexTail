@@ -38,6 +38,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     private string? _previewMessage;
     private bool _isLoading;
     private bool _isSelectionResolved;
+    private bool _isMetadataLoaded;
     private string? _timeFieldName;
     private string? _serverField;
     private string? _namespaceField;
@@ -90,6 +91,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(SelectedDataView));
             var version = ++_metadataVersion;
             InvalidateResults();
+            SetMetadataLoaded(false);
             IsSelectionResolved = false;
             Error = null;
             if (value is null)
@@ -223,6 +225,13 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             NotifyPrerequisitesChanged();
         }
     }
+
+    /// <summary>
+    /// True once the data view's fields were fetched for the current selection. A view restored
+    /// from saved settings is resolved but holds only its output fields until this is true.
+    /// </summary>
+    public bool IsMetadataLoaded => _isMetadataLoaded;
+
     public bool IsSelectionResolved
     {
         get => _isSelectionResolved;
@@ -336,6 +345,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         if (summary is null)
         {
             ++_metadataVersion;
+            SetMetadataLoaded(false);
             IsLoading = false;
             IsSelectionResolved = false;
             Error = "The selected data view is no longer available. Choose another data view.";
@@ -358,9 +368,18 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         if (IsLoading || string.IsNullOrWhiteSpace(SelectedDataViewId))
             return Task.CompletedTask;
         Error = null;
+        SetMetadataLoaded(false);
         IsSelectionResolved = false;
         IsLoading = true;
         return LoadDataViewAsync(SelectedDataViewId, ++_metadataVersion);
+    }
+
+    private void SetMetadataLoaded(bool value)
+    {
+        if (_isMetadataLoaded == value)
+            return;
+        _isMetadataLoaded = value;
+        this.RaisePropertyChanged(nameof(IsMetadataLoaded));
     }
 
     private string DescribeField(string? name) =>
@@ -399,6 +418,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     {
         ++_metadataVersion;
         InvalidateResults();
+        SetMetadataLoaded(false);
         IsLoading = false;
         IsSelectionResolved = true;
         Error = null;
@@ -489,6 +509,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(SearchableFields));
             this.RaisePropertyChanged(nameof(SuggestedFields));
             RefreshVisibleFields();
+            SetMetadataLoaded(true);
             IsSelectionResolved = true;
             Error = null;
         }
