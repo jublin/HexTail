@@ -39,7 +39,7 @@ public sealed class SettingsSectionTests
     }
 
     [Fact]
-    public async Task SetUpElasticOpensTheElasticSection()
+    public async Task SetUpElasticOpensTheSetupFlow()
     {
         var state = new AppState(
             new LogSourceService(),
@@ -50,8 +50,7 @@ public sealed class SettingsSectionTests
 
         owner.SetUpElasticCommand.Execute().Subscribe();
 
-        Assert.True(owner.SettingsOpen);
-        Assert.Equal(1, owner.Settings.SectionIndex);
-        Assert.Equal("elastic", owner.Settings.Section);
+        Assert.True(owner.ElasticSetup.IsOpen);
+        Assert.False(owner.SettingsOpen);
     }
 }

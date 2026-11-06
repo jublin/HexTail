@@ -35,7 +35,10 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     {
         _owner = owner;
         Id = id;
-        AddViewCommand = ReactiveCommand.Create(AddView);
+        AddViewCommand = ReactiveCommand.Create(() =>
+        {
+            AddNewView();
+        });
         RemoveViewCommand = ReactiveCommand.Create<ElasticViewEditorViewModel>(RemoveView);
         TestConnectionCommand = ReactiveCommand.CreateFromTask(TestConnectionAsync);
         SaveCommand = ReactiveCommand.CreateFromTask(
@@ -300,11 +303,15 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             Secret
         );
 
-    private void AddView()
+    /// <summary>Adds an empty view editor; the setup flow passes a blank name and fills it in later.</summary>
+    internal ElasticViewEditorViewModel AddNewView(string name = "New view")
     {
-        Views.Add(
-            new ElasticViewEditorViewModel(this, Guid.NewGuid().ToString("N")) { Name = "New view" }
-        );
+        var view = new ElasticViewEditorViewModel(this, Guid.NewGuid().ToString("N"))
+        {
+            Name = name,
+        };
+        Views.Add(view);
+        return view;
     }
 
     private void RemoveView(ElasticViewEditorViewModel view) => Views.Remove(view);

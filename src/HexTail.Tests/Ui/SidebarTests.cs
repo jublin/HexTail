@@ -271,8 +271,7 @@ public sealed class SidebarTests
         Assert.True(sidebar.FindControl<TextBlock>("ElasticEmptyHint")!.IsVisible);
         var setup = sidebar.FindControl<Button>("SidebarElasticSetupButton")!;
         setup.Command!.Execute(null);
-        Assert.True(viewModel.SettingsOpen);
-        Assert.Equal(1, viewModel.Settings.SectionIndex);
+        Assert.True(viewModel.ElasticSetup.IsOpen);
         window.Close();
     }
 

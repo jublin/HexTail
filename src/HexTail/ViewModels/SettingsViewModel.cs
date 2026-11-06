@@ -34,7 +34,13 @@ internal sealed class SettingsViewModel : ReactiveObject
     internal SettingsViewModel(MainWindowViewModel owner, IScheduler scheduler)
     {
         _owner = owner;
-        AddElasticConnectionCommand = ReactiveCommand.Create(AddElasticConnection, scheduler);
+        AddElasticConnectionCommand = ReactiveCommand.Create(
+            () =>
+            {
+                AddElasticConnection();
+            },
+            scheduler
+        );
         RemoveElasticConnectionCommand =
             ReactiveCommand.CreateFromTask<ElasticConnectionEditorViewModel>(
                 RemoveElasticConnectionAsync,
@@ -585,11 +591,24 @@ internal sealed class SettingsViewModel : ReactiveObject
             secret
         );
 
-    private void AddElasticConnection()
+    internal ElasticConnectionEditorViewModel AddElasticConnection()
     {
         var editor = new ElasticConnectionEditorViewModel(this, Guid.NewGuid().ToString("N"));
         ElasticConnections.Add(editor);
         SelectedElasticConnection = editor;
+        return editor;
+    }
+
+    internal ElasticConnectionEditorViewModel? EditorFor(string connectionId) =>
+        ElasticConnections.FirstOrDefault(editor => editor.Id == connectionId);
+
+    /// <summary>Drops an editor that was never saved (the setup flow was closed before its first save).</summary>
+    internal void DiscardUnsavedElasticConnection(ElasticConnectionEditorViewModel editor)
+    {
+        if (editor.IsSaved || !ElasticConnections.Remove(editor))
+            return;
+        if (ReferenceEquals(SelectedElasticConnection, editor))
+            SelectedElasticConnection = ElasticConnections.FirstOrDefault();
     }
 
     private Task RemoveElasticConnectionAsync(ElasticConnectionEditorViewModel editor)
