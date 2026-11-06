@@ -10,7 +10,7 @@ namespace HexTail.ViewModels;
 internal sealed class FilterBarViewModel : ReactiveObject
 {
     private readonly MainWindowViewModel _owner;
-    private IReadOnlyList<ChipKey> _lastKeys = [];
+    private List<(ChipKey Key, RuleChipViewModel Chip)> _entries = [];
     private string _query = string.Empty;
     private MatchMode _matchMode = MatchMode.Literal;
     private bool _caseSensitive;
@@ -90,16 +90,45 @@ internal sealed class FilterBarViewModel : ReactiveObject
                     .Select(search => new ChipKey(null, search))
             );
         }
-        if (keys.SequenceEqual(_lastKeys))
+        if (keys.SequenceEqual(_entries.Select(entry => entry.Key)))
             return;
-        _lastKeys = keys;
-        Chips.Clear();
+
+        // Reuse the chip of every key that survives, so an open editor (and its focus) is not
+        // torn down by an unrelated change. Duplicate keys are consumed one chip at a time.
+        var available = _entries.ToList();
+        var next = new List<(ChipKey Key, RuleChipViewModel Chip)>(keys.Count);
         foreach (var key in keys)
-            Chips.Add(
-                key.Search is { } search
-                    ? new RuleChipViewModel(this, search)
-                    : new RuleChipViewModel(this, key.Rule!)
-            );
+        {
+            var index = available.FindIndex(entry => entry.Key == key);
+            if (index >= 0)
+            {
+                next.Add(available[index]);
+                available.RemoveAt(index);
+            }
+            else
+                next.Add(
+                    (
+                        key,
+                        key.Search is { } search
+                            ? new RuleChipViewModel(this, search)
+                            : new RuleChipViewModel(this, key.Rule!)
+                    )
+                );
+        }
+        foreach (var gone in available)
+            Chips.Remove(gone.Chip);
+        for (var i = 0; i < next.Count; i++)
+        {
+            var chip = next[i].Chip;
+            if (i < Chips.Count && ReferenceEquals(Chips[i], chip))
+                continue;
+            var current = Chips.IndexOf(chip);
+            if (current >= 0)
+                Chips.Move(current, i);
+            else
+                Chips.Insert(i, chip);
+        }
+        _entries = next;
         this.RaisePropertyChanged(nameof(HasChips));
     }
 
@@ -161,14 +190,14 @@ internal sealed class FilterBarViewModel : ReactiveObject
     }
 
     internal Task ToggleAsync(RuleChipViewModel chip) =>
-        chip.Rule is { } rule && chip.PinnedSearch is null
+        chip.IsRuleChip
             ? _owner
                 .State.ReplaceRuleAsync(
                     _owner.SelectedFile?.Model,
-                    rule,
-                    rule with
+                    chip.Rule,
+                    chip.Rule with
                     {
-                        Enabled = !rule.Enabled,
+                        Enabled = !chip.Rule.Enabled,
                     }
                 )
                 .AsTask()
@@ -181,14 +210,36 @@ internal sealed class FilterBarViewModel : ReactiveObject
             return file is null
                 ? Task.CompletedTask
                 : _owner.State.RemoveSearchAsync(file, search).AsTask();
-        return chip.Rule is { } rule
-            ? _owner.State.RemoveRuleAsync(file, rule).AsTask()
-            : Task.CompletedTask;
+        return _owner.State.RemoveRuleAsync(file, chip.Rule).AsTask();
+    }
+
+    internal async Task ApplyAsync(RuleChipViewModel chip)
+    {
+        if (!chip.IsRuleChip || chip.Draft is not { CanSave: true } draft)
+            return;
+        try
+        {
+            await _owner.State.ReplaceRuleAsync(
+                _owner.SelectedFile?.Model,
+                chip.Rule,
+                draft.ToRule()
+            );
+            chip.IsEditorOpen = false;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Error = ex.Message;
+        }
     }
 
     internal void Activate(RuleChipViewModel chip)
     {
-        if (chip.PinnedSearch is null || _owner.SelectedFile is not { } file)
+        if (chip.IsRuleChip)
+        {
+            chip.OpenEditor();
+            return;
+        }
+        if (_owner.SelectedFile is not { } file)
             return;
         var index = file
             .Views.ToList()

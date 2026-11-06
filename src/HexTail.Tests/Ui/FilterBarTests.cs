@@ -1,11 +1,15 @@
 using System.Reactive.Linq;
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using HexTail.Domain;
 using HexTail.Tests.Support;
+using HexTail.ViewModels;
 using HexTail.Views;
 
 namespace HexTail.Tests.Ui;
@@ -48,4 +52,136 @@ public sealed class FilterBarTests
             File.Delete(path);
         }
     }
+
+    private static async Task<(
+        MainWindow Window,
+        MainWindowViewModel Owner,
+        string Path
+    )> OpenWithRuleAsync()
+    {
+        var path = System.IO.Path.GetTempFileName();
+        var window = TestWindow.Create(out var owner);
+        window.Show();
+        await owner.InitializeAsync();
+        await owner.OpenPathsCommand.Execute([path]);
+        await owner.State.SetSourceRulesAsync(
+            owner.SelectedFile!.Model,
+            [TestRules.Source("boom")]
+        );
+        owner.FilterBar.Sync();
+        await UiWait.Until(() => FindChipBody(window) is not null);
+        return (window, owner, path);
+    }
+
+    private static Button? FindChipBody(Window window) =>
+        window
+            .GetVisualDescendants()
+            .OfType<Button>()
+            .FirstOrDefault(button => button.Classes.Contains("chip-body"));
+
+    private static void Click(MainWindow window, Control control)
+    {
+        var point = control
+            .TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)!
+            .Value;
+        window.MouseDown(point, MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(point, MouseButton.Left, RawInputModifiers.None);
+    }
+
+    [AvaloniaFact]
+    public async Task ClickingARuleChipOpensTheEditorFlyoutWithItsFields()
+    {
+        var (window, owner, path) = await OpenWithRuleAsync();
+        try
+        {
+            Click(window, FindChipBody(window)!);
+            Dispatcher.UIThread.RunJobs();
+            var chip = owner.FilterBar.Chips.Single();
+            Assert.True(chip.IsEditorOpen);
+            var box = await FindFlyoutControlAsync<TextBox>(window, "DraftPatternBox");
+            Assert.Equal("boom", box.Text);
+            Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(box)));
+            await FindFlyoutControlAsync<ComboBox>(window, "DraftActionPicker");
+            await FindFlyoutControlAsync<ToggleSwitch>(window, "DraftScopeSwitch");
+            var swatches = await FindFlyoutControlAsync<ItemsControl>(window, "DraftSwatches");
+            var buttons = swatches.GetVisualDescendants().OfType<Button>().ToList();
+            Assert.Equal(MainWindowViewModel.Swatches.Count, buttons.Count);
+            Assert.All(
+                buttons,
+                button =>
+                    Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(button.Background)
+            );
+            Assert.All(
+                buttons,
+                button =>
+                    Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)))
+            );
+            buttons[2].Command!.Execute(buttons[2].CommandParameter);
+            Assert.Equal(MainWindowViewModel.Swatches[2], chip.Draft!.Color);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task EnterInTheDraftBoxAppliesAndEscapeCancels()
+    {
+        var (window, owner, path) = await OpenWithRuleAsync();
+        try
+        {
+            var file = owner.SelectedFile!.Model;
+            Click(window, FindChipBody(window)!);
+            Dispatcher.UIThread.RunJobs();
+            var box = await FindFlyoutControlAsync<TextBox>(window, "DraftPatternBox");
+            box.Text = "changed";
+            box.Focus();
+            window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+            await UiWait.Until(() => !owner.FilterBar.Chips.Single().IsEditorOpen);
+            Assert.Equal("boom", file.Rules.Single().Pattern);
+
+            Click(window, FindChipBody(window)!);
+            Dispatcher.UIThread.RunJobs();
+            box = await FindFlyoutControlAsync<TextBox>(window, "DraftPatternBox");
+            Assert.Equal("boom", box.Text);
+            box.Text = "changed";
+            box.Focus();
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            await UiWait.Until(() => file.Rules.Single().Pattern == "changed");
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    private static async Task<T> FindFlyoutControlAsync<T>(Window window, string name)
+        where T : Control
+    {
+        T? found = null;
+        await UiWait.Until(() =>
+        {
+            Dispatcher.UIThread.RunJobs();
+            found = FlyoutRoots(window)
+                .SelectMany(root => root.GetVisualDescendants().Prepend(root))
+                .OfType<T>()
+                .FirstOrDefault(control => control.Name == name);
+            return found is not null;
+        });
+        return found!;
+    }
+
+    private static IEnumerable<Visual> FlyoutRoots(Window window) =>
+        new Visual[] { window }.Concat(
+            window
+                .GetVisualDescendants()
+                .OfType<Avalonia.Controls.Primitives.Popup>()
+                .Select(popup => popup.Child)
+                .OfType<Visual>()
+        );
 }

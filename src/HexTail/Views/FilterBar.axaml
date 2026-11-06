@@ -104,10 +104,126 @@
               <ic:Icon Value="mdi-filter-outline" IsVisible="{Binding IsShowOnly}" />
               <ic:Icon Value="mdi-bookmark-outline" IsVisible="{Binding IsPinnedTab}" />
               <Button
+                Name="ChipBody"
                 Classes="chip-body"
                 Command="{Binding ActivateCommand}"
-                AutomationProperties.Name="{Binding Text, StringFormat='Edit {0}'}"
+                AutomationProperties.Name="{Binding BodyAutomationName}"
               >
+                <FlyoutBase.AttachedFlyout>
+                  <Flyout Placement="BottomEdgeAlignedLeft">
+                    <StackPanel Width="280" Spacing="6" AutomationProperties.Name="Edit rule">
+                      <TextBox
+                        Name="DraftPatternBox"
+                        Text="{Binding Draft.Pattern, Mode=TwoWay}"
+                        PlaceholderText="Pattern"
+                        AutomationProperties.Name="Rule pattern"
+                      >
+                        <TextBox.KeyBindings>
+                          <KeyBinding Gesture="Enter" Command="{Binding ApplyCommand}" />
+                          <KeyBinding Gesture="Escape" Command="{Binding CancelCommand}" />
+                        </TextBox.KeyBindings>
+                      </TextBox>
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ComboBox
+                          Name="DraftModePicker"
+                          Width="94"
+                          ItemsSource="{Binding Draft.MatchModes}"
+                          SelectedItem="{Binding Draft.MatchMode, Mode=TwoWay}"
+                          AutomationProperties.Name="Rule match mode"
+                        />
+                        <ToggleButton
+                          Name="DraftCaseToggle"
+                          Content="Aa"
+                          IsChecked="{Binding Draft.CaseSensitive, Mode=TwoWay}"
+                          ToolTip.Tip="Match case"
+                          AutomationProperties.Name="Rule match case"
+                        />
+                        <ComboBox
+                          Name="DraftActionPicker"
+                          Width="120"
+                          ItemsSource="{Binding Draft.Actions}"
+                          SelectedItem="{Binding Draft.Action, Mode=TwoWay}"
+                          AutomationProperties.Name="Rule action"
+                        />
+                      </StackPanel>
+                      <ToggleSwitch
+                        Name="DraftScopeSwitch"
+                        Content="All sources"
+                        IsChecked="{Binding Draft.AllSources, Mode=TwoWay}"
+                        AutomationProperties.Name="Rule applies to all sources"
+                      />
+                      <CheckBox
+                        Name="DraftPinCheck"
+                        Content="Show as a tab in every file"
+                        IsVisible="{Binding Draft.CanPin}"
+                        IsChecked="{Binding Draft.PinnedAsTab, Mode=TwoWay}"
+                        AutomationProperties.Name="Show rule as a tab in every file"
+                      />
+                      <StackPanel
+                        Orientation="Horizontal"
+                        Spacing="4"
+                        IsVisible="{Binding Draft.HasColor}"
+                      >
+                        <ItemsControl Name="DraftSwatches" ItemsSource="{Binding Draft.Swatches}">
+                          <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                              <StackPanel Orientation="Horizontal" Spacing="4" />
+                            </ItemsPanelTemplate>
+                          </ItemsControl.ItemsPanel>
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                              <Button
+                                Classes="swatch"
+                                Background="{Binding}"
+                                Command="{Binding $parent[ItemsControl].DataContext.Draft.PickSwatchCommand}"
+                                CommandParameter="{Binding}"
+                                AutomationProperties.Name="{Binding StringFormat='Use color {0}'}"
+                              />
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <ColorPicker
+                          Name="DraftColorPicker"
+                          Color="{Binding Draft.PickerColor, Mode=TwoWay}"
+                          IsAlphaEnabled="False"
+                          Width="48"
+                          ToolTip.Tip="Custom color"
+                          AutomationProperties.Name="Custom rule color"
+                        />
+                      </StackPanel>
+                      <TextBlock
+                        Name="DraftError"
+                        Classes="error"
+                        Text="{Binding Draft.Error}"
+                        IsVisible="{Binding Draft.HasError}"
+                        TextWrapping="Wrap"
+                      />
+                      <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                        <Button
+                          Name="DraftRemoveButton"
+                          Classes="destructive"
+                          Content="Remove"
+                          Command="{Binding RemoveCommand}"
+                          AutomationProperties.Name="Remove rule"
+                        />
+                        <Button
+                          Name="DraftCancelButton"
+                          Content="Cancel"
+                          Command="{Binding CancelCommand}"
+                          AutomationProperties.Name="Cancel rule edit"
+                        />
+                        <Button
+                          Name="DraftApplyButton"
+                          Classes="primary"
+                          Content="Apply"
+                          IsEnabled="{Binding Draft.CanSave}"
+                          Command="{Binding ApplyCommand}"
+                          AutomationProperties.Name="Apply rule edit"
+                        />
+                      </StackPanel>
+                    </StackPanel>
+                  </Flyout>
+                </FlyoutBase.AttachedFlyout>
                 <TextBlock Classes="chip-text" Text="{Binding Text}" />
               </Button>
               <Button
