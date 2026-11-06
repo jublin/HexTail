@@ -20,7 +20,11 @@ public sealed class AccessibilityTests
     public async Task SettingsFocusEntersCyclesAndReturnsToItsOpener()
     {
         await using var owner = new MainWindowViewModel(
-            new AppState(new LogSourceService(), new TestPersistence()),
+            new AppState(
+                new LogSourceService(),
+                new TestPersistence(),
+                credentials: new InMemoryCredentialVault()
+            ),
             startPolling: false
         );
         await owner.InitializeAsync();
@@ -67,7 +71,11 @@ public sealed class AccessibilityTests
     {
         var path = Path.GetTempFileName();
         await using var owner = new MainWindowViewModel(
-            new AppState(new LogSourceService(), new TestPersistence()),
+            new AppState(
+                new LogSourceService(),
+                new TestPersistence(),
+                credentials: new InMemoryCredentialVault()
+            ),
             startPolling: false
         );
         await owner.InitializeAsync();

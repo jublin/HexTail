@@ -65,7 +65,8 @@ public sealed class SettingsReflowTests
             new LogSourceService(),
             persistence,
             settings,
-            elastic: new FakeElasticApiClient()
+            elastic: new FakeElasticApiClient(),
+            credentials: new InMemoryCredentialVault()
         );
         await using var owner = new MainWindowViewModel(state, startPolling: false);
         await owner.InitializeAsync();

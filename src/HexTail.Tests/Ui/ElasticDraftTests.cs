@@ -26,7 +26,8 @@ public sealed class ElasticDraftTests
             new LogSourceService(),
             persistence,
             Settings(),
-            elastic: new FakeElasticApiClient()
+            elastic: new FakeElasticApiClient(),
+            credentials: new InMemoryCredentialVault()
         );
         await using var owner = new MainWindowViewModel(state, startPolling: false);
         await owner.InitializeAsync();
@@ -67,7 +68,8 @@ public sealed class ElasticDraftTests
             new LogSourceService(),
             persistence,
             Settings(),
-            elastic: new FakeElasticApiClient()
+            elastic: new FakeElasticApiClient(),
+            credentials: new InMemoryCredentialVault()
         );
         await using var owner = new MainWindowViewModel(state, startPolling: false);
         await owner.InitializeAsync();
@@ -139,7 +141,8 @@ public sealed class ElasticDraftTests
             new LogSourceService(),
             persistence,
             Settings(),
-            elastic: new FakeElasticApiClient()
+            elastic: new FakeElasticApiClient(),
+            credentials: new InMemoryCredentialVault()
         );
         await using var owner = new MainWindowViewModel(state, startPolling: false);
         await owner.InitializeAsync();
@@ -186,7 +189,8 @@ public sealed class ElasticDraftTests
             new LogSourceService(),
             persistence,
             Settings(),
-            elastic: new FakeElasticApiClient()
+            elastic: new FakeElasticApiClient(),
+            credentials: new InMemoryCredentialVault()
         );
         await using var owner = new MainWindowViewModel(state, startPolling: false);
         await owner.InitializeAsync();

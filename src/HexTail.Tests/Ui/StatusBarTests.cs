@@ -273,7 +273,8 @@ public sealed class StatusBarTests
             new LogSourceService(),
             new TestPersistence(),
             new AppSettings { ElasticConnections = [connection] },
-            elastic: new FakeElasticApiClient()
+            elastic: new FakeElasticApiClient(),
+            credentials: new InMemoryCredentialVault()
         );
         var viewModel = new MainWindowViewModel(
             state,

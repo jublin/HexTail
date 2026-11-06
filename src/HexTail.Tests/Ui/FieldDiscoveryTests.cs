@@ -55,7 +55,12 @@ public sealed class FieldDiscoveryTests
                     )
                 ),
         };
-        var state = new AppState(new LogSourceService(), new TestPersistence(), elastic: client);
+        var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
+        );
         await using var owner = new MainWindowViewModel(
             state,
             scheduler: ImmediateScheduler.Instance,

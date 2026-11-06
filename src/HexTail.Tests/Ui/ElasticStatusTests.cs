@@ -21,7 +21,12 @@ public sealed class ElasticStatusTests
         var response = new TaskCompletionSource<IReadOnlyList<ElasticDataViewSummary>>();
         var client = new FakeElasticApiClient { DataViewsHandler = () => response.Task };
         await using var owner = new MainWindowViewModel(
-            new AppState(new LogSourceService(), new TestPersistence(), elastic: client),
+            new AppState(
+                new LogSourceService(),
+                new TestPersistence(),
+                elastic: client,
+                credentials: new InMemoryCredentialVault()
+            ),
             startPolling: false
         );
         owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
@@ -50,7 +55,8 @@ public sealed class ElasticStatusTests
             elastic: new FakeElasticApiClient
             {
                 ElasticsearchError = new InvalidOperationException("Endpoint offline"),
-            }
+            },
+            credentials: new InMemoryCredentialVault()
         );
         await using var owner = new MainWindowViewModel(
             state,
@@ -118,7 +124,11 @@ public sealed class ElasticStatusTests
     public async Task SourceRowToolTip_IncludesTheLoadStatus()
     {
         await using var owner = new MainWindowViewModel(
-            new AppState(new LogSourceService(), new TestPersistence()),
+            new AppState(
+                new LogSourceService(),
+                new TestPersistence(),
+                credentials: new InMemoryCredentialVault()
+            ),
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );

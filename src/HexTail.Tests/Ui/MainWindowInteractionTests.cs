@@ -79,7 +79,8 @@ public sealed class MainWindowInteractionTests
             new LogSourceService(),
             new TestPersistence(),
             new AppSettings { ElasticConnections = [connection] },
-            elastic: new FakeElasticApiClient()
+            elastic: new FakeElasticApiClient(),
+            credentials: new InMemoryCredentialVault()
         );
         var viewModel = new MainWindowViewModel(
             state,
@@ -435,7 +436,11 @@ public sealed class MainWindowInteractionTests
             },
         };
         var viewModel = new MainWindowViewModel(
-            new AppState(new LogSourceService(), persistence),
+            new AppState(
+                new LogSourceService(),
+                persistence,
+                credentials: new InMemoryCredentialVault()
+            ),
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
@@ -940,7 +945,11 @@ public sealed class MainWindowInteractionTests
     public async Task OpenShortcutAcceptsControlOrMeta()
     {
         var viewModel = new MainWindowViewModel(
-            new AppState(new LogSourceService(), new TestPersistence()),
+            new AppState(
+                new LogSourceService(),
+                new TestPersistence(),
+                credentials: new InMemoryCredentialVault()
+            ),
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
@@ -1034,7 +1043,11 @@ public sealed class MainWindowInteractionTests
             },
         };
         var viewModel = new MainWindowViewModel(
-            new AppState(new LogSourceService(), persistence),
+            new AppState(
+                new LogSourceService(),
+                persistence,
+                credentials: new InMemoryCredentialVault()
+            ),
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );

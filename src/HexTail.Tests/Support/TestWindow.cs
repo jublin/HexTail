@@ -35,7 +35,11 @@ internal static class TestWindow
     )
     {
         viewModel = new MainWindowViewModel(
-            new AppState(new LogSourceService(options), persistence),
+            new AppState(
+                new LogSourceService(options),
+                persistence,
+                credentials: new InMemoryCredentialVault()
+            ),
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );

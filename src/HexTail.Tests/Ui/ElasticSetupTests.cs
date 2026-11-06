@@ -44,7 +44,13 @@ public sealed class ElasticSetupTests
         var settings = new AppSettings { ElasticConnections = [connection] };
         var persistence = new TestPersistence();
         await persistence.SaveAsync(new AppConfig { Settings = settings });
-        var state = new AppState(new LogSourceService(), persistence, settings, elastic: client);
+        var state = new AppState(
+            new LogSourceService(),
+            persistence,
+            settings,
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
+        );
         await using var owner = new MainWindowViewModel(state, startPolling: false);
         await owner.InitializeAsync();
         owner.Settings.SectionIndex = 2;

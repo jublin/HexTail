@@ -38,7 +38,8 @@ public sealed class AppStateTests
             new LogSourceService(),
             persistence,
             new AppSettings { ElasticConnections = [connection] },
-            elastic: client
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
         );
         try
         {
@@ -83,7 +84,8 @@ public sealed class AppStateTests
             elastic: new FakeElasticApiClient
             {
                 SearchHandler = _ => Task.FromResult(new ElasticSearchPage("pit", [])),
-            }
+            },
+            credentials: new InMemoryCredentialVault()
         );
         var api = await state.OpenElasticSourceAsync(
             "api",
@@ -143,7 +145,8 @@ public sealed class AppStateTests
                 NewTailers(),
                 persistence,
                 new AppSettings { ElasticConnections = [connection] },
-                elastic: new FakeElasticApiClient()
+                elastic: new FakeElasticApiClient(),
+                credentials: new InMemoryCredentialVault()
             )
         )
         {
@@ -165,7 +168,12 @@ public sealed class AppStateTests
                 return Task.FromResult(new ElasticSearchPage("pit", []));
             },
         };
-        await using var restored = new AppState(NewTailers(), persistence, elastic: client);
+        await using var restored = new AppState(
+            NewTailers(),
+            persistence,
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
+        );
         var beforeRestore = DateTimeOffset.UtcNow;
         await restored.RestoreAsync(TestContext.Current.CancellationToken);
         var first = await requested.Task.WaitAsync(
@@ -213,7 +221,8 @@ public sealed class AppStateTests
             NewTailers(),
             new MemoryPersistence(),
             new AppSettings { ElasticConnections = [connection] },
-            elastic: client
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
         );
         var tab = await state.OpenElasticSourceAsync(
             "source-1",
@@ -300,7 +309,8 @@ public sealed class AppStateTests
             service,
             new MemoryPersistence(),
             new AppSettings { ElasticConnections = [connection] },
-            elastic: client
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
         );
         var old = await state.OpenElasticSourceAsync(
             "source-1",
@@ -354,7 +364,8 @@ public sealed class AppStateTests
             NewTailers(),
             persistence,
             new AppSettings { ElasticConnections = [connection] },
-            elastic: client
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
         );
         var tab = await state.OpenElasticSourceAsync("source-1", save: false);
         const string from = "2026-08-20T10:00:00Z";
@@ -520,7 +531,11 @@ public sealed class AppStateTests
                 UseFileSystemWatcher = false,
             }
         );
-        await using var state = new AppState(tailers, persistence);
+        await using var state = new AppState(
+            tailers,
+            persistence,
+            credentials: new InMemoryCredentialVault()
+        );
 
         var tab = await state.OpenFileAsync(path);
         await DrainUntilAsync(state, () => tab.Buffer.Count == 1);
@@ -545,7 +560,13 @@ public sealed class AppStateTests
         var path = CreateTempFile("error\n");
         var persistence = new MemoryPersistence();
         await using (var tailers = NewTailers())
-        await using (var state = new AppState(tailers, persistence))
+        await using (
+            var state = new AppState(
+                tailers,
+                persistence,
+                credentials: new InMemoryCredentialVault()
+            )
+        )
         {
             var tab = await state.OpenFileAsync(path);
             await DrainUntilAsync(state, () => tab.Buffer.Count == 1);
@@ -558,7 +579,11 @@ public sealed class AppStateTests
         }
 
         await using var restoredTailers = NewTailers();
-        await using var restored = new AppState(restoredTailers, persistence);
+        await using var restored = new AppState(
+            restoredTailers,
+            persistence,
+            credentials: new InMemoryCredentialVault()
+        );
         await restored.RestoreAsync();
 
         var restoredTab = Assert.Single(restored.Files);
@@ -589,7 +614,11 @@ public sealed class AppStateTests
     public async Task UpdateSettings_PersistsNormalizedGlobalRules()
     {
         var persistence = new MemoryPersistence();
-        await using var state = new AppState(NewTailers(), persistence);
+        await using var state = new AppState(
+            NewTailers(),
+            persistence,
+            credentials: new InMemoryCredentialVault()
+        );
 
         await state.UpdateSettingsAsync(
             new AppSettings
@@ -618,7 +647,11 @@ public sealed class AppStateTests
     public async Task UpdateSettings_ShowsGlobalLabelsAsSearchTabsInOpenViews()
     {
         var path = CreateTempFile("error\n");
-        await using var state = new AppState(NewTailers(), new MemoryPersistence());
+        await using var state = new AppState(
+            NewTailers(),
+            new MemoryPersistence(),
+            credentials: new InMemoryCredentialVault()
+        );
         try
         {
             var tab = await state.OpenFileAsync(path, save: false);
@@ -672,7 +705,11 @@ public sealed class AppStateTests
     [Fact]
     public async Task DrainTailerEvents_WithoutEventsDoesNotNotify()
     {
-        await using var state = new AppState(NewTailers(), new MemoryPersistence());
+        await using var state = new AppState(
+            NewTailers(),
+            new MemoryPersistence(),
+            credentials: new InMemoryCredentialVault()
+        );
         var notifications = 0;
         state.Changed += () => notifications++;
 
@@ -685,7 +722,11 @@ public sealed class AppStateTests
     {
         var path = CreateTempFile(string.Empty);
         await using var tailers = NewTailers();
-        await using var state = new AppState(tailers, new MemoryPersistence());
+        await using var state = new AppState(
+            tailers,
+            new MemoryPersistence(),
+            credentials: new InMemoryCredentialVault()
+        );
         var tab = await state.OpenFileAsync(path, save: false);
         var bufferChanges = 0;
         tab.Buffer.Changed += _ => bufferChanges++;
@@ -708,7 +749,11 @@ public sealed class AppStateTests
         try
         {
             await using var tailers = NewTailers();
-            await using var state = new AppState(tailers, new MemoryPersistence());
+            await using var state = new AppState(
+                tailers,
+                new MemoryPersistence(),
+                credentials: new InMemoryCredentialVault()
+            );
             var tab = await state.OpenFileAsync(path, save: false);
             var lines = Enumerable.Range(0, 20_000).Select(i => new Line(i.ToString())).ToArray();
             Assert.True(tailers.Publish(new SourceLines(tab.Id, lines)));
@@ -730,7 +775,11 @@ public sealed class AppStateTests
     public async Task Files_ReturnsSnapshotWhileWorkspaceChanges()
     {
         var path = CreateTempFile(string.Empty);
-        await using var state = new AppState(NewTailers(), new MemoryPersistence());
+        await using var state = new AppState(
+            NewTailers(),
+            new MemoryPersistence(),
+            credentials: new InMemoryCredentialVault()
+        );
 
         var beforeOpen = state.Files;
         await state.OpenFileAsync(path, save: false);
@@ -773,7 +822,12 @@ public sealed class AppStateTests
             SearchHandler = _ => Task.FromResult(new HexTail.Elastic.ElasticSearchPage("pit", [])),
         };
         await using var tailers = NewTailers();
-        await using var state = new AppState(tailers, new MemoryPersistence(), elastic: client);
+        await using var state = new AppState(
+            tailers,
+            new MemoryPersistence(),
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
+        );
         var connection = ElasticConnection("ops") with
         {
             Views =

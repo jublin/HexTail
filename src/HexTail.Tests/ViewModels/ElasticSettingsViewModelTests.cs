@@ -26,7 +26,12 @@ public sealed class ElasticSettingsViewModelTests
         {
             DataViewHandler = id => id == "first" ? first.Task : latest.Task,
         };
-        var state = new AppState(new LogSourceService(), new TestPersistence(), elastic: client);
+        var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
+        );
         await using var owner = new MainWindowViewModel(
             state,
             scheduler: ImmediateScheduler.Instance,
@@ -84,7 +89,12 @@ public sealed class ElasticSettingsViewModelTests
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
         var pending = new TaskCompletionSource<ElasticDataView>();
         var client = new FakeElasticApiClient { DataViewHandler = _ => pending.Task };
-        var state = new AppState(new LogSourceService(), new TestPersistence(), elastic: client);
+        var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
+        );
         await using var owner = new MainWindowViewModel(
             state,
             scheduler: ImmediateScheduler.Instance,
@@ -122,7 +132,11 @@ public sealed class ElasticSettingsViewModelTests
     public async Task EditingView_PreservesEverySourceAndNamespace(string? namespaceField)
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
-        var state = new AppState(new LogSourceService(), new TestPersistence());
+        var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            credentials: new InMemoryCredentialVault()
+        );
         await using var owner = new MainWindowViewModel(
             state,
             scheduler: ImmediateScheduler.Instance,
@@ -174,7 +188,11 @@ public sealed class ElasticSettingsViewModelTests
     public async Task SaveCommand_RequiresCompleteViewMappings()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
-        var state = new AppState(new LogSourceService(), new TestPersistence());
+        var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            credentials: new InMemoryCredentialVault()
+        );
         await using var owner = new MainWindowViewModel(
             state,
             scheduler: ImmediateScheduler.Instance,
@@ -223,7 +241,11 @@ public sealed class ElasticSettingsViewModelTests
     public async Task ChangingAuthModeNotifiesCredentialVisibility()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
-        var state = new AppState(new LogSourceService(), new TestPersistence());
+        var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            credentials: new InMemoryCredentialVault()
+        );
         await using var owner = new MainWindowViewModel(
             state,
             scheduler: ImmediateScheduler.Instance,
@@ -245,7 +267,12 @@ public sealed class ElasticSettingsViewModelTests
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
         var client = new FakeElasticApiClient { DataViews = [new("view-1", "logs-*")] };
-        var state = new AppState(new LogSourceService(), new TestPersistence(), elastic: client);
+        var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
+        );
         await using var owner = new MainWindowViewModel(
             state,
             scheduler: ImmediateScheduler.Instance,
@@ -271,7 +298,12 @@ public sealed class ElasticSettingsViewModelTests
             DataViews = [new("view-1", "logs-*")],
             ElasticsearchError = new UriFormatException("Invalid Elasticsearch URL."),
         };
-        var state = new AppState(new LogSourceService(), new TestPersistence(), elastic: client);
+        var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
+        );
         await using var owner = new MainWindowViewModel(
             state,
             scheduler: ImmediateScheduler.Instance,
@@ -451,7 +483,11 @@ public sealed class ElasticSettingsViewModelTests
     public async Task FieldSearch_UsesLatestQuery()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
-        var state = new AppState(new LogSourceService(), new TestPersistence());
+        var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            credentials: new InMemoryCredentialVault()
+        );
         await using var owner = new MainWindowViewModel(
             state,
             scheduler: ImmediateScheduler.Instance,
@@ -485,7 +521,11 @@ public sealed class ElasticSettingsViewModelTests
     public async Task StateSync_DoesNotClearUnsavedElasticEditorValues()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
-        var state = new AppState(new LogSourceService(), new TestPersistence());
+        var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            credentials: new InMemoryCredentialVault()
+        );
         await using var owner = new MainWindowViewModel(
             state,
             scheduler: ImmediateScheduler.Instance,
@@ -530,7 +570,11 @@ public sealed class ElasticSettingsViewModelTests
     public async Task StateSync_PreservesUnsavedElasticConnectionDraft()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
-        var state = new AppState(new LogSourceService(), new TestPersistence());
+        var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            credentials: new InMemoryCredentialVault()
+        );
         await using var owner = new MainWindowViewModel(
             state,
             scheduler: ImmediateScheduler.Instance,
@@ -596,7 +640,11 @@ public sealed class ElasticSettingsViewModelTests
     public async Task Settings_ExposesElasticSectionAndManualSourceEditors()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
-        var state = new AppState(new LogSourceService(), new TestPersistence());
+        var state = new AppState(
+            new LogSourceService(),
+            new TestPersistence(),
+            credentials: new InMemoryCredentialVault()
+        );
         await using var owner = new MainWindowViewModel(
             state,
             scheduler: ImmediateScheduler.Instance,

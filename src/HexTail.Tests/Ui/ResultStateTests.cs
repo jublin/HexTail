@@ -57,7 +57,8 @@ public sealed class ResultStateTests
             new LogSourceService(new TailerOptions { MaxInitialLines = 2 }),
             new TestPersistence(),
             new AppSettings { ElasticConnections = [connection] },
-            elastic: client
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
         );
         await using var workspace = new MainWindowViewModel(
             state,

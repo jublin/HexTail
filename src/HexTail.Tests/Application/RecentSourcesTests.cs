@@ -14,7 +14,13 @@ public sealed class RecentSourcesTests
         var persistence = new TestPersistence();
         try
         {
-            await using (var state = new AppState(new LogSourceService(), persistence))
+            await using (
+                var state = new AppState(
+                    new LogSourceService(),
+                    persistence,
+                    credentials: new InMemoryCredentialVault()
+                )
+            )
             {
                 foreach (var path in paths)
                     await state.OpenFileAsync(
@@ -49,7 +55,8 @@ public sealed class RecentSourcesTests
             };
             await using var state = new AppState(
                 new LogSourceService(),
-                new TestPersistence(saved)
+                new TestPersistence(saved),
+                credentials: new InMemoryCredentialVault()
             );
             await state.RestoreAsync(TestContext.Current.CancellationToken);
             Assert.Equal(paths.Take(10), state.RecentFiles);
@@ -83,7 +90,13 @@ public sealed class RecentSourcesTests
         var persistence = new TestPersistence();
         try
         {
-            await using (var state = new AppState(new LogSourceService(), persistence))
+            await using (
+                var state = new AppState(
+                    new LogSourceService(),
+                    persistence,
+                    credentials: new InMemoryCredentialVault()
+                )
+            )
             {
                 await state.OpenFileAsync(
                     kept,
@@ -104,7 +117,11 @@ public sealed class RecentSourcesTests
             Assert.DoesNotContain(Path.GetFullPath(sample), saved.RecentFiles);
             Assert.Null(saved.SelectedFilePath);
 
-            await using var restored = new AppState(new LogSourceService(), persistence);
+            await using var restored = new AppState(
+                new LogSourceService(),
+                persistence,
+                credentials: new InMemoryCredentialVault()
+            );
             await restored.RestoreAsync(TestContext.Current.CancellationToken);
             var only = Assert.Single(restored.Files);
             Assert.Equal(Path.GetFullPath(kept), only.Path);

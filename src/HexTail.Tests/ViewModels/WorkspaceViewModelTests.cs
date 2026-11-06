@@ -20,7 +20,11 @@ public sealed class WorkspaceViewModelTests
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
         var persistence = new TestPersistence();
-        var state = new AppState(new LogSourceService(), persistence);
+        var state = new AppState(
+            new LogSourceService(),
+            persistence,
+            credentials: new InMemoryCredentialVault()
+        );
         await using var viewModel = new MainWindowViewModel(
             state,
             scheduler: ImmediateScheduler.Instance
@@ -122,7 +126,11 @@ public sealed class WorkspaceViewModelTests
         try
         {
             await using var viewModel = new MainWindowViewModel(
-                new AppState(new LogSourceService(), new TestPersistence()),
+                new AppState(
+                    new LogSourceService(),
+                    new TestPersistence(),
+                    credentials: new InMemoryCredentialVault()
+                ),
                 scheduler: ImmediateScheduler.Instance,
                 startPolling: false
             );
@@ -169,7 +177,11 @@ public sealed class WorkspaceViewModelTests
         try
         {
             await using var viewModel = new MainWindowViewModel(
-                new AppState(new LogSourceService(), new TestPersistence()),
+                new AppState(
+                    new LogSourceService(),
+                    new TestPersistence(),
+                    credentials: new InMemoryCredentialVault()
+                ),
                 scheduler: ImmediateScheduler.Instance,
                 startPolling: false
             );
@@ -217,7 +229,11 @@ public sealed class WorkspaceViewModelTests
         try
         {
             await using var owner = new MainWindowViewModel(
-                new AppState(new LogSourceService(), new TestPersistence()),
+                new AppState(
+                    new LogSourceService(),
+                    new TestPersistence(),
+                    credentials: new InMemoryCredentialVault()
+                ),
                 scheduler: ImmediateScheduler.Instance,
                 startPolling: false
             );
