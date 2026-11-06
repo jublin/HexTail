@@ -6,6 +6,10 @@ namespace HexTail.Application;
 
 public sealed class FileTabState : IAsyncDisposable
 {
+    private IReadOnlyList<ViewRule>? _effectiveGlobal;
+    private IReadOnlyList<ViewRule>? _effectiveSource;
+    private RuleSet _effectiveRules = RuleSet.Empty;
+
     internal FileTabState(
         string id,
         string path,
@@ -92,10 +96,6 @@ public sealed class FileTabState : IAsyncDisposable
         FollowSearches.RemoveAt(index);
         return Buffer.RemoveSearch(search);
     }
-
-    private IReadOnlyList<ViewRule>? _effectiveGlobal;
-    private IReadOnlyList<ViewRule>? _effectiveSource;
-    private RuleSet _effectiveRules = RuleSet.Empty;
 
     /// <summary>Source-scope rules for this open source.</summary>
     public IReadOnlyList<ViewRule> Rules { get; private set; } = [];

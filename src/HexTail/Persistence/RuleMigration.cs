@@ -33,26 +33,27 @@ internal static class RuleMigration
 
         if (root["settings"] is JsonObject settings)
         {
-            var rules = settings["rules"] as JsonArray ?? [];
-            var modes = (settings["globalExcludeModes"] as JsonObject)?.ToDictionary(
-                pair => pair.Key,
-                pair => pair.Value?.GetValue<string>(),
-                StringComparer.OrdinalIgnoreCase
-            );
+            var existing = settings["rules"] as JsonArray;
+            var rules = existing ?? [];
+            var modes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (settings["globalExcludeModes"] is JsonObject modeObject)
+                foreach (var (key, value) in modeObject)
+                    if (TextOf(value) is { } modeText)
+                        modes[key] = modeText;
 
             if (settings["globalLabels"] is JsonArray labels)
                 foreach (var label in labels.OfType<JsonObject>())
                 {
-                    var text = label["text"]?.GetValue<string>();
+                    var text = TextOf(label["text"]);
                     if (string.IsNullOrWhiteSpace(text))
                         continue;
                     rules.Add(
                         Rule(
                             text.Trim(),
-                            label["mode"]?.GetValue<string>(),
-                            label["color"]?.GetValue<string>(),
+                            TextOf(label["mode"]),
+                            TextOf(label["color"]),
                             "Highlight",
-                            label["showInOpenFile"]?.GetValue<bool>() ?? false
+                            FlagOf(label["showInOpenFile"]) ?? true
                         )
                     );
                 }
@@ -60,18 +61,18 @@ internal static class RuleMigration
             if (settings["globalExcludeLabels"] is JsonArray exclusions)
                 foreach (var exclusion in exclusions)
                 {
-                    var text = exclusion?.GetValue<string>();
+                    var text = TextOf(exclusion);
                     if (string.IsNullOrWhiteSpace(text))
                         continue;
-                    string? mode = null;
-                    modes?.TryGetValue(text, out mode);
+                    modes.TryGetValue(text, out var mode);
                     rules.Add(Rule(text.Trim(), mode, null, "Hide", false));
                 }
 
             settings.Remove("globalLabels");
             settings.Remove("globalExcludeLabels");
             settings.Remove("globalExcludeModes");
-            settings["rules"] = rules;
+            if (existing is null)
+                settings["rules"] = rules;
         }
 
         root["version"] = CurrentVersion;
@@ -88,9 +89,7 @@ internal static class RuleMigration
         new()
         {
             ["pattern"] = pattern,
-            ["mode"] = mode is "Literal" or "Regex"
-                ? mode
-                : CompiledQuery.DetectMode(pattern).ToString(),
+            ["mode"] = ParseMode(mode, pattern).ToString(),
             ["caseSensitive"] = false,
             ["color"] = IsHexColor(color) ? color : FallbackColor,
             ["action"] = action,
@@ -98,6 +97,21 @@ internal static class RuleMigration
             ["enabled"] = true,
             ["pinnedAsTab"] = pinned,
         };
+
+    /// <summary>Reads a JSON string; any other JSON type is treated as absent.</summary>
+    private static string? TextOf(JsonNode? node) =>
+        node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+
+    private static bool? FlagOf(JsonNode? node) =>
+        node is JsonValue value && value.TryGetValue<bool>(out var flag) ? flag : null;
+
+    private static MatchMode ParseMode(string? mode, string pattern)
+    {
+        foreach (var name in Enum.GetNames<MatchMode>())
+            if (string.Equals(name, mode?.Trim(), StringComparison.OrdinalIgnoreCase))
+                return Enum.Parse<MatchMode>(name);
+        return CompiledQuery.DetectMode(pattern);
+    }
 
     private static bool IsHexColor(string? color) =>
         color is { Length: 4 or 7 } && color[0] == '#' && color[1..].All(Uri.IsHexDigit);

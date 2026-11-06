@@ -58,7 +58,7 @@ Preset offsets are relative to the load's clock. Live polling appends from the l
 
 Connection and source health describe reachability and authentication: an untested or failed connection is not shown as connected. Open errors appear under the source in the sidebar, and hovering a source shows whether its logs are closed, loading, live, historical, or failed. A reachable server can still have a failed log query or an interval with no logs; read the selected tab's load status and result message as well.
 
-Each view distinguishes loading, query failure, no returned logs, no search matches, and logs hidden by global exclusions. Counts show **visible** rows and rows **loaded from source**, not the server's total matching count.
+Each view distinguishes loading, query failure, no returned logs, no search matches, and logs hidden by filter rules. Counts show **visible** rows and rows **loaded from source**, not the server's total matching count.
 
 The initial fetch is bounded (10,000 newest logs by default). If the initial limit is reached, the view says that the interval may contain more logs. Narrow the interval to inspect earlier history. The application also keeps a bounded log buffer, so a long-running session does not retain every row indefinitely.
 

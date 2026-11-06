@@ -1,5 +1,6 @@
 using HexTail.Application;
 using HexTail.Domain;
+using HexTail.Persistence;
 using HexTail.Tests.Support;
 
 namespace HexTail.Tests.Application;
@@ -36,12 +37,18 @@ public sealed class HighlightSpanCacheTests
     {
         var cache = new HighlightSpanCache();
         var line = new Line("error warn");
-        var rules = RuleSet.For([TestRules.Highlight("error", "red")]);
+        var settings = new AppSettings { Rules = [TestRules.Highlight("error", "red")] };
+        var rules = RuleSet.For(settings.Rules);
         var spans = cache.Get(line, [], rules);
         Assert.Equal([new HighlightSpan(0, 5, "red")], spans);
         Assert.Same(spans, cache.Get(line, [], rules));
         Assert.NotSame(spans, cache.Get(new Line(line.Raw), [], rules));
-        Assert.Same(spans, cache.Get(line, [], rules));
+        // An unrelated settings change copies the record but shares the rule list, so it keeps the cache.
+        var unrelated = settings with
+        {
+            LogFontSize = LogFontSize.Large,
+        };
+        Assert.Same(spans, cache.Get(line, [], RuleSet.For(unrelated.Rules)));
         var changed = RuleSet.For([TestRules.Highlight("warn", "green")]);
         Assert.Equal([new HighlightSpan(6, 4, "green")], cache.Get(line, [], changed));
     }

@@ -35,7 +35,7 @@ public sealed class RuleMigrationTests
 
         var warn = rules[1];
         Assert.Equal(MatchMode.Regex, warn.Mode); // legacy rule with no mode: detected
-        Assert.False(warn.PinnedAsTab);
+        Assert.True(warn.PinnedAsTab); // the old ShowInOpenFile default was true
 
         Assert.Equal(
             ("healthz", MatchMode.Literal, RuleAction.Hide),
@@ -80,6 +80,71 @@ public sealed class RuleMigrationTests
     {
         Assert.Empty(AppConfigJson.Deserialize("{}").Settings.Rules);
         Assert.False(RuleMigration.Apply("[1,2]").Migrated);
+    }
+
+    [Fact]
+    public void LabelWithoutShowInOpenFile_MigratesPinned_ExplicitFalseDoesNot()
+    {
+        var rules = AppConfigJson
+            .Deserialize(
+                """
+                { "settings": { "globalLabels": [
+                  { "text": "a" },
+                  { "text": "b", "showInOpenFile": false },
+                  { "text": "c", "showInOpenFile": true }
+                ] } }
+                """
+            )
+            .Settings.Rules;
+
+        Assert.Equal([true, false, true], rules.Select(rule => rule.PinnedAsTab));
+    }
+
+    [Fact]
+    public void WrongTypedValuesAndCaseCollidingModeKeys_DoNotThrowAndKeepUsableEntries()
+    {
+        var json = """
+            { "settings": {
+              "globalLabels": [
+                { "text": 5 }, 42, null,
+                { "text": "ok", "color": 7, "mode": 3, "showInOpenFile": "yes" },
+                { "text": "fine", "mode": "literal", "showInOpenFile": false }
+              ],
+              "globalExcludeLabels": [1, null, "keep", "Other"],
+              "globalExcludeModes": { "keep": "literal", "KEEP": "Regex", "Other": 9 }
+            } }
+            """;
+
+        var (migratedJson, migrated) = RuleMigration.Apply(json);
+        var rules = AppConfigJson.Deserialize(json).Settings.Rules;
+
+        Assert.True(migrated);
+        Assert.NotEmpty(migratedJson);
+        Assert.Equal(["ok", "fine", "keep", "Other"], rules.Select(rule => rule.Pattern));
+        Assert.Equal("#f59e0b", rules[0].Color);
+        Assert.True(rules[0].PinnedAsTab); // unusable flag: the legacy default (true) applies
+        Assert.Equal(MatchMode.Literal, rules[1].Mode);
+        Assert.False(rules[1].PinnedAsTab);
+        Assert.Equal(MatchMode.Regex, rules[2].Mode); // colliding keys: last one wins
+        Assert.Equal(RuleAction.Hide, rules[2].Action);
+        Assert.Equal(MatchMode.Literal, rules[3].Mode); // numeric mode: detected from the text
+    }
+
+    [Theory]
+    [InlineData("literal", MatchMode.Literal)]
+    [InlineData("REGEX", MatchMode.Regex)]
+    [InlineData("Regex", MatchMode.Regex)]
+    public void ModeNames_AreMatchedCaseInsensitively(string mode, MatchMode expected)
+    {
+        var rule = Assert.Single(
+            AppConfigJson
+                .Deserialize(
+                    $$"""{ "settings": { "globalLabels": [{ "text": "a.b", "mode": "{{mode}}" }] } }"""
+                )
+                .Settings.Rules
+        );
+
+        Assert.Equal(expected, rule.Mode);
     }
 
     [Fact]

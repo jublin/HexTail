@@ -12,7 +12,7 @@ public sealed class JsonFileAppPersistenceTests
         var config = AppConfigJson.Deserialize(
             """
             { "settings": {
-              "globalLabels": [{ "text": "[ERROR]", "color": "#ff0000", "mode": "Literal" }],
+              "globalLabels": [{ "text": "[ERROR]", "color": "#ff0000", "mode": "Literal", "showInOpenFile": false }],
               "globalExcludeLabels": ["[ERROR]"],
               "globalExcludeModes": { "[ERROR]": "Literal" }
             } }
@@ -33,7 +33,7 @@ public sealed class JsonFileAppPersistenceTests
         var legacy = AppConfigJson.Deserialize(
             """
             { "settings": {
-              "globalLabels": [{ "text": "ERROR|WARN" }],
+              "globalLabels": [{ "text": "ERROR|WARN", "showInOpenFile": false }],
               "globalExcludeLabels": ["ERROR|WARN"]
             } }
             """
