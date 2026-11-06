@@ -265,10 +265,9 @@
             />
           </Grid>
         </SplitView.Pane>
-        <Grid RowDefinitions="Auto,Auto,*">
-          <views:SearchBar Grid.Row="0" />
-          <views:WorkspaceError Grid.Row="1" />
-          <views:LogWorkspace Grid.Row="2" />
+        <Grid RowDefinitions="Auto,*">
+          <views:WorkspaceError Grid.Row="0" />
+          <views:LogWorkspace Grid.Row="1" />
         </Grid>
       </SplitView>
       <views:StatusBar Grid.Row="2" />

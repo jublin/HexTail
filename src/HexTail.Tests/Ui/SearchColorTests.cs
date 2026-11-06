@@ -1,6 +1,5 @@
 using System.Reactive.Linq;
 using Avalonia.Headless.XUnit;
-using Avalonia.Media;
 using HexTail.Application;
 using HexTail.Domain;
 using HexTail.Persistence;
@@ -39,13 +38,12 @@ public sealed class SearchColorTests
                 startPolling: false
             );
             await viewModel.OpenPathsCommand.Execute([path]);
-            viewModel.Query = "needle";
-            viewModel.SearchColor = Color.Parse("#22D3EE");
+            viewModel.FilterBar.Query = "needle";
 
-            await viewModel.AddSearchCommand.Execute();
+            await viewModel.FilterBar.SubmitAsync(RuleAction.Highlight);
 
-            // Amber is the Hide rule's placeholder color; it is still free for a new search.
-            Assert.Equal(Color.Parse("#F59E0B"), viewModel.SearchColor);
+            // Amber is the Hide rule's placeholder color; it is still free for a new rule.
+            Assert.Equal("#F59E0B", Assert.Single(viewModel.SelectedFile!.Model.Rules).Color);
         }
         finally
         {

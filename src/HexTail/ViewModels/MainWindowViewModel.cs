@@ -40,15 +40,10 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private readonly bool _startPolling;
     private readonly CompositeDisposable _subscriptions = new();
     private FileTabViewModel? _selectedFile;
-    private string _query = string.Empty;
     private string _sourceSummary = "No sources open";
-    private MatchMode _matchMode = MatchMode.Literal;
-    private bool _caseSensitive;
-    private Color _searchColor = Color.Parse("#F59E0B");
     private bool _settingsOpen;
     private int _selectedViewIndex;
     private string? _fileError;
-    private string? _searchError;
     private bool _started;
     private bool _closed;
     private bool _restoring;
@@ -133,21 +128,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             _scheduler
         );
 
-        var canAddSearch = this.WhenAnyValue(
-            viewModel => viewModel.Query,
-            viewModel => viewModel.SelectedFile,
-            (query, file) => !string.IsNullOrWhiteSpace(query) && file is not null
-        );
-        AddSearchCommand = ReactiveCommand.CreateFromTask(AddSearchAsync, canAddSearch, _scheduler);
-        AddSearchOnKeyCommand = ReactiveCommand.Create<KeyEventArgs>(
-            args =>
-            {
-                if (args.Key == Key.Enter)
-                    AddSearchCommand.Execute().Subscribe();
-            },
-            _scheduler
-        );
-
         _subscriptions.Add(
             Observable
                 .Create<Unit>(observer =>
@@ -169,8 +149,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                     OpenSampleCommand.ThrownExceptions,
                     SaveCommand.ThrownExceptions,
                     CloseFileCommand.ThrownExceptions,
-                    RemoveSearchCommand.ThrownExceptions,
-                    AddSearchCommand.ThrownExceptions
+                    RemoveSearchCommand.ThrownExceptions
                 )
                 .Subscribe(ex => SetFileError(ex.Message))
         );
@@ -197,7 +176,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public Interaction<Unit, IReadOnlyList<string>> PickFiles { get; }
     public CommandPaletteViewModel Palette { get; }
     public ReactiveCommand<Unit, Unit> OpenPaletteCommand { get; }
-    internal event EventHandler? FocusSearchRequested;
     public ReactiveCommand<Unit, Unit> OpenCommand { get; }
     public ReactiveCommand<IEnumerable<string>, Unit> OpenPathsCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
@@ -210,8 +188,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<string, Unit> ApplyRangePresetCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> CloseFileCommand { get; }
     public ReactiveCommand<LogViewViewModel, Unit> RemoveSearchCommand { get; }
-    public ReactiveCommand<Unit, Unit> AddSearchCommand { get; }
-    public ReactiveCommand<KeyEventArgs, Unit> AddSearchOnKeyCommand { get; }
 
     public FileTabViewModel? SelectedFile
     {
@@ -421,44 +397,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     }
 
     public bool HasFileError => !string.IsNullOrWhiteSpace(FileError);
-
-    public string? SearchError
-    {
-        get => _searchError;
-        private set
-        {
-            this.RaiseAndSetIfChanged(ref _searchError, value);
-            this.RaisePropertyChanged(nameof(HasSearchError));
-        }
-    }
-
-    public bool HasSearchError => !string.IsNullOrWhiteSpace(SearchError);
-
-    public string Query
-    {
-        get => _query;
-        set => this.RaiseAndSetIfChanged(ref _query, value);
-    }
-
-    public MatchMode MatchMode
-    {
-        get => _matchMode;
-        set => this.RaiseAndSetIfChanged(ref _matchMode, value);
-    }
-
-    public IReadOnlyList<MatchMode> MatchModes { get; } = [MatchMode.Literal, MatchMode.Regex];
-
-    public bool CaseSensitive
-    {
-        get => _caseSensitive;
-        set => this.RaiseAndSetIfChanged(ref _caseSensitive, value);
-    }
-
-    public Color SearchColor
-    {
-        get => _searchColor;
-        set => this.RaiseAndSetIfChanged(ref _searchColor, value);
-    }
 
     public bool SettingsOpen
     {
@@ -684,8 +622,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         FileError = string.IsNullOrWhiteSpace(message) ? null : message;
     }
 
-    internal void ClearSearchError() => SearchError = null;
-
     private async Task OpenFilesAsync()
     {
         var paths = await PickFiles.Handle(Unit.Default);
@@ -789,33 +725,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         SetFileError(null);
     }
 
-    private async Task AddSearchAsync()
-    {
-        var file = SelectedFile;
-        if (file is null || string.IsNullOrWhiteSpace(Query))
-            return;
-
-        try
-        {
-            _state.AddSearch(file.Model, Query, MatchMode, CaseSensitive, ColorToHex(SearchColor));
-            SearchColor = Color.Parse(
-                NextSearchColor(
-                    file.Model.Searches.Select(search => search.Color),
-                    State
-                        .Settings.Rules.Where(rule => rule.Action != RuleAction.Hide)
-                        .Select(rule => rule.Color)
-                )
-            );
-            Query = string.Empty;
-            SearchError = null;
-            await _state.SaveAsync();
-        }
-        catch (ArgumentException ex)
-        {
-            SearchError = ex.Message;
-        }
-    }
-
     internal IEnumerable<PaletteItem> BuildPaletteItems()
     {
         yield return new("Open files…", "File", "Ctrl+O", async () => await OpenCommand.Execute());
@@ -851,7 +760,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 "/",
                 () =>
                 {
-                    FocusSearchRequested?.Invoke(this, EventArgs.Empty);
+                    FilterBar.RequestFocus();
                     return Task.CompletedTask;
                 }
             );
@@ -1064,8 +973,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             this.RaisePropertyChanged(nameof(FileError));
         if (previous.HasFileError != current.HasFileError)
             this.RaisePropertyChanged(nameof(HasFileError));
-        if (previous.HasSearchError != current.HasSearchError)
-            this.RaisePropertyChanged(nameof(HasSearchError));
         if (previous.HasElasticSources != current.HasElasticSources)
             this.RaisePropertyChanged(nameof(HasElasticSources));
         if (previous.HasElasticWarning != current.HasElasticWarning)
@@ -1106,7 +1013,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             LineCount,
             FileError,
             HasFileError,
-            HasSearchError,
             HasElasticSources,
             HasElasticWarning,
             ElasticSourceIcon
@@ -1162,7 +1068,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         }
     }
 
-    private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+    internal static IReadOnlyList<string> Swatches => SearchColors[..5];
 
     internal static string NextSearchColor(
         IEnumerable<string> activeSearchColors,
@@ -1196,7 +1102,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         int LineCount,
         string? FileError,
         bool HasFileError,
-        bool HasSearchError,
         bool HasElasticSources,
         bool HasElasticWarning,
         string ElasticSourceIcon

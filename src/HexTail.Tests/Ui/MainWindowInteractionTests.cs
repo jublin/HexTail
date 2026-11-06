@@ -257,7 +257,7 @@ public sealed class MainWindowInteractionTests
             foreach (var density in vm.Settings.DensityOptions)
             {
                 vm.Settings.Density = density;
-                vm.Query = string.Empty;
+                vm.FilterBar.Query = string.Empty;
                 Dispatcher.UIThread.RunJobs();
                 window.UpdateLayout();
                 var query = FindVisual<TextBox>(window, "QueryBox");
@@ -266,7 +266,9 @@ public sealed class MainWindowInteractionTests
                 var placeholder = query
                     .GetVisualDescendants()
                     .OfType<TextBlock>()
-                    .Single(text => text.Text == "Search this file" && text.IsVisible);
+                    .Single(text =>
+                        text.Text?.StartsWith("Filter this source") == true && text.IsVisible
+                    );
                 Assert.True(placeholder.IsVisible);
                 var hintPosition = placeholder.TranslatePoint(default, query)!.Value;
                 Assert.True(hintPosition.Y >= 0);
@@ -276,9 +278,9 @@ public sealed class MainWindowInteractionTests
                     queryPosition.X >= 0
                         && queryPosition.X + query.Bounds.Width <= window.Bounds.Width
                 );
-                var add = FindVisual<Button>(window, "AddSearchButton");
-                var addPosition = add.TranslatePoint(default, window)!.Value;
-                Assert.True(addPosition.X + add.Bounds.Width <= window.Bounds.Width);
+                var pin = FindVisual<ToggleButton>(window, "PinTabToggle");
+                var pinPosition = pin.TranslatePoint(default, window)!.Value;
+                Assert.True(pinPosition.X + pin.Bounds.Width <= window.Bounds.Width);
                 query.Text = "visible search input";
                 Dispatcher.UIThread.RunJobs();
                 window.UpdateLayout();
@@ -291,7 +293,7 @@ public sealed class MainWindowInteractionTests
                     textPosition.Y >= 0
                         && textPosition.Y + presenter.Bounds.Height <= query.Bounds.Height
                 );
-                Assert.Equal("visible search input", vm.Query);
+                Assert.Equal("visible search input", vm.FilterBar.Query);
                 var toggle = FindVisual<ToggleButton>(window, "CaseToggle");
                 Assert.True(
                     toggle.TranslatePoint(default, window)!.Value.X
@@ -332,8 +334,9 @@ public sealed class MainWindowInteractionTests
             var window = TestWindow.Create(out var viewModel);
             await viewModel.OpenPathsCommand.Execute([path]);
             window.Show();
-            viewModel.Query = "error";
-            Click(FindVisual<Button>(window, "AddSearchButton"));
+            viewModel.FilterBar.PinAsTab = true;
+            viewModel.FilterBar.Query = "error";
+            await viewModel.FilterBar.SubmitAsync(RuleAction.Highlight);
             await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 1);
             Dispatcher.UIThread.RunJobs();
 
@@ -602,7 +605,7 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
-    public async Task SearchCanBeAddedByButtonAndEnter()
+    public async Task PinnedSearchIsAddedByEnterOnly()
     {
         var path = Path.GetTempFileName();
         try
@@ -611,13 +614,14 @@ public sealed class MainWindowInteractionTests
             await viewModel.OpenPathsCommand.Execute([path]);
             window.Show();
             Dispatcher.UIThread.RunJobs();
+            viewModel.FilterBar.PinAsTab = true;
             var query = FindVisual<TextBox>(window, "QueryBox");
 
             query.Text = "first";
-            Dispatcher.UIThread.RunJobs();
-            Click(FindVisual<Button>(window, "AddSearchButton"));
+            query.Focus();
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.None, null);
             await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 1);
-            await WaitFor(() => window.GetVisualDescendants().OfType<SearchBar>().Any());
+            await WaitFor(() => window.GetVisualDescendants().OfType<FilterBar>().Any());
 
             query = FindVisual<TextBox>(window, "QueryBox");
             query.Text = "ignored";
@@ -650,8 +654,9 @@ public sealed class MainWindowInteractionTests
             var window = TestWindow.Create(out var viewModel);
             await viewModel.OpenPathsCommand.Execute([path]);
             window.Show();
-            viewModel.Query = "error";
-            Click(FindVisual<Button>(window, "AddSearchButton"));
+            viewModel.FilterBar.PinAsTab = true;
+            viewModel.FilterBar.Query = "error";
+            await viewModel.FilterBar.SubmitAsync(RuleAction.Highlight);
             await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 1);
             Dispatcher.UIThread.RunJobs();
 
@@ -706,15 +711,16 @@ public sealed class MainWindowInteractionTests
                 new Line("[ERROR] failed"),
                 new Line("ERROR plain"),
             ]);
-            vm.Query = "[ERROR]";
-            Assert.Equal(MatchMode.Literal, vm.MatchMode);
-            Click(FindVisual<Button>(window, "AddSearchButton"));
+            vm.FilterBar.PinAsTab = true;
+            vm.FilterBar.Query = "[ERROR]";
+            Assert.Equal(MatchMode.Literal, vm.FilterBar.MatchMode);
+            await vm.FilterBar.SubmitAsync(RuleAction.Highlight);
             await WaitFor(() => vm.State.SelectedFile.Searches.Count == 1);
             var literal = Assert.Single(vm.State.SelectedFile.Searches);
             Assert.Equal(MatchMode.Literal, literal.Query.Mode);
             Assert.Equal([0], literal.Results);
             FindVisual<ComboBox>(window, "SearchModePicker").SelectedItem = MatchMode.Regex;
-            vm.Query = "^ERROR";
+            vm.FilterBar.Query = "^ERROR";
             var queryBox = FindVisual<TextBox>(window, "QueryBox");
             queryBox.Focus();
             window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
@@ -722,7 +728,7 @@ public sealed class MainWindowInteractionTests
             var regex = vm.State.SelectedFile.Searches[1];
             Assert.Equal(MatchMode.Regex, regex.Query.Mode);
             Assert.Equal([1], regex.Results);
-            Assert.Equal(MatchMode.Regex, vm.MatchMode);
+            Assert.Equal(MatchMode.Regex, vm.FilterBar.MatchMode);
             await vm.SaveCommand.Execute().FirstAsync();
             Assert.Equal(
                 [MatchMode.Literal, MatchMode.Regex],
@@ -747,15 +753,15 @@ public sealed class MainWindowInteractionTests
             var window = TestWindow.Create(out var viewModel);
             await viewModel.OpenPathsCommand.Execute([path]);
             window.Show();
-            viewModel.MatchMode = MatchMode.Regex;
-            viewModel.Query = "[";
+            viewModel.FilterBar.MatchMode = MatchMode.Regex;
+            viewModel.FilterBar.Query = "[";
             Dispatcher.UIThread.RunJobs();
 
-            Click(FindVisual<Button>(window, "AddSearchButton"));
-            await WaitFor(() => viewModel.HasSearchError);
+            await viewModel.FilterBar.SubmitAsync(RuleAction.Highlight);
+            await WaitFor(() => viewModel.FilterBar.HasError);
 
-            Assert.Equal("[", viewModel.Query);
-            Assert.True(FindVisual<TextBlock>(window, "SearchError").IsVisible);
+            Assert.Equal("[", viewModel.FilterBar.Query);
+            Assert.True(FindVisual<TextBlock>(window, "FilterError").IsVisible);
             window.Close();
         }
         finally
@@ -995,6 +1001,7 @@ public sealed class MainWindowInteractionTests
         var query = FindVisual<TextBox>(window, "QueryBox");
 
         window.KeyPress(Key.F, modifier, PhysicalKey.None, null);
+        Dispatcher.UIThread.RunJobs();
 
         Assert.True(query.IsFocused);
         window.Close();
@@ -1090,7 +1097,7 @@ public sealed class MainWindowInteractionTests
         if (
             window
                 .GetVisualDescendants()
-                .OfType<SearchBar>()
+                .OfType<FilterBar>()
                 .FirstOrDefault()
                 ?.FindControl<T>(name) is
             { } searchControl

@@ -233,13 +233,5 @@
         </DataTemplate>
       </ContentControl.ContentTemplate>
     </ContentControl>
-    <TextBlock
-      x:Name="SearchError"
-      Classes="error"
-      Margin="12,0"
-      VerticalAlignment="Top"
-      IsVisible="{Binding HasSearchError}"
-      Text="{Binding SearchError}"
-    />
   </Grid>
 </UserControl>

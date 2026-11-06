@@ -8,6 +8,68 @@
   AutomationProperties.Name="Filters"
 >
   <StackPanel Margin="8,2,8,4" Spacing="4">
+    <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4">
+      <TextBox
+        x:Name="QueryBox"
+        Name="QueryBox"
+        VerticalContentAlignment="Center"
+        Height="{Binding Settings.SecondaryControlHeight}"
+        MinHeight="{Binding Settings.SecondaryControlHeight}"
+        FontSize="{Binding Settings.SecondaryFontSize}"
+        Padding="{Binding Settings.SecondaryPadding}"
+        Text="{Binding Query, Mode=TwoWay}"
+        PlaceholderText="Filter this source — Enter highlight · Shift+Enter show only · Alt+Enter hide"
+        AutomationProperties.Name="Filter text"
+        UseFloatingPlaceholder="False"
+        TextAlignment="Left"
+      />
+      <ComboBox
+        x:Name="SearchModePicker"
+        Grid.Column="1"
+        Width="94"
+        Height="{Binding Settings.SecondaryControlHeight}"
+        MinHeight="{Binding Settings.SecondaryControlHeight}"
+        FontSize="{Binding Settings.SecondaryFontSize}"
+        Padding="{Binding Settings.SecondaryPadding}"
+        ItemsSource="{Binding MatchModes}"
+        SelectedItem="{Binding MatchMode, Mode=TwoWay}"
+        AutomationProperties.Name="Match mode"
+        ToolTip.Tip="Literal matches exact text; Regex interprets a regular expression."
+      />
+      <ToggleButton
+        x:Name="CaseToggle"
+        Name="CaseToggle"
+        Grid.Column="2"
+        Height="{Binding Settings.SecondaryControlHeight}"
+        MinHeight="{Binding Settings.SecondaryControlHeight}"
+        FontSize="{Binding Settings.SecondaryFontSize}"
+        Padding="{Binding Settings.SecondaryPadding}"
+        Content="Aa"
+        IsChecked="{Binding CaseSensitive, Mode=TwoWay}"
+        ToolTip.Tip="Match case"
+        AutomationProperties.Name="Match case"
+      />
+      <ToggleButton
+        x:Name="PinTabToggle"
+        Name="PinTabToggle"
+        Grid.Column="3"
+        Height="{Binding Settings.SecondaryControlHeight}"
+        MinHeight="{Binding Settings.SecondaryControlHeight}"
+        Padding="{Binding Settings.SecondaryPadding}"
+        IsChecked="{Binding PinAsTab, Mode=TwoWay}"
+        ToolTip.Tip="Enter creates a view tab instead of a highlight rule"
+        AutomationProperties.Name="Pin as tab"
+      >
+        <ic:Icon Value="mdi-bookmark-outline" />
+      </ToggleButton>
+    </Grid>
+    <TextBlock
+      x:Name="FilterError"
+      Name="FilterError"
+      Classes="error"
+      Text="{Binding Error}"
+      IsVisible="{Binding HasError}"
+    />
     <ItemsControl x:Name="ChipList" ItemsSource="{Binding Chips}" IsVisible="{Binding HasChips}">
       <ItemsControl.ItemsPanel>
         <ItemsPanelTemplate>
