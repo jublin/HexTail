@@ -18,11 +18,25 @@ internal sealed class FilterBarViewModel : ReactiveObject
     private string? _error;
     private bool _submitting;
 
-    internal FilterBarViewModel(MainWindowViewModel owner) => _owner = owner;
+    internal FilterBarViewModel(MainWindowViewModel owner)
+    {
+        _owner = owner;
+        LevelToggles =
+        [
+            new LevelToggleViewModel(this, LogLevels.Trace, "T", "Trace"),
+            new LevelToggleViewModel(this, LogLevels.Debug, "D", "Debug"),
+            new LevelToggleViewModel(this, LogLevels.Info, "I", "Info"),
+            new LevelToggleViewModel(this, LogLevels.Warn, "W", "Warn"),
+            new LevelToggleViewModel(this, LogLevels.Error, "E", "Error"),
+        ];
+    }
 
     internal IScheduler Scheduler => _owner.Scheduler;
     public ObservableCollection<RuleChipViewModel> Chips { get; } = [];
     public bool HasChips => Chips.Count > 0;
+    public IReadOnlyList<LevelToggleViewModel> LevelToggles { get; }
+    public bool HasLevelFilter =>
+        _owner.SelectedFile?.Model.Levels is { } levels && levels != LogLevels.All;
     public SettingsViewModel Settings => _owner.Settings;
     public IReadOnlyList<MatchMode> MatchModes { get; } = [MatchMode.Literal, MatchMode.Regex];
 
@@ -77,7 +91,30 @@ internal sealed class FilterBarViewModel : ReactiveObject
     // ViewRule compares by value, Search by reference: that keeps Sync cheap and stable.
     private readonly record struct ChipKey(ViewRule? Rule, Search? Search);
 
+    internal bool IsLevelOn(LogLevels level) =>
+        _owner.SelectedFile is { } file && (file.Model.Levels & level) != 0;
+
+    internal async Task ToggleLevelAsync(LevelToggleViewModel toggle)
+    {
+        var file = _owner.SelectedFile?.Model;
+        if (file is null)
+            return;
+        var next = file.Levels ^ toggle.Level;
+        if ((next & LogLevels.All) == LogLevels.None)
+            return;
+        await _owner.State.SetLevelsAsync(file, next);
+    }
+
     internal void Sync()
+    {
+        // The level control follows the selected source on every sync, chips changed or not.
+        foreach (var toggle in LevelToggles)
+            toggle.Refresh();
+        this.RaisePropertyChanged(nameof(HasLevelFilter));
+        SyncChips();
+    }
+
+    private void SyncChips()
     {
         var file = _owner.SelectedFile;
         var keys = new List<ChipKey>();

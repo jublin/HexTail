@@ -14,6 +14,7 @@
     <SolidColorBrush x:Key="MutedBrush" Color="#91A0B5" />
     <SolidColorBrush x:Key="FaintTextBrush" Color="#65758D" />
     <SolidColorBrush x:Key="AccentBrush" Color="#28D7FE" />
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="#4028D7FE" />
     <SolidColorBrush x:Key="AccentMutedBrush" Color="#157B94" />
     <SolidColorBrush x:Key="AccentStrongBrush" Color="#7AEAFF" />
     <SolidColorBrush x:Key="SelectedTabBrush" Color="#28D7FE" />
@@ -220,6 +221,29 @@
 </Style>
 <Style Selector="Rectangle.chip-outline.global">
   <Setter Property="StrokeDashArray" Value="3,2" />
+</Style>
+<Style Selector="Border.level-segment">
+  <Setter Property="BorderBrush" Value="{DynamicResource MutedBrush}" />
+  <Setter Property="BorderThickness" Value="1" />
+  <Setter Property="CornerRadius" Value="4" />
+  <Setter Property="ClipToBounds" Value="True" />
+</Style>
+<Style Selector="Border.level-segment.filtered">
+  <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+</Style>
+<Style Selector="Border.level-segment ToggleButton">
+  <Setter Property="MinWidth" Value="24" />
+  <Setter Property="MinHeight" Value="0" />
+  <Setter Property="Padding" Value="4,0" />
+  <Setter Property="BorderThickness" Value="0" />
+  <Setter Property="CornerRadius" Value="0" />
+  <Setter Property="VerticalAlignment" Value="Stretch" />
+</Style>
+<Style Selector="Border.level-segment ToggleButton:checked">
+  <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+</Style>
+<Style Selector="Border.level-segment ToggleButton:checked /template/ ContentPresenter#PART_ContentPresenter">
+  <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
 </Style>
 <Style Selector="Grid.rule-chip.disabled">
   <Setter Property="Opacity" Value="0.5" />

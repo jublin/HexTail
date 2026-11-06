@@ -9,7 +9,7 @@
   AutomationProperties.Name="Filters"
 >
   <StackPanel Margin="8,2,8,4" Spacing="4">
-    <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4">
+    <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="4">
       <TextBox
         x:Name="QueryBox"
         Name="QueryBox"
@@ -63,6 +63,35 @@
       >
         <ic:Icon Value="mdi-bookmark-outline" />
       </ToggleButton>
+      <Border
+        x:Name="LevelSegment"
+        Name="LevelSegment"
+        Grid.Column="4"
+        Classes="level-segment"
+        Classes.filtered="{Binding HasLevelFilter}"
+        Height="{Binding Settings.SecondaryControlHeight}"
+        AutomationProperties.Name="Log levels"
+      >
+        <ItemsControl ItemsSource="{Binding LevelToggles}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:LevelToggleViewModel">
+              <ToggleButton
+                Name="LevelToggle"
+                IsChecked="{Binding IsOn, Mode=OneWay}"
+                Command="{Binding ToggleCommand}"
+                Content="{Binding Label}"
+                ToolTip.Tip="{Binding Name}"
+                AutomationProperties.Name="{Binding AutomationName}"
+              />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Border>
     </Grid>
     <TextBlock
       x:Name="FilterError"
