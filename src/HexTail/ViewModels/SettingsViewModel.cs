@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Concurrency;
 using Avalonia;
-using HexTail.Domain;
 using HexTail.Elastic;
 using HexTail.Persistence;
 using ReactiveUI;

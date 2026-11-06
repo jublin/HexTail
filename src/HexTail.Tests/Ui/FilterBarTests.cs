@@ -132,6 +132,49 @@ public sealed class FilterBarTests
     }
 
     [AvaloniaFact]
+    public async Task ChipEditorColorPickerAndComboBoxesAreTemplatedAndOpen()
+    {
+        var (window, owner, path) = await OpenWithRuleAsync();
+        try
+        {
+            Click(window, FindChipBody(window)!);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(owner.FilterBar.Chips.Single().IsEditorOpen);
+
+            var colorPicker = await FindFlyoutControlAsync<ColorPicker>(window, "DraftColorPicker");
+            await UiWait.Until(() =>
+            {
+                Dispatcher.UIThread.RunJobs();
+                return colorPicker.Template is not null;
+            });
+            Assert.NotNull(colorPicker.Template);
+
+            foreach (var name in new[] { "DraftActionPicker", "DraftModePicker" })
+            {
+                var combo = await FindFlyoutControlAsync<ComboBox>(window, name);
+                await UiWait.Until(() =>
+                {
+                    Dispatcher.UIThread.RunJobs();
+                    return combo.Template is not null;
+                });
+                Assert.NotNull(combo.Template);
+                combo.IsDropDownOpen = true;
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(combo.IsDropDownOpen);
+                combo.IsDropDownOpen = false;
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(combo.IsDropDownOpen);
+            }
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task EnterInTheDraftBoxAppliesAndEscapeCancels()
     {
         var (window, owner, path) = await OpenWithRuleAsync();

@@ -408,23 +408,33 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
-    public void TextBoxesCenterTextVertically()
+    public async Task TextBoxesCenterTextVertically()
     {
         var window = TestWindow.Create(out var viewModel);
-        viewModel.SettingsOpen = true;
-        window.Show();
+        await viewModel.InitializeAsync();
+        var path = Path.GetTempFileName();
+        try
+        {
+            await viewModel.OpenPathsCommand.Execute([path]);
+            window.Show();
+            await UiWait.Until(() =>
+            {
+                Dispatcher.UIThread.RunJobs();
+                return window.GetVisualDescendants().OfType<FilterBar>().Any();
+            });
 
-        var textBox = window
-            .GetVisualDescendants()
-            .OfType<SettingsPanel>()
-            .Single()
-            .GetVisualDescendants()
-            .OfType<TextBox>()
-            .First();
-        Assert.Equal(TextAlignment.Start, textBox.TextAlignment);
-        Assert.Equal(VerticalAlignment.Center, textBox.VerticalContentAlignment);
-
-        window.Close();
+            var textBox = FindVisual<TextBox>(window, "QueryBox");
+            Assert.Equal("QueryBox", textBox.Name);
+            Assert.DoesNotContain(textBox.GetVisualAncestors(), a => a is ComboBox);
+            Assert.Equal(TextAlignment.Left, textBox.TextAlignment);
+            Assert.Equal(VerticalAlignment.Center, textBox.VerticalContentAlignment);
+        }
+        finally
+        {
+            window.Close();
+            await viewModel.DisposeAsync();
+            File.Delete(path);
+        }
     }
 
     [AvaloniaFact]

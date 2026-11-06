@@ -72,6 +72,40 @@ public sealed class FilterBarEditTests
         );
 
     [AvaloniaFact]
+    public async Task EditingTheTextOfASavedRegexRuleKeepsItRegex()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var window = TestWindow.Create(out var owner);
+            await owner.InitializeAsync();
+            await owner.OpenPathsCommand.Execute([path]);
+            var file = owner.SelectedFile!;
+            await owner.State.SetSourceRulesAsync(
+                file.Model,
+                [TestRules.Source("err.r") with { Mode = MatchMode.Regex }]
+            );
+            owner.FilterBar.Sync();
+            var chip = owner.FilterBar.Chips.Single();
+
+            chip.OpenEditor();
+            Assert.Equal(MatchMode.Regex, chip.Draft!.MatchMode);
+            chip.Draft.Pattern = "warn.+";
+            await chip.ApplyCommand.Execute();
+
+            var rule = Assert.Single(file.Model.Rules);
+            Assert.Equal("warn.+", rule.Pattern);
+            Assert.Equal(MatchMode.Regex, rule.Mode);
+            window.Close();
+            await owner.DisposeAsync();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
     public Task CancelLeavesRulesUntouchedAndClosesTheEditor() =>
         WithRuleChipAsync(
             "a",

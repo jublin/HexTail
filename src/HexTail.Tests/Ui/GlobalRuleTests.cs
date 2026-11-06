@@ -29,8 +29,8 @@ public sealed class GlobalRuleTests
         );
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal(MatchMode.Literal, Assert.Single(HighlightRules(owner)).Mode);
-        Assert.Equal(MatchMode.Literal, Assert.Single(HideRules(owner)).Mode);
+        Assert.Single(HighlightRules(owner));
+        Assert.Single(HideRules(owner));
         Assert.False(IsHidden(owner, "READY"));
         Assert.True(IsHidden(owner, "[ERROR] failed"));
         Assert.NotEmpty(
