@@ -19,12 +19,13 @@ public sealed class FollowAndPauseTests
         await File.WriteAllLinesAsync(path, Enumerable.Range(0, 20).Select(i => $"line {i}"));
         try
         {
-            var window = TestWindow.Create(out var viewModel);
+            var window = TestWindow.CreatePolling(out var viewModel);
             window.Show();
             await viewModel.OpenPathsCommand.Execute([path]);
             var view = await LoadedView(viewModel, 20);
 
             view.IsFollowing = false;
+            await UiWait.Until(() => !view.IsFollowing);
             await File.AppendAllLinesAsync(path, ["new 1", "new 2", "new 3"]);
             await UiWait.Until(() =>
             {
@@ -57,7 +58,7 @@ public sealed class FollowAndPauseTests
         await File.WriteAllLinesAsync(path, Enumerable.Range(0, 10).Select(i => $"line {i}"));
         try
         {
-            var window = TestWindow.Create(out var viewModel);
+            var window = TestWindow.CreatePolling(out var viewModel);
             window.Show();
             await viewModel.OpenPathsCommand.Execute([path]);
             var view = await LoadedView(viewModel, 10);
@@ -92,7 +93,7 @@ public sealed class FollowAndPauseTests
         await File.WriteAllLinesAsync(path, Enumerable.Range(0, 5).Select(i => $"line {i}"));
         try
         {
-            var window = TestWindow.Create(out var viewModel);
+            var window = TestWindow.CreatePolling(out var viewModel);
             window.Show();
             await viewModel.OpenPathsCommand.Execute([path]);
             var view = await LoadedView(viewModel, 5);
@@ -127,7 +128,7 @@ public sealed class FollowAndPauseTests
         await File.WriteAllLinesAsync(path, Enumerable.Range(0, 5).Select(i => $"line {i}"));
         try
         {
-            var window = TestWindow.Create(out var viewModel);
+            var window = TestWindow.CreatePolling(out var viewModel);
             window.Show();
             await viewModel.OpenPathsCommand.Execute([path]);
             var view = await LoadedView(viewModel, 5);
@@ -167,7 +168,7 @@ public sealed class FollowAndPauseTests
         await File.WriteAllLinesAsync(path, Enumerable.Range(0, 10).Select(i => $"line {i}"));
         try
         {
-            var window = TestWindow.Create(out var viewModel);
+            var window = TestWindow.CreatePolling(out var viewModel);
             window.Show();
             await viewModel.OpenPathsCommand.Execute([path]);
             var view = await LoadedView(viewModel, 10);
@@ -216,7 +217,7 @@ public sealed class FollowAndPauseTests
         await File.WriteAllLinesAsync(path, Enumerable.Range(0, 5).Select(i => $"line {i}"));
         try
         {
-            var window = TestWindow.Create(out var viewModel);
+            var window = TestWindow.CreatePolling(out var viewModel);
             window.Show();
             window.Width = 720;
             await viewModel.OpenPathsCommand.Execute([path]);

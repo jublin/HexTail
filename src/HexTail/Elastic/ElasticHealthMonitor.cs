@@ -8,6 +8,7 @@ public sealed class ElasticHealthMonitor : IAsyncDisposable
     private readonly IElasticApiClient _client;
     private readonly ICredentialVault _vault;
     private readonly Func<DateTimeOffset> _now;
+    private readonly object _gate = new();
     private readonly Dictionary<string, ElasticSourceHealth> _statuses = new(
         StringComparer.Ordinal
     );
@@ -23,10 +24,26 @@ public sealed class ElasticHealthMonitor : IAsyncDisposable
         _now = now ?? (() => DateTimeOffset.UtcNow);
     }
 
-    public IReadOnlyDictionary<string, ElasticSourceHealth> Statuses =>
-        new Dictionary<string, ElasticSourceHealth>(_statuses);
-    public bool HasWarning =>
-        _statuses.Values.Any(status => status.Status != ElasticConnectionStatus.Connected);
+    // Checks run off the UI thread while the UI reads these, so every access takes the gate.
+    public IReadOnlyDictionary<string, ElasticSourceHealth> Statuses
+    {
+        get
+        {
+            lock (_gate)
+                return new Dictionary<string, ElasticSourceHealth>(_statuses);
+        }
+    }
+
+    public bool HasWarning
+    {
+        get
+        {
+            lock (_gate)
+                return _statuses.Values.Any(status =>
+                    status.Status != ElasticConnectionStatus.Connected
+                );
+        }
+    }
     public event Action? Changed;
 
     public async Task CheckOnceAsync(
@@ -152,22 +169,22 @@ public sealed class ElasticHealthMonitor : IAsyncDisposable
 
     private void Publish(IReadOnlyDictionary<string, ElasticSourceHealth> next)
     {
-        var changed =
-            _statuses.Count != next.Count
-            || next.Any(item =>
-                !_statuses.TryGetValue(item.Key, out var previous)
-                || previous.Status != item.Value.Status
-                || previous.Message != item.Value.Message
-            );
-        if (!changed)
+        bool changed;
+        lock (_gate)
         {
+            changed =
+                _statuses.Count != next.Count
+                || next.Any(item =>
+                    !_statuses.TryGetValue(item.Key, out var previous)
+                    || previous.Status != item.Value.Status
+                    || previous.Message != item.Value.Message
+                );
+            if (changed)
+                _statuses.Clear();
             foreach (var item in next)
                 _statuses[item.Key] = item.Value;
-            return;
         }
-        _statuses.Clear();
-        foreach (var item in next)
-            _statuses[item.Key] = item.Value;
-        Changed?.Invoke();
+        if (changed)
+            Changed?.Invoke();
     }
 }

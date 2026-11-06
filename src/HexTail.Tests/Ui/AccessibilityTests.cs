@@ -35,6 +35,8 @@ public sealed class AccessibilityTests
             await owner.ToggleSettingsCommand.Execute().FirstAsync();
             Dispatcher.UIThread.RunJobs();
             var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
+            // Focus moves into the panel on a dispatcher post, so wait for it rather than racing it.
+            await UiWait.Until(() => FocusInPanel(window, panel));
             AssertFocusInPanel(window, panel);
 
             // Walk beyond every control in this section, including backwards across the first one.
@@ -49,7 +51,7 @@ public sealed class AccessibilityTests
             window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.None, null);
             Dispatcher.UIThread.RunJobs();
             Assert.False(owner.SettingsOpen);
-            Assert.True(opener.IsFocused);
+            await UiWait.Until(() => opener.IsFocused);
         }
         finally
         {
@@ -91,6 +93,10 @@ public sealed class AccessibilityTests
             File.Delete(path);
         }
     }
+
+    private static bool FocusInPanel(Window window, SettingsPanel panel) =>
+        window.FocusManager!.GetFocusedElement() is Control focused
+        && (focused == panel || focused.GetVisualAncestors().Contains(panel));
 
     private static void AssertFocusInPanel(Window window, SettingsPanel panel)
     {

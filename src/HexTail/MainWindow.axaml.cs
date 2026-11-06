@@ -82,20 +82,29 @@ public partial class MainWindow : Window
             && !focused.GetVisualAncestors().OfType<SettingsPanel>().Any()
         )
             _settingsOpener = focused;
-        Dispatcher.UIThread.Post(() =>
+        Dispatcher.UIThread.Post(() => ApplySettingsFocus(attemptsLeft: 5));
+    }
+
+    private void ApplySettingsFocus(int attemptsLeft)
+    {
+        if (ViewModel.SettingsOpen)
         {
-            if (ViewModel.SettingsOpen)
-                this.GetVisualDescendants()
-                    .OfType<SettingsPanel>()
-                    .FirstOrDefault()
-                    ?.FindControl<Button>("SettingsCloseButton")
-                    ?.Focus();
-            else if (_settingsOpener is { IsEffectivelyVisible: true } opener)
-            {
-                opener.Focus();
-                _settingsOpener = null;
-            }
-        });
+            var closeButton = this.GetVisualDescendants()
+                .OfType<SettingsPanel>()
+                .FirstOrDefault()
+                ?.FindControl<Button>("SettingsCloseButton");
+            // The panel may not be laid out yet on the first pass, so Focus() can be refused; retry.
+            if (closeButton?.Focus() != true && attemptsLeft > 0)
+                Dispatcher.UIThread.Post(
+                    () => ApplySettingsFocus(attemptsLeft - 1),
+                    DispatcherPriority.Background
+                );
+        }
+        else if (_settingsOpener is { IsEffectivelyVisible: true } opener)
+        {
+            opener.Focus();
+            _settingsOpener = null;
+        }
     }
 
     private void OnSettingsDialogClosing(object? sender, DialogClosingEventArgs args)
