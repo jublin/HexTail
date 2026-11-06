@@ -26,12 +26,17 @@ lookback, and native OS credential storage for authenticated connections.
 - Named saved filters, applied from the sidebar or the command palette.
 - Search tabs (Pin as tab) with a separate highlight color for each search.
 - Independent follow-tail toggles for the All view and each search view.
-- Optional inline context view with its own scroll position.
+- A row inspector (`Ctrl+I`): raw text, parsed fields you can turn into
+  show-only, hide or highlight rules or copy, **Copy raw** and **Copy JSON**,
+  an optional **Show context** list of neighbouring rows, and a bookmark toggle.
+- Session bookmarks: `m` marks the selected row, `]` and `[` jump between
+  bookmarked rows. Bookmarks are not saved.
 - Global rules: make any rule apply to every source with the chip's **All
   sources** switch.
-- Display density, log font size, and theme settings.
+- Display density, log font size, and theme settings, plus **Limits** for the
+  line cap per source, context lines and the initial Elastic fetch.
 - Session persistence for open files, searches, settings, window geometry, and
-  context-pane size.
+  the inspector's open state and width.
 
 ## Quick start
 
@@ -96,10 +101,11 @@ dotnet run --project src/HexTail.LogGenerator -- --format jsonl --output /tmp/he
    Shift+Enter shows only matching rows, Alt+Enter hides them. Turn on **Pin as
    tab** first to make Enter add a search tab instead; tabs show matching
    lines while the All view highlights the same matches.
-4. **Follow** and **Context** are on each view's toolbar. Follow keeps a view at
+4. **Follow** is on each view's toolbar. Follow keeps a view at
    the newest line or match; scrolling away shows a **↓ N new lines** pill that
-   jumps back and resumes following. **Context** shows the selected line with
-   its surrounding lines. **Pause** on the top toolbar freezes row updates in
+   jumps back and resumes following. Press `Ctrl+I`, Enter on a row, or
+   double-click a row to open the **inspector** for it; `m` bookmarks the
+   selected row. **Pause** on the top toolbar freezes row updates in
    the view while logs keep buffering.
 5. The status bar shows source and row counts and the display time zone
    (**Local** or **Utc**). For an Elastic source, the clock pill in the top
@@ -148,7 +154,8 @@ The default in-memory limit is 100,000 lines per file. It can be changed in
 
 HexTail saves session state as `HexTailSharp/session.json` under the operating
 system application-data directory. The file is written atomically and stores
-open paths, searches, settings, window geometry, and context-pane size. Remove
+open paths, searches, settings, window geometry, and the inspector's open
+state and width. Remove
 that file when a clean first-launch session is needed.
 
 The first launch of this version migrates `session.json` to the rule-based

@@ -8,7 +8,7 @@ HTTP server in the runtime path.
 Elastic sources use a dual-endpoint, source-neutral path: Kibana provides
 supported data-view metadata and Elasticsearch provides read-only PIT/search
 requests. Local files and remote sources emit parsed `Line` batches into the
-same buffer, search, context, and virtualized renderer. Secrets use the native
+same buffer, search, inspector, and virtualized renderer. Secrets use the native
 credential vault and are excluded from session JSON.
 
 ## Runtime flow
@@ -39,19 +39,20 @@ flowchart LR
    events for new lines, truncation, rotation, and missing-file recovery.
 5. `AppState` drains events on the UI dispatcher, appends parsed lines to the
    bounded `FileBuffer`, updates searches, and notifies the view models.
-6. Virtualized `ListBox` controls render only the visible log and context rows.
+6. Virtualized `ListBox` controls render only the visible log rows; the inspector's context list shows a small window of rows.
    Closing the window saves state and disposes the tailers.
 
 ## Component map
 
 | Area | Source | Responsibility |
 | --- | --- | --- |
-| Application shell | `src/HexTail/MainWindow.axaml` | Commands, tabs, search controls, follow/context toggles, settings pane |
+| Application shell | `src/HexTail/MainWindow.axaml` | Commands, tabs, search controls, follow toggle, inspector and settings panes |
 | State | `src/HexTail/Application/AppState.cs` | Open files, selected file, settings, searches, persistence coordination |
-| File state | `src/HexTail/Application/FileTabState.cs` | One file buffer, derived views, follow state, selected context line |
+| File state | `src/HexTail/Application/FileTabState.cs` | One file buffer, derived views, follow state, selected line (`SelectedLine`), bookmarks (`Bookmarks`) |
 | Domain | `src/HexTail/Domain/` | Lines, bounded buffers, parsers, search compilation, highlight ranges |
 | Tailing | `src/HexTail/Tailing/` | Background file monitoring and resilient tail events |
-| Views | `src/HexTail/Views/` | Native Avalonia log rows, search tabs, context view, and settings controls |
+| Views | `src/HexTail/Views/` | Native Avalonia log rows, search tabs, inspector panel, and settings controls |
+| View models | `src/HexTail/ViewModels/` | Window, settings and per-view state; `InspectorViewModel` owns the inspector (open state, width, fields, context list) and toggles bookmarks on the selected row |
 | Persistence | `src/HexTail/Persistence/` | Atomic JSON session load/save and persisted configuration types |
 | Tests | `src/HexTail.Tests/` | Domain, tailing, persistence, view-model, and headless UI coverage |
 
@@ -65,15 +66,17 @@ flowchart LR
   are rebased with the buffer.
 - Filter rules (`ViewRule`) have an action (highlight, show only, hide) and a
   scope: global rules live in `AppSettings.Rules`, source rules on the file tab.
-  Hide and show-only rules filter visible log and context lists but do not
-  delete rows from the buffer; highlight rules add match ranges to visible rows.
+  Hide and show-only rules filter the visible log list (the inspector's context
+  list ignores them) but do not delete rows from the buffer; highlight rules add match ranges to visible rows.
 - Each source also has a level mask (`LogLevels`); lines whose level cannot be
   detected always pass it.
 - Saved filters (`AppConfig.SavedFilters`) store source rules plus a level mask
   and are merged into a source on apply.
 - The main view and each search view have independent follow-tail state.
-- The inline context view is a window over the selected buffer line and owns
-  its own scrolling.
+- The inspector's context list is a window over the selected buffer line, sized
+  by `AppSettings.ContextAbove` and `AppSettings.ContextBelow`; its toggle is
+  in-session UI state. The inspector's open state and width are persisted;
+  bookmarks live on `FileTabState` for the session only and are not saved.
 - The default buffer cap is 100,000 lines per file, controlled by
   `AppSettings.MaxLines`.
 - Missing or malformed session JSON is treated as a first launch; atomic saves

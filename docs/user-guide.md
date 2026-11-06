@@ -18,6 +18,14 @@ The **command palette** (`Ctrl+K` or `Ctrl+Shift+P`) lists commands, the views o
 
 The status bar at the bottom shows how many sources are open, the selected view's row counts, and the **display time zone** picker. When **Pause** is on it also says **Paused — rows are buffering**.
 
+## Settings
+
+**Settings** (toolbar button or command palette) is a compact modal with a section list on the left: **Appearance**, **Elastic** and **Limits**. **Appearance** holds display density, log font size and theme. **Elastic** is described below. **Limits** holds:
+
+- **Maximum lines per source** (1,000 to 1,000,000; default 100,000): the buffer cap for each source. It applies to sources opened afterwards.
+- **Context lines before** and **after** (0 to 50; defaults 3 and 10): how many neighbouring rows the inspector's **Show context** lists.
+- **Initial Elastic fetch** (100 to 100,000; default 10,000): how many rows an Elastic view loads first. It applies to Elastic views opened afterwards.
+
 ## Set up Elastic
 
 1. Select **Add server**, give it a name, and enter separate **Kibana URL** and **Elasticsearch URL** values. Kibana supplies data-view metadata; Elasticsearch supplies log documents.
@@ -92,19 +100,30 @@ The bookmark toggle, **Pin as tab**, changes what a plain `Enter` does: instead 
 
 **Saved filters.** When the source has rules or a level filter, a save button appears at the right of the bar. Enter a name and choose **Save** (or press `Enter`; `Esc` cancels). A saved filter stores this source's rules and its level selection; global rules are not included. Saving under an existing name, ignoring case, replaces that filter. Saved filters are listed under **Saved filters** in the sidebar and in the command palette as **Apply filter: name**. Applying one **merges** it into the selected source: its rules are added (rules already present are skipped), and the level selection is replaced unless the saved filter shows every level. It never removes rules the source already has. Use the **x** next to a saved filter in the sidebar to delete it. Saved filters are kept in `session.json`.
 
-## Inspect rows and navigate tabs
+## Inspect a row
 
-Double-click a log row, or press Enter with its row focused, to expand selectable full text and parsed fields. Right-click, the Menu key, or Shift+F10 opens actions to toggle details, **Copy raw line**, or **Copy fields**. Ctrl+C (Command+C on macOS) copies the focused row's full raw text; add Shift to copy fields. Selecting text in expanded details keeps normal text copying available. For Elastic rows, raw text means the composed output-field row, not the original JSON document.
+The inspector is a panel on the right of the log that shows the selected row in detail. Open it with `Ctrl+I` (which also closes it), by pressing Enter on a focused row, by double-clicking a row, or with **Inspect** in the row menu; the last three open it on that row. Drag the handle on its left edge to resize it (260 to 640 px). Whether it is open and how wide it is are saved with the session.
+
+- **Raw** shows the row's full, selectable text.
+- **Fields** lists the parsed fields. Each field has a **…** menu: **Show only this value**, **Hide value** and **Highlight** add a source rule for that field's value (literal and case-sensitive), and **Copy value** copies it.
+- **Copy raw** copies the raw text. **Copy JSON** copies the fields as JSON and is disabled for plain-text rows.
+- **Show context** toggles a list of the rows around the selected one, taken from the source's buffer regardless of filters. The numbers of rows before and after come from **Settings → Limits**. Click a context row to select it. The toggle is not saved.
+- **Bookmark** marks the row. Bookmarked rows show a bookmark glyph. `m` toggles the bookmark on the selected row even when the inspector is closed, and `]` and `[` jump to the next and previous bookmarked row that is visible. Bookmarks last for the session and are not saved. The command palette has **Toggle inspector** and **Toggle bookmark on selected row**.
+
+## Navigate rows and tabs
+
+Select a row to work with it; right-click, the Menu key, or Shift+F10 opens actions for the row: **Inspect**, **Copy raw line**, **Toggle bookmark**, and **Copy fields**. Ctrl+C (Command+C on macOS) copies the focused row's full raw text; add Shift to copy fields. For Elastic rows, raw text means the composed output-field row, not the original JSON document.
 
 Long source names have full tooltips. Select any open source in the **sidebar**, and use the **x** on its row to close it. Within a source, view tabs hold **All** plus one tab per search; **All** stays first. Alt+Up or Alt+Down on a focused sidebar file moves it up or down, and Alt+Left or Alt+Right on a view tab header reorders search tabs, in both cases preserving the selection.
 
-Keyboard shortcuts for navigating views (they do not fire while a text box has focus, except the Ctrl combinations):
+Keyboard shortcuts for navigating views and rows (they do not fire while a text box has focus, except the Ctrl combinations):
 
 - `Ctrl+Tab` and `Ctrl+Shift+Tab` select the next and previous view; `Ctrl+1` to `Ctrl+9` select a view by position.
 - `Ctrl+W` closes the selected search view, or the source when **All** is selected.
 - `F` toggles **Follow**, `g` jumps to the first line, and `Shift+G` jumps to the newest line and follows. `/` or `Ctrl+F` focuses the filter input.
+- `Ctrl+I` toggles the inspector, and works while a text box has focus. `m` toggles a bookmark on the selected row, and `]` and `[` jump to the next and previous bookmarked row; they behave like the other row keys and stop following.
 - `j` and `k` select the next and previous row in the current view. `n` and `N` select the next and previous row that has at least one highlight in the current view (a match of a highlight rule or search). They stop at the ends of the list rather than wrapping, and `j`, `k`, `n` and `N` do nothing while a text box has focus.
 
-**Follow** and **Context** are toggles on each view's toolbar. Follow keeps the newest row (or match) in view; scrolling up, pressing `g`, or turning Follow off stops it. While a view is not following and new lines arrive, a **↓ N new lines** pill appears at the bottom of the list; click it to jump to the newest line and resume following. **Context** shows the neighboring buffered rows around the selected row.
+**Follow** is a toggle on each view's toolbar. Follow keeps the newest row (or match) in view; scrolling up, pressing `g`, turning Follow off, or using a row key such as `j`, `k`, `[` or `]` stops it. While a view is not following and new lines arrive, a **↓ N new lines** pill appears at the bottom of the list; click it to jump to the newest line and resume following.
 
 **Pause** (toolbar button or `Space`) freezes the rows shown while the sources keep buffering. The status bar says **Paused — rows are buffering**, the **visible** count stops changing while the **loaded** count keeps rising, and the new-lines pill counts what has arrived since. Press `Space` or the button again to resume and catch up, or click the pill, which resumes and follows. Pause applies to the whole window, not one view.
