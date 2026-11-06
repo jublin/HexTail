@@ -35,6 +35,8 @@ Closing Settings with Elastic drafts offers **Save changes**, **Discard changes*
 
 Passwords and API keys are stored in the operating-system credential vault, never in `session.json`. Authenticated configuration fails closed when the vault is unavailable. Linux needs an active Secret Service session and `libsecret`. See [native build and platform setup](native-build.md).
 
+**Upgrading the session file.** The first launch of this version migrates `session.json` (global labels and exclusions become filter rules) and keeps the original as `session.v1.json.bak` in the same folder. Going back to an older build afterwards loses labels and exclusions; copy the backup over `session.json` to recover them. If `session.json` cannot be read, or was written by a newer build, HexTail copies it once to `session.unreadable.bak` before saving anything new.
+
 ## Set an Elastic log interval
 
 A newly opened source initially loads the previous five minutes. Select an Elastic source and click the clock pill in the top toolbar. It shows the applied range and state, for example **Last 5 min · live**, and its tooltip shows the exact applied instants in the display zone. The pill opens the time range:

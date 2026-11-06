@@ -113,14 +113,16 @@ public sealed class FileTabState : IAsyncDisposable
     /// <summary>Global + source rules. UI thread only (it caches the last combination).</summary>
     public RuleSet EffectiveRules(AppSettings settings)
     {
+        // RestoreAsync may call SetRules off the UI thread: read each list once.
+        var global = settings.Rules;
+        var source = Rules;
         if (
-            !ReferenceEquals(_effectiveGlobal, settings.Rules)
-            || !ReferenceEquals(_effectiveSource, Rules)
+            !ReferenceEquals(_effectiveGlobal, global) || !ReferenceEquals(_effectiveSource, source)
         )
         {
-            _effectiveRules = RuleSet.Combine(settings.Rules, Rules);
-            _effectiveGlobal = settings.Rules;
-            _effectiveSource = Rules;
+            _effectiveRules = RuleSet.Combine(global, source);
+            _effectiveGlobal = global;
+            _effectiveSource = source;
         }
         return _effectiveRules;
     }

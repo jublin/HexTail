@@ -11,6 +11,22 @@ internal static class RuleMigration
 
     internal static bool NeedsMigration(string json) => Apply(json).Migrated;
 
+    /// <summary>True when the document was written by a newer build than this one understands.</summary>
+    internal static bool IsFutureVersion(string json)
+    {
+        try
+        {
+            return JsonNode.Parse(json) is JsonObject root
+                && root["version"] is JsonValue value
+                && value.TryGetValue<int>(out var version)
+                && version > CurrentVersion;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
+    }
+
     internal static (string Json, bool Migrated) Apply(string json)
     {
         JsonObject? root;
@@ -64,7 +80,8 @@ internal static class RuleMigration
                     var text = TextOf(exclusion);
                     if (string.IsNullOrWhiteSpace(text))
                         continue;
-                    modes.TryGetValue(text, out var mode);
+                    if (!modes.TryGetValue(text, out var mode))
+                        modes.TryGetValue(text.Trim(), out mode);
                     rules.Add(Rule(text.Trim(), mode, null, "Hide", false));
                 }
 

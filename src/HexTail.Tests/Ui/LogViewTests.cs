@@ -429,6 +429,52 @@ public sealed class LogViewTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task SourceRuleChangeRefreshesAlreadyRenderedRowHighlights()
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllLinesAsync(
+            path,
+            ["INFO keep", "INFO marked"],
+            TestContext.Current.CancellationToken
+        );
+        try
+        {
+            var window = TestWindow.CreatePolling(out var viewModel);
+            window.Show();
+            await viewModel.OpenPathsCommand.Execute([path]);
+            var view = await LoadedView(viewModel, 2);
+            var row = view.Lines.Single(item => item.Line.Raw == "INFO marked");
+            row.SetVisible(true);
+            Assert.Empty(row.Spans);
+
+            await viewModel.State.SetSourceRulesAsync(
+                viewModel.SelectedFile!.Model,
+                [
+                    new ViewRule
+                    {
+                        Pattern = "marked",
+                        Color = "#112233",
+                        Action = RuleAction.Highlight,
+                        Scope = RuleScope.Source,
+                    },
+                ],
+                TestContext.Current.CancellationToken
+            );
+            await UiWait.Until(() =>
+            {
+                view.Sync();
+                return row.Spans.Count == 1;
+            });
+            Assert.Equal([new HighlightSpan(5, 6, "#112233")], row.Spans);
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static async Task<LogViewViewModel> LoadedView(MainWindowViewModel viewModel, int lines)
     {
         await UiWait.Until(() =>

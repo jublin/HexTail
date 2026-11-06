@@ -239,4 +239,108 @@ public sealed class SourceRulesTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public async Task SourceRule_PinnedAsTabComesBackUnpinnedAndStillFilters()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            await using var state = new AppState(
+                NewTailers(),
+                new TestPersistence(),
+                credentials: new InMemoryCredentialVault()
+            );
+            var tab = await state.OpenFileAsync(
+                path,
+                cancellationToken: TestContext.Current.CancellationToken
+            );
+
+            await state.SetSourceRulesAsync(
+                tab,
+                [
+                    Source("mark", RuleAction.Highlight) with
+                    {
+                        PinnedAsTab = true,
+                    },
+                    Source("noise", RuleAction.Hide) with
+                    {
+                        PinnedAsTab = true,
+                    },
+                ],
+                TestContext.Current.CancellationToken
+            );
+
+            Assert.All(tab.Rules, rule => Assert.False(rule.PinnedAsTab));
+            Assert.DoesNotContain(tab.Searches, search => search.IsGlobalLabel);
+            var effective = tab.EffectiveRules(state.Settings);
+            Assert.Single(effective.Highlights(new Line("a mark here")));
+            Assert.False(effective.IsVisible(new Line("some noise")));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task RestoredFollowFlags_LandOnUserSearchesNotGlobalRuleSearches()
+    {
+        var path = Path.GetTempFileName();
+        var persistence = new TestPersistence();
+        var settings = new AppSettings
+        {
+            Rules =
+            [
+                new ViewRule
+                {
+                    Pattern = "global",
+                    Scope = RuleScope.Global,
+                    PinnedAsTab = true,
+                },
+            ],
+        };
+        try
+        {
+            await using (
+                var state = new AppState(
+                    NewTailers(),
+                    persistence,
+                    settings,
+                    credentials: new InMemoryCredentialVault()
+                )
+            )
+            {
+                var tab = await state.OpenFileAsync(
+                    path,
+                    cancellationToken: TestContext.Current.CancellationToken
+                );
+                var user = state.AddSearch(tab, "mine", MatchMode.Literal, false, "#22D3EE");
+                await state.SetSearchFollowAsync(
+                    tab,
+                    user,
+                    false,
+                    TestContext.Current.CancellationToken
+                );
+                Assert.True(tab.Searches[0].IsGlobalLabel);
+            }
+
+            await using var restored = new AppState(
+                NewTailers(),
+                persistence,
+                credentials: new InMemoryCredentialVault()
+            );
+            await restored.RestoreAsync(TestContext.Current.CancellationToken);
+            var tab2 = Assert.Single(restored.Files);
+            Assert.Equal(2, tab2.Searches.Count);
+            Assert.True(tab2.Searches[0].IsGlobalLabel);
+            Assert.True(tab2.FollowSearches[0]);
+            Assert.Equal("mine", tab2.Searches[1].Query.Query);
+            Assert.False(tab2.FollowSearches[1]);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

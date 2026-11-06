@@ -326,8 +326,11 @@ public sealed class AppState : IAsyncDisposable
             tab.ContextAbove = persisted.ContextAbove;
             tab.ContextBelow = persisted.ContextBelow;
 
-            foreach (var search in persisted.Searches)
+            // Global-rule searches were added when the tab opened; the persisted lists only hold user
+            // searches, so each follow flag is applied to the search it was saved with.
+            for (var i = 0; i < persisted.Searches.Count; i++)
             {
+                var search = persisted.Searches[i];
                 try
                 {
                     var active = new Search(
@@ -336,15 +339,14 @@ public sealed class AppState : IAsyncDisposable
                         tab.Buffer
                     );
                     tab.AddSearch(active);
+                    if (i < persisted.FollowSearches.Count)
+                        tab.FollowSearches[^1] = persisted.FollowSearches[i];
                 }
                 catch (ArgumentException)
                 {
                     // A stale invalid regex must not prevent the rest of the session from loading.
                 }
             }
-
-            for (var i = 0; i < tab.FollowSearches.Count && i < persisted.FollowSearches.Count; i++)
-                tab.FollowSearches[i] = persisted.FollowSearches[i];
         }
         foreach (var persisted in config.OpenElasticTabs)
         {
@@ -366,7 +368,9 @@ public sealed class AppState : IAsyncDisposable
                 tab.Levels = NormalizeLevels(persisted.Levels);
                 tab.ContextAbove = persisted.ContextAbove;
                 tab.ContextBelow = persisted.ContextBelow;
-                foreach (var search in persisted.Searches)
+                for (var i = 0; i < persisted.Searches.Count; i++)
+                {
+                    var search = persisted.Searches[i];
                     try
                     {
                         tab.AddSearch(
@@ -376,14 +380,11 @@ public sealed class AppState : IAsyncDisposable
                                 tab.Buffer
                             )
                         );
+                        if (i < persisted.FollowSearches.Count)
+                            tab.FollowSearches[^1] = persisted.FollowSearches[i];
                     }
                     catch (ArgumentException) { }
-                for (
-                    var i = 0;
-                    i < tab.FollowSearches.Count && i < persisted.FollowSearches.Count;
-                    i++
-                )
-                    tab.FollowSearches[i] = persisted.FollowSearches[i];
+                }
             }
             catch (ArgumentException) { }
             catch (InvalidOperationException) { }
@@ -1101,7 +1102,11 @@ public sealed class AppState : IAsyncDisposable
                         ? rule.Mode
                         : CompiledQuery.DetectMode(rule.Pattern),
                     Action = Enum.IsDefined(rule.Action) ? rule.Action : RuleAction.Highlight,
-                    PinnedAsTab = rule.PinnedAsTab && rule.Action != RuleAction.Hide,
+                    // Only global rules own a view tab; pinning source rules is not supported yet.
+                    PinnedAsTab =
+                        scope == RuleScope.Global
+                        && rule.PinnedAsTab
+                        && rule.Action != RuleAction.Hide,
                 }
             )
             .DistinctBy(rule =>

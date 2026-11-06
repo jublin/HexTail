@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using HexTail.Domain;
 
@@ -135,6 +136,67 @@ public static class AppConfigJson
     public static string Serialize(AppConfig config) => JsonSerializer.Serialize(config, Options);
 
     public static AppConfig Deserialize(string json) =>
-        JsonSerializer.Deserialize<AppConfig>(RuleMigration.Apply(json).Json, Options)
+        JsonSerializer.Deserialize<AppConfig>(Sanitize(RuleMigration.Apply(json).Json), Options)
         ?? new AppConfig();
+
+    /// <summary>
+    /// Drops individual rules that do not deserialize (an unknown action, scope or mode name written
+    /// by another build) and treats an unusable <c>levels</c> value as absent, so one bad value costs
+    /// that value, not the whole session.
+    /// </summary>
+    private static string Sanitize(string json)
+    {
+        JsonObject? root;
+        try
+        {
+            root = JsonNode.Parse(json) as JsonObject;
+        }
+        catch (JsonException)
+        {
+            return json; // The real deserializer reports the malformed document.
+        }
+        if (root is null)
+            return json;
+
+        if (root["settings"] is JsonObject settings)
+            SanitizeRules(settings);
+        foreach (var tabs in new[] { root["openFiles"], root["openElasticTabs"] })
+            if (tabs is JsonArray array)
+                foreach (var tab in array.OfType<JsonObject>())
+                {
+                    SanitizeRules(tab);
+                    if (
+                        tab.ContainsKey("levels")
+                        && !(tab["levels"] is { } levels && Parses<LogLevels>(levels))
+                    )
+                        tab.Remove("levels");
+                }
+        return root.ToJsonString();
+    }
+
+    private static void SanitizeRules(JsonObject owner)
+    {
+        if (!owner.ContainsKey("rules"))
+            return;
+        if (owner["rules"] is not JsonArray rules)
+        {
+            owner.Remove("rules");
+            return;
+        }
+        for (var index = rules.Count - 1; index >= 0; index--)
+            if (rules[index] is not JsonObject rule || !Parses<ViewRule>(rule))
+                rules.RemoveAt(index);
+    }
+
+    private static bool Parses<T>(JsonNode node)
+    {
+        try
+        {
+            return node.Deserialize<T>(Options) is not null;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 }

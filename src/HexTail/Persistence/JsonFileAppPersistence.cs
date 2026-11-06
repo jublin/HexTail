@@ -5,6 +5,7 @@ namespace HexTail.Persistence;
 public sealed class JsonFileAppPersistence : IAppPersistence
 {
     public const string FileName = "session.json";
+    private const string UnreadableBackup = "session.unreadable.bak";
 
     public JsonFileAppPersistence(string? path = null)
     {
@@ -24,15 +25,21 @@ public sealed class JsonFileAppPersistence : IAppPersistence
         if (!File.Exists(Path))
             return null;
 
+        string? json = null;
         try
         {
-            var json = await File.ReadAllTextAsync(Path, cancellationToken).ConfigureAwait(false);
+            json = await File.ReadAllTextAsync(Path, cancellationToken).ConfigureAwait(false);
             if (RuleMigration.NeedsMigration(json))
-                BackUpLegacySession();
+                BackUp("session.v1.json.bak");
+            else if (RuleMigration.IsFutureVersion(json))
+                BackUp(UnreadableBackup);
             return AppConfigJson.Deserialize(json);
         }
         catch (JsonException)
         {
+            // Keep the unreadable file: the next save would otherwise overwrite it.
+            if (json is not null)
+                BackUp(UnreadableBackup);
             return null;
         }
         catch (IOException)
@@ -45,12 +52,9 @@ public sealed class JsonFileAppPersistence : IAppPersistence
         }
     }
 
-    private void BackUpLegacySession()
+    private void BackUp(string fileName)
     {
-        var backup = System.IO.Path.Combine(
-            System.IO.Path.GetDirectoryName(Path)!,
-            "session.v1.json.bak"
-        );
+        var backup = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!, fileName);
         try
         {
             if (!File.Exists(backup))
