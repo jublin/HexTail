@@ -144,6 +144,16 @@
           AutomationProperties.Name="Copy fields as JSON"
         />
         <ToggleButton
+          x:Name="InspectorBookmark"
+          Content="Bookmark"
+          Margin="2"
+          IsChecked="{Binding IsBookmarked, Mode=OneWay}"
+          Command="{Binding ToggleBookmarkCommand}"
+          IsEnabled="{Binding HasLine}"
+          ToolTip.Tip="Bookmark this row (M)"
+          AutomationProperties.Name="Bookmark this row"
+        />
+        <ToggleButton
           x:Name="InspectorContextToggle"
           Content="Show context"
           Margin="2"

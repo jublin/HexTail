@@ -1,4 +1,5 @@
 using System.Reactive.Linq;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
@@ -148,6 +149,64 @@ public sealed class InspectorPanelTests
             buttons[0].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
 
             await UiWait.Until(() => file.Model.SelectedLine == 1);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    private static void Click(Window window, Control control)
+    {
+        var point = control
+            .TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)!
+            .Value;
+        window.MouseDown(point, MouseButton.Left);
+        window.MouseUp(point, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    [AvaloniaFact]
+    public async Task TheBookmarkButtonTogglesOnceAndFollowsTheRowsBookmark()
+    {
+        var path = Path.GetTempFileName();
+        var window = TestWindow.CreatePolling(out var owner);
+        try
+        {
+            await owner.OpenPathsCommand.Execute([path]);
+            var file = owner.SelectedFile!;
+            file.Model.Buffer.Append([new Line("one"), new Line("two")]);
+            file.SyncViews();
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            owner.Inspector.Open();
+            window
+                .GetVisualDescendants()
+                .OfType<LogView>()
+                .Single()
+                .FindControl<ListBox>("LogList")!
+                .SelectedIndex = 1;
+            await UiWait.Until(() => owner.Inspector.HasLine);
+            Dispatcher.UIThread.RunJobs();
+            var panel = window.GetVisualDescendants().OfType<InspectorPanel>().Single();
+            var button = panel.FindControl<ToggleButton>("InspectorBookmark")!;
+            Assert.NotEqual(true, button.IsChecked);
+
+            Click(window, button);
+            await UiWait.Until(() => owner.Inspector.IsBookmarked);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal([1], file.Model.Bookmarks);
+            Assert.Equal(true, button.IsChecked);
+
+            Click(window, button);
+            await UiWait.Until(() => !owner.Inspector.IsBookmarked);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Empty(file.Model.Bookmarks);
+            Assert.NotEqual(true, button.IsChecked);
         }
         finally
         {

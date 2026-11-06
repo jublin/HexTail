@@ -23,6 +23,9 @@ internal enum ShellAction
     PreviousRow,
     NextMatch,
     PreviousMatch,
+    ToggleBookmark,
+    NextBookmark,
+    PreviousBookmark,
 }
 
 internal readonly record struct ShellCommand(ShellAction Action, int Index = 0)
@@ -65,6 +68,9 @@ internal static class ShellShortcuts
             Key.J => new(ShellAction.NextRow),
             Key.K => new(ShellAction.PreviousRow),
             Key.N => new(shift ? ShellAction.PreviousMatch : ShellAction.NextMatch),
+            Key.M => new(ShellAction.ToggleBookmark),
+            Key.OemCloseBrackets => new(ShellAction.NextBookmark),
+            Key.OemOpenBrackets => new(ShellAction.PreviousBookmark),
             _ => ShellCommand.None,
         };
     }

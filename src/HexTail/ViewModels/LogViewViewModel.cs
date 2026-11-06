@@ -21,6 +21,7 @@ internal sealed class LogViewViewModel : ReactiveObject
     private AppSettings? _lastSettings;
     private int _lastViewsVersion;
     private int _lastRulesVersion;
+    private int _lastBookmarksVersion;
     private ViewSnapshot? _lastSnapshot;
     internal const int UnseenScanLimit = 10_000;
     private Line? _seenAnchor;
@@ -133,6 +134,24 @@ internal sealed class LogViewViewModel : ReactiveObject
         }
     }
 
+    internal void MoveToBookmark(int direction)
+    {
+        var current = CurrentRowIndex();
+        // With no (visible) selected row, start from the edge the direction heads away from.
+        var first =
+            current >= 0 ? current + direction
+            : direction > 0 ? 0
+            : Lines.Count - 1;
+        for (var index = first; index >= 0 && index < Lines.Count; index += direction)
+        {
+            if (File.IsBookmarked(Lines[index].Line))
+            {
+                SelectRow(Lines[index]);
+                return;
+            }
+        }
+    }
+
     private void SelectRow(LogLineViewModel row)
     {
         _file.SelectLine(row.Line);
@@ -219,6 +238,13 @@ internal sealed class LogViewViewModel : ReactiveObject
         else
             _rowRefreshPending |= settingsChanged;
         UpdateUnseen(lines, frozen);
+
+        if (_lastBookmarksVersion != _file.Model.BookmarksVersion)
+        {
+            _lastBookmarksVersion = _file.Model.BookmarksVersion;
+            foreach (var row in Lines)
+                row.SyncBookmark();
+        }
 
         var snapshot = new ViewSnapshot(
             MatchSummary,

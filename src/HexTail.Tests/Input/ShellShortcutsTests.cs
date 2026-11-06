@@ -66,6 +66,9 @@ public sealed class ShellShortcutsTests
     [InlineData(Key.K, KeyModifiers.None, nameof(ShellAction.PreviousRow))]
     [InlineData(Key.N, KeyModifiers.None, nameof(ShellAction.NextMatch))]
     [InlineData(Key.N, KeyModifiers.Shift, nameof(ShellAction.PreviousMatch))]
+    [InlineData(Key.M, KeyModifiers.None, nameof(ShellAction.ToggleBookmark))]
+    [InlineData(Key.OemCloseBrackets, KeyModifiers.None, nameof(ShellAction.NextBookmark))]
+    [InlineData(Key.OemOpenBrackets, KeyModifiers.None, nameof(ShellAction.PreviousBookmark))]
     public void SingleKeysWorkOutsideTextInput(Key key, KeyModifiers modifiers, string expected) =>
         Assert.Equal(
             Enum.Parse<ShellAction>(expected),
@@ -80,6 +83,9 @@ public sealed class ShellShortcutsTests
     [InlineData(Key.J)]
     [InlineData(Key.K)]
     [InlineData(Key.N)]
+    [InlineData(Key.M)]
+    [InlineData(Key.OemCloseBrackets)]
+    [InlineData(Key.OemOpenBrackets)]
     public void SingleKeysAreIgnoredWhileTyping(Key key) =>
         Assert.Equal(
             ShellCommand.None,

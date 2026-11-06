@@ -65,6 +65,14 @@ public partial class LogLineView : UserControl
             row.Inspect();
     }
 
+    private void OnToggleBookmark(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not LogLineViewModel row)
+            return;
+        row.Select();
+        row.ToggleBookmark();
+    }
+
     private async void OnCopyRawLine(object? sender, RoutedEventArgs e) =>
         await CopyAsync(fields: false);
 

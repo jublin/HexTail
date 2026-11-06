@@ -32,6 +32,8 @@ internal sealed class InspectorViewModel : ReactiveObject
     private string? _jsonText;
     private string? _error;
     private bool _contextOpen;
+    private bool _isBookmarked;
+    private int _lastBookmarksVersion = -1;
 
     internal InspectorViewModel(MainWindowViewModel owner)
     {
@@ -43,6 +45,7 @@ internal sealed class InspectorViewModel : ReactiveObject
             },
             owner.Scheduler
         );
+        ToggleBookmarkCommand = ReactiveCommand.Create(ToggleBookmarkOnSelection, owner.Scheduler);
         ToggleContextCommand = ReactiveCommand.Create(
             () =>
             {
@@ -55,6 +58,7 @@ internal sealed class InspectorViewModel : ReactiveObject
     internal MainWindowViewModel Owner => _owner;
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleContextCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleBookmarkCommand { get; }
     public ObservableCollection<InspectorFieldViewModel> Fields { get; } = [];
     public ObservableCollection<InspectorContextRowViewModel> ContextRows { get; } = [];
 
@@ -86,6 +90,9 @@ internal sealed class InspectorViewModel : ReactiveObject
         get => _width;
         set => this.RaiseAndSetIfChanged(ref _width, Math.Clamp(value, MinWidth, MaxWidth));
     }
+
+    /// <summary>Whether the inspected row is bookmarked. In-session only; not persisted.</summary>
+    public bool IsBookmarked => _isBookmarked;
 
     public bool HasLine => _line is not null;
     public string Title => _title;
@@ -150,6 +157,15 @@ internal sealed class InspectorViewModel : ReactiveObject
         }
     }
 
+    internal void ToggleBookmarkOnSelection()
+    {
+        // Read the live selection rather than the last synced row: the shortcut also works with the panel closed.
+        var file = _owner.SelectedFile?.Model;
+        if (file?.SelectedLine is not int selected || selected < 0 || selected >= file.Buffer.Count)
+            return;
+        _owner.State.ToggleBookmark(file, file.Buffer[selected]);
+    }
+
     internal void Open() => IsOpen = true;
 
     internal void Toggle() => IsOpen = !IsOpen;
@@ -164,6 +180,15 @@ internal sealed class InspectorViewModel : ReactiveObject
         {
             index = selected;
             line = file.Buffer[selected];
+        }
+
+        var bookmarked = line is not null && file is not null && file.IsBookmarked(line);
+        var bookmarksVersion = file?.BookmarksVersion ?? -1;
+        if (bookmarked != _isBookmarked || bookmarksVersion != _lastBookmarksVersion)
+        {
+            _lastBookmarksVersion = bookmarksVersion;
+            _isBookmarked = bookmarked;
+            this.RaisePropertyChanged(nameof(IsBookmarked));
         }
 
         if (ReferenceEquals(line, _line) && index == _index)

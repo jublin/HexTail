@@ -26,6 +26,7 @@ internal sealed class LogLineViewModel : ReactiveObject
     }
 
     public Line Line { get; }
+    public bool IsBookmarked { get; private set; }
     public IReadOnlyList<HighlightSpan> Spans { get; private set; } = [];
     public string ParsedFieldsText { get; private set; } = string.Empty;
     public bool HasParsedFields => Line.ParsedFields is { Count: > 0 };
@@ -55,6 +56,7 @@ internal sealed class LogLineViewModel : ReactiveObject
         Foreground = ThemeManager.Brush("TextBrush");
         Background = ThemeManager.Brush("SurfaceBrush");
         ParsedFieldsText = string.Empty;
+        IsBookmarked = _file.Model.IsBookmarked(Line);
 
         _renderDirty = true;
         if (_isVisible)
@@ -68,8 +70,21 @@ internal sealed class LogLineViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(RowPadding));
             this.RaisePropertyChanged(nameof(Foreground));
             this.RaisePropertyChanged(nameof(Background));
+            this.RaisePropertyChanged(nameof(IsBookmarked));
         }
     }
+
+    /// <summary>Re-reads the bookmark flag after the tab's bookmarks changed.</summary>
+    internal void SyncBookmark()
+    {
+        var bookmarked = _file.Model.IsBookmarked(Line);
+        if (bookmarked == IsBookmarked)
+            return;
+        IsBookmarked = bookmarked;
+        this.RaisePropertyChanged(nameof(IsBookmarked));
+    }
+
+    internal void ToggleBookmark() => _owner.Workspace.State.ToggleBookmark(_file.Model, Line);
 
     internal void SetVisible(bool visible)
     {

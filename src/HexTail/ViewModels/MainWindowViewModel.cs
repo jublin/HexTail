@@ -757,6 +757,16 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         if (SelectedFile is { } file)
         {
             yield return new(
+                "Toggle bookmark on selected row",
+                "View",
+                "M",
+                () =>
+                {
+                    Inspector.ToggleBookmarkOnSelection();
+                    return Task.CompletedTask;
+                }
+            );
+            yield return new(
                 "Focus search",
                 "Search",
                 "/",

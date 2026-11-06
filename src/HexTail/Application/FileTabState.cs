@@ -55,6 +55,28 @@ public sealed class FileTabState : IAsyncDisposable
     public List<bool> FollowSearches { get; } = [];
     public LogLevels Levels { get; set; } = LogLevels.All;
     public int? SelectedLine { get; set; }
+
+    /// <summary>Buffer indices of bookmarked rows. In-session only; never saved to the session file.</summary>
+    public SortedSet<int> Bookmarks { get; } = [];
+
+    /// <summary>Bumped whenever <see cref="Bookmarks"/> changes, so rows re-render their glyph.</summary>
+    public int BookmarksVersion { get; private set; }
+
+    public bool IsBookmarked(Line line)
+    {
+        foreach (var index in Bookmarks)
+            if (index >= 0 && index < Buffer.Count && ReferenceEquals(Buffer[index], line))
+                return true;
+        return false;
+    }
+
+    internal void ToggleBookmarkAt(int index)
+    {
+        if (!Bookmarks.Remove(index))
+            Bookmarks.Add(index);
+        BookmarksVersion++;
+    }
+
     public AppTimeZoneMode ElasticInputZone { get; set; } = AppTimeZoneMode.Utc;
     public string ElasticFrom { get; set; } = "now-5m";
     public string ElasticTo { get; set; } = "now";
@@ -156,6 +178,25 @@ public sealed class FileTabState : IAsyncDisposable
 
     private void OnBufferChanged(BufferChange change)
     {
+        if (Bookmarks.Count > 0)
+        {
+            if (change.Cleared)
+            {
+                Bookmarks.Clear();
+                BookmarksVersion++;
+            }
+            else if (change.RolledOutCount > 0)
+            {
+                var shifted = Bookmarks
+                    .Select(index => index - change.RolledOutCount)
+                    .Where(index => index >= 0)
+                    .ToList();
+                Bookmarks.Clear();
+                Bookmarks.UnionWith(shifted);
+                BookmarksVersion++;
+            }
+        }
+
         if (change.Cleared || SelectedLine is null)
             SelectedLine = null;
         else if (change.RolledOutCount > 0)

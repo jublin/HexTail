@@ -43,6 +43,66 @@ public sealed class RowKeyTests
     }
 
     [AvaloniaFact]
+    public async Task MoveToBookmarkJumpsBetweenBookmarkedVisibleRows()
+    {
+        var path = await WriteLinesAsync("a", "b", "c", "d", "e");
+        try
+        {
+            var window = TestWindow.Create(out var owner);
+            await owner.OpenPathsCommand.Execute([path]);
+            var file = owner.SelectedFile!;
+            var view = await LoadedView(owner, 5);
+            owner.State.ToggleBookmark(file.Model, file.Model.Buffer[1]);
+            owner.State.ToggleBookmark(file.Model, file.Model.Buffer[3]);
+            view.Sync();
+
+            view.MoveToBookmark(1);
+            Assert.Equal(1, file.Model.SelectedLine);
+            view.MoveToBookmark(1);
+            Assert.Equal(3, file.Model.SelectedLine);
+            view.MoveToBookmark(1);
+            Assert.Equal(3, file.Model.SelectedLine);
+            view.MoveToBookmark(-1);
+            Assert.Equal(1, file.Model.SelectedLine);
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task RowsFollowTheirBookmarkAfterASync()
+    {
+        var path = await WriteLinesAsync("a", "b");
+        try
+        {
+            var window = TestWindow.Create(out var owner);
+            await owner.OpenPathsCommand.Execute([path]);
+            var file = owner.SelectedFile!;
+            var view = await LoadedView(owner, 2);
+            Assert.All(view.Lines, row => Assert.False(row.IsBookmarked));
+
+            view.Lines[1].ToggleBookmark();
+            view.Sync();
+
+            Assert.False(view.Lines[0].IsBookmarked);
+            Assert.True(view.Lines[1].IsBookmarked);
+            Assert.Equal([1], file.Model.Bookmarks);
+
+            view.Lines[1].ToggleBookmark();
+            view.Sync();
+            Assert.False(view.Lines[1].IsBookmarked);
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task MoveToMatchJumpsBetweenRowsThatHaveHighlights()
     {
         var path = await WriteLinesAsync("x", "hit one", "y", "z", "hit two", "w");

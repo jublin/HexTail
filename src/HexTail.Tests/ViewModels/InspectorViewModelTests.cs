@@ -291,4 +291,58 @@ public sealed class InspectorViewModelTests
             File.Delete(path);
         }
     }
+
+    [AvaloniaFact]
+    public async Task ToggleBookmarkCommandFlipsIsBookmarkedForTheSelectedRow()
+    {
+        var line = new Line("k=v", new Dictionary<string, string> { ["k"] = "v" });
+        var (owner, file, path, window) = await OpenAsync(new Line("first"), line);
+        try
+        {
+            owner.State.SelectLine(file.Model, line);
+            owner.Inspector.Sync();
+            Assert.False(owner.Inspector.IsBookmarked);
+
+            await owner.Inspector.ToggleBookmarkCommand.Execute();
+            owner.Inspector.Sync();
+
+            Assert.True(owner.Inspector.IsBookmarked);
+            Assert.Equal([1], file.Model.Bookmarks);
+            Assert.Equal("Line 2", owner.Inspector.Title);
+            Assert.Equal("k=v", owner.Inspector.RawText);
+
+            await owner.Inspector.ToggleBookmarkCommand.Execute();
+            owner.Inspector.Sync();
+
+            Assert.False(owner.Inspector.IsBookmarked);
+            Assert.Empty(file.Model.Bookmarks);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task ToggleBookmarkWithNoSelectedRowDoesNothing()
+    {
+        var (owner, file, path, window) = await OpenAsync(new Line("a"));
+        try
+        {
+            owner.Inspector.Sync();
+
+            owner.Inspector.ToggleBookmarkOnSelection();
+
+            Assert.Empty(file.Model.Bookmarks);
+            Assert.False(owner.Inspector.IsBookmarked);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
 }

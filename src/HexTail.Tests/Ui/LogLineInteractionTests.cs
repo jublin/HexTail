@@ -79,7 +79,7 @@ public sealed class LogLineInteractionTests
                 .Single()
                 .GetVisualDescendants()
                 .OfType<Border>()
-                .First(b => b.Child is StackPanel);
+                .First(b => b.Child is Grid);
             var point = border
                 .TranslatePoint(
                     new Point(border.Bounds.Width / 2, border.Bounds.Height / 2),

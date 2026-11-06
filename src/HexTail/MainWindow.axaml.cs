@@ -388,6 +388,15 @@ public partial class MainWindow : Window
             case ShellAction.PreviousMatch when file is not null:
                 file.SelectedView.MoveToMatch(-1);
                 break;
+            case ShellAction.ToggleBookmark when file is not null:
+                ViewModel.Inspector.ToggleBookmarkOnSelection();
+                break;
+            case ShellAction.NextBookmark when file is not null:
+                file.SelectedView.MoveToBookmark(1);
+                break;
+            case ShellAction.PreviousBookmark when file is not null:
+                file.SelectedView.MoveToBookmark(-1);
+                break;
             case ShellAction.ScrollToTop:
                 this.GetVisualDescendants()
                     .OfType<LogView>()

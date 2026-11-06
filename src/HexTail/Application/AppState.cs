@@ -945,6 +945,23 @@ public sealed class AppState : IAsyncDisposable
             Window = window;
     }
 
+    public void ToggleBookmark(FileTabState tab, Line line)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(line);
+        lock (_gate)
+        {
+            if (!_files.Contains(tab))
+                return;
+
+            var index = FindLineIndex(tab, line);
+            if (index < 0)
+                return;
+            tab.ToggleBookmarkAt(index);
+        }
+        NotifyChanged();
+    }
+
     private static int FindLineIndex(FileTabState tab, Line line)
     {
         for (var index = 0; index < tab.Buffer.Count; index++)

@@ -3,6 +3,7 @@
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:vm="using:HexTail.ViewModels"
   xmlns:views="using:HexTail.Views"
+  xmlns:ic="https://github.com/projektanker/icons.avalonia"
   x:Class="HexTail.Views.LogLineView"
   x:DataType="vm:LogLineViewModel"
 >
@@ -14,6 +15,12 @@
         Header="Copy raw line"
         InputGesture="Ctrl+C"
         Click="OnCopyRawLine"
+      />
+      <MenuItem
+        x:Name="ToggleBookmarkRow"
+        Header="Toggle bookmark"
+        InputGesture="M"
+        Click="OnToggleBookmark"
       />
       <MenuItem
         Header="Copy fields"
@@ -31,8 +38,17 @@
     Tapped="OnTapped"
     DoubleTapped="OnDoubleTapped"
   >
-    <StackPanel Spacing="3">
+    <Grid ColumnDefinitions="Auto,*">
+      <ic:Icon
+        x:Name="BookmarkGlyph"
+        Value="mdi-bookmark"
+        Foreground="{DynamicResource AccentBrush}"
+        IsVisible="{Binding IsBookmarked}"
+        VerticalAlignment="Center"
+        Margin="0,0,6,0"
+      />
       <views:HighlightedTextBlock
+        Grid.Column="1"
         Text="{Binding Line.Raw}"
         Spans="{Binding Spans}"
         FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
@@ -41,6 +57,6 @@
         TextWrapping="NoWrap"
         TextTrimming="CharacterEllipsis"
       />
-    </StackPanel>
+    </Grid>
   </Border>
 </UserControl>
