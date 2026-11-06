@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using HexTail.Domain;
 using HexTail.ViewModels;
 using ReactiveUI.Reactive;
@@ -37,13 +38,32 @@ public partial class FilterBar : UserControl
             if (args.PropertyName == nameof(RuleChipViewModel.IsEditorOpen) && !chip.IsEditorOpen)
                 flyout.Hide();
         }
+        void OnOpened(object? s, EventArgs args)
+        {
+            flyout.Opened -= OnOpened;
+            // Keyboard users land on the pattern, ready to retype it (Enter applies, Escape cancels).
+            if (
+                flyout is Flyout { Content: Control root }
+                && root.GetVisualDescendants()
+                    .Prepend(root)
+                    .OfType<TextBox>()
+                    .FirstOrDefault(box => box.Name == "DraftPatternBox")
+                    is { } patternBox
+            )
+            {
+                patternBox.Focus();
+                patternBox.SelectAll();
+            }
+        }
         void OnClosed(object? s, EventArgs args)
         {
+            flyout.Opened -= OnOpened;
             flyout.Closed -= OnClosed;
             chip.PropertyChanged -= OnChipChanged;
             chip.IsEditorOpen = false;
         }
         chip.PropertyChanged += OnChipChanged;
+        flyout.Opened += OnOpened;
         flyout.Closed += OnClosed;
         FlyoutBase.ShowAttachedFlyout(button);
         e.Handled = true;

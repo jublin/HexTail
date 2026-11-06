@@ -2,35 +2,31 @@ using System.Reactive.Linq;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using HexTail.Domain;
+using HexTail.Persistence;
 using HexTail.Tests.Support;
+using HexTail.ViewModels;
 
 namespace HexTail.Tests.ViewModels;
 
 public sealed class FilterBarEditTests
 {
-    [AvaloniaFact]
-    public async Task ApplyingADraftMovesTheRuleToAnotherScope()
+    /// <summary>Opens a temp file with one source rule <paramref name="pattern"/> and runs <paramref name="body"/> on its chip.</summary>
+    private static async Task WithRuleChipAsync(
+        string pattern,
+        Func<MainWindowViewModel, FileTabViewModel, RuleChipViewModel, Task> body,
+        IAppPersistence? persistence = null
+    )
     {
         var path = Path.GetTempFileName();
         try
         {
-            var window = TestWindow.Create(out var owner);
+            var window = TestWindow.Create(persistence ?? new TestPersistence(), out var owner);
             await owner.InitializeAsync();
             await owner.OpenPathsCommand.Execute([path]);
             var file = owner.SelectedFile!;
-            await owner.State.SetSourceRulesAsync(file.Model, [TestRules.Source("a")]);
+            await owner.State.SetSourceRulesAsync(file.Model, [TestRules.Source(pattern)]);
             owner.FilterBar.Sync();
-            var chip = owner.FilterBar.Chips.Single();
-            chip.OpenEditor();
-            Assert.True(chip.IsEditorOpen);
-            chip.Draft!.Pattern = "b";
-            chip.Draft.AllSources = true;
-
-            await chip.ApplyCommand.Execute();
-
-            Assert.Empty(file.Model.Rules);
-            Assert.Equal("b", owner.State.Settings.Rules.Single().Pattern);
-            Assert.False(chip.IsEditorOpen);
+            await body(owner, file, owner.FilterBar.Chips.Single());
             window.Close();
             await owner.DisposeAsync();
         }
@@ -41,92 +37,107 @@ public sealed class FilterBarEditTests
     }
 
     [AvaloniaFact]
-    public async Task ApplyingAnInvalidDraftChangesNothingAndKeepsTheEditorOpen()
+    public Task ApplyingADraftMovesTheRuleToAnotherScope() =>
+        WithRuleChipAsync(
+            "a",
+            async (owner, file, chip) =>
+            {
+                chip.OpenEditor();
+                Assert.True(chip.IsEditorOpen);
+                chip.Draft!.Pattern = "b";
+                chip.Draft.AllSources = true;
+
+                await chip.ApplyCommand.Execute();
+
+                Assert.Empty(file.Model.Rules);
+                Assert.Equal("b", owner.State.Settings.Rules.Single().Pattern);
+                Assert.False(chip.IsEditorOpen);
+            }
+        );
+
+    [AvaloniaFact]
+    public Task ApplyingAnInvalidDraftChangesNothingAndKeepsTheEditorOpen() =>
+        WithRuleChipAsync(
+            "a",
+            async (_, file, chip) =>
+            {
+                chip.OpenEditor();
+                chip.Draft!.Pattern = "  ";
+
+                await chip.ApplyCommand.Execute();
+
+                Assert.Equal("a", file.Model.Rules.Single().Pattern);
+                Assert.True(chip.IsEditorOpen);
+            }
+        );
+
+    [AvaloniaFact]
+    public Task CancelLeavesRulesUntouchedAndClosesTheEditor() =>
+        WithRuleChipAsync(
+            "a",
+            async (_, file, chip) =>
+            {
+                chip.OpenEditor();
+                chip.Draft!.Pattern = "changed";
+
+                await chip.CancelCommand.Execute();
+
+                Assert.False(chip.IsEditorOpen);
+                Assert.Equal("a", file.Model.Rules.Single().Pattern);
+                chip.OpenEditor();
+                Assert.Equal("a", chip.Draft!.Pattern);
+            }
+        );
+
+    [AvaloniaFact]
+    public async Task ApplyFailureShowsInTheDraftKeepsTheEditorOpenAndClearsOnEdit()
     {
-        var path = Path.GetTempFileName();
-        try
-        {
-            var window = TestWindow.Create(out var owner);
-            await owner.InitializeAsync();
-            await owner.OpenPathsCommand.Execute([path]);
-            var file = owner.SelectedFile!;
-            await owner.State.SetSourceRulesAsync(file.Model, [TestRules.Source("a")]);
-            owner.FilterBar.Sync();
-            var chip = owner.FilterBar.Chips.Single();
-            chip.OpenEditor();
-            chip.Draft!.Pattern = "  ";
+        var persistence = new TestPersistence();
+        await WithRuleChipAsync(
+            "a",
+            async (owner, file, chip) =>
+            {
+                chip.OpenEditor();
+                var draft = chip.Draft!;
+                draft.AllSources = true;
+                draft.Pattern = "b";
+                owner.FilterBar.Error = "stale";
+                persistence.SaveError = new IOException("disk full");
 
-            await chip.ApplyCommand.Execute();
+                await chip.ApplyCommand.Execute();
 
-            Assert.Equal("a", file.Model.Rules.Single().Pattern);
-            Assert.True(chip.IsEditorOpen);
-            window.Close();
-            await owner.DisposeAsync();
-        }
-        finally
-        {
-            File.Delete(path);
-        }
+                Assert.Equal("disk full", draft.SaveError);
+                Assert.True(draft.HasSaveError);
+                Assert.True(chip.IsEditorOpen);
+                Assert.Null(owner.FilterBar.Error);
+
+                draft.Pattern = "c";
+                Assert.Null(draft.SaveError);
+
+                persistence.SaveError = null;
+                await chip.ApplyCommand.Execute();
+                Assert.Null(draft.SaveError);
+                Assert.False(chip.IsEditorOpen);
+                Assert.Contains(owner.State.Settings.Rules, rule => rule.Pattern == "c");
+            },
+            persistence
+        );
     }
 
     [AvaloniaFact]
-    public async Task CancelLeavesRulesUntouchedAndClosesTheEditor()
-    {
-        var path = Path.GetTempFileName();
-        try
-        {
-            var window = TestWindow.Create(out var owner);
-            await owner.InitializeAsync();
-            await owner.OpenPathsCommand.Execute([path]);
-            var file = owner.SelectedFile!;
-            await owner.State.SetSourceRulesAsync(file.Model, [TestRules.Source("a")]);
-            owner.FilterBar.Sync();
-            var chip = owner.FilterBar.Chips.Single();
-            chip.OpenEditor();
-            chip.Draft!.Pattern = "changed";
+    public Task RemovingFromTheEditorRemovesTheRuleAndClosesIt() =>
+        WithRuleChipAsync(
+            "a",
+            async (owner, file, chip) =>
+            {
+                chip.OpenEditor();
 
-            await chip.CancelCommand.Execute();
+                await chip.RemoveCommand.Execute();
 
-            Assert.False(chip.IsEditorOpen);
-            Assert.Equal("a", file.Model.Rules.Single().Pattern);
-            chip.OpenEditor();
-            Assert.Equal("a", chip.Draft!.Pattern);
-            window.Close();
-            await owner.DisposeAsync();
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
-
-    [AvaloniaFact]
-    public async Task ActivatingARuleChipOpensItsEditor()
-    {
-        var path = Path.GetTempFileName();
-        try
-        {
-            var window = TestWindow.Create(out var owner);
-            await owner.InitializeAsync();
-            await owner.OpenPathsCommand.Execute([path]);
-            await owner.State.SetSourceRulesAsync(
-                owner.SelectedFile!.Model,
-                [TestRules.Source("a")]
-            );
-            owner.FilterBar.Sync();
-            var chip = owner.FilterBar.Chips.Single();
-            Assert.False(chip.IsEditorOpen);
-            await chip.ActivateCommand.Execute();
-            Assert.True(chip.IsEditorOpen);
-            Assert.Equal("Edit a", chip.BodyAutomationName);
-            window.Close();
-            await owner.DisposeAsync();
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
+                Assert.Empty(file.Model.Rules);
+                Assert.False(chip.IsEditorOpen);
+            }
+        );
 
     [AvaloniaFact]
     public async Task PinnedTabChipsHaveNoEditorAndAreNamedAsTabSelectors()

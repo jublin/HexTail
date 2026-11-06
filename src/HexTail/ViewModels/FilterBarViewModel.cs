@@ -203,20 +203,26 @@ internal sealed class FilterBarViewModel : ReactiveObject
                 .AsTask()
             : Task.CompletedTask;
 
-    internal Task RemoveAsync(RuleChipViewModel chip)
+    internal async Task RemoveAsync(RuleChipViewModel chip)
     {
         var file = _owner.SelectedFile?.Model;
         if (chip.PinnedSearch is { } search)
-            return file is null
-                ? Task.CompletedTask
-                : _owner.State.RemoveSearchAsync(file, search).AsTask();
-        return _owner.State.RemoveRuleAsync(file, chip.Rule).AsTask();
+        {
+            if (file is not null)
+                await _owner.State.RemoveSearchAsync(file, search);
+            return;
+        }
+        await _owner.State.RemoveRuleAsync(file, chip.Rule);
+        // Removing from inside the editor must also dismiss its flyout.
+        chip.IsEditorOpen = false;
     }
 
     internal async Task ApplyAsync(RuleChipViewModel chip)
     {
         if (!chip.IsRuleChip || chip.Draft is not { CanSave: true } draft)
             return;
+        draft.SaveError = null;
+        Error = null;
         try
         {
             await _owner.State.ReplaceRuleAsync(
@@ -228,7 +234,8 @@ internal sealed class FilterBarViewModel : ReactiveObject
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Error = ex.Message;
+            // The flyout covers the filter bar's own error line, so report inside the editor.
+            draft.SaveError = ex.Message;
         }
     }
 

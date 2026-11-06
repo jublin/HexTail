@@ -1,5 +1,6 @@
 using System.Reactive;
 using System.Reactive.Concurrency;
+using Avalonia.Data.Converters;
 using Avalonia.Media;
 using HexTail.Domain;
 using ReactiveUI;
@@ -18,6 +19,7 @@ internal sealed class RuleDraftViewModel : ReactiveObject
     private bool _allSources;
     private string _color;
     private bool _pinnedAsTab;
+    private string? _saveError;
 
     internal RuleDraftViewModel(ViewRule original, IScheduler? scheduler = null)
     {
@@ -29,6 +31,10 @@ internal sealed class RuleDraftViewModel : ReactiveObject
         _allSources = original.Scope == RuleScope.Global;
         _color = original.Color;
         _pinnedAsTab = original.PinnedAsTab;
+        SwatchOptions = MainWindowViewModel
+            .Swatches.Select(color => new SwatchOption(color))
+            .ToList();
+        UpdateSelectedSwatch();
         PickSwatchCommand = ReactiveCommand.Create<string>(
             PickSwatch,
             scheduler ?? ImmediateScheduler.Instance
@@ -40,7 +46,34 @@ internal sealed class RuleDraftViewModel : ReactiveObject
     public IReadOnlyList<RuleAction> Actions { get; } =
     [RuleAction.Highlight, RuleAction.ShowOnly, RuleAction.Hide];
 
+    /// <summary>The swatches with a flag marking the one equal to the draft color.</summary>
+    public IReadOnlyList<SwatchOption> SwatchOptions { get; }
+
+    /// <summary>Display text for the action picker.</summary>
+    public static FuncValueConverter<RuleAction, string> ActionText { get; } =
+        new(action =>
+            action switch
+            {
+                RuleAction.ShowOnly => "Show only",
+                RuleAction.Hide => "Hide",
+                _ => "Highlight",
+            }
+        );
+
     public ReactiveCommand<string, Unit> PickSwatchCommand { get; }
+
+    /// <summary>Why the last apply failed; shown inside the editor and cleared by the next edit.</summary>
+    public string? SaveError
+    {
+        get => _saveError;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _saveError, value);
+            this.RaisePropertyChanged(nameof(HasSaveError));
+        }
+    }
+
+    public bool HasSaveError => !string.IsNullOrWhiteSpace(SaveError);
 
     public string Pattern
     {
@@ -65,7 +98,11 @@ internal sealed class RuleDraftViewModel : ReactiveObject
     public bool CaseSensitive
     {
         get => _caseSensitive;
-        set => this.RaiseAndSetIfChanged(ref _caseSensitive, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _caseSensitive, value);
+            SaveError = null;
+        }
     }
 
     public RuleAction Action
@@ -76,6 +113,7 @@ internal sealed class RuleDraftViewModel : ReactiveObject
             this.RaiseAndSetIfChanged(ref _action, value);
             this.RaisePropertyChanged(nameof(CanPin));
             this.RaisePropertyChanged(nameof(HasColor));
+            SaveError = null;
         }
     }
 
@@ -86,6 +124,7 @@ internal sealed class RuleDraftViewModel : ReactiveObject
         {
             this.RaiseAndSetIfChanged(ref _allSources, value);
             this.RaisePropertyChanged(nameof(CanPin));
+            SaveError = null;
         }
     }
 
@@ -96,6 +135,8 @@ internal sealed class RuleDraftViewModel : ReactiveObject
         {
             this.RaiseAndSetIfChanged(ref _color, value);
             this.RaisePropertyChanged(nameof(PickerColor));
+            UpdateSelectedSwatch();
+            SaveError = null;
         }
     }
 
@@ -109,7 +150,11 @@ internal sealed class RuleDraftViewModel : ReactiveObject
     public bool PinnedAsTab
     {
         get => _pinnedAsTab;
-        set => this.RaiseAndSetIfChanged(ref _pinnedAsTab, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _pinnedAsTab, value);
+            SaveError = null;
+        }
     }
 
     public bool HasColor => Action != RuleAction.Hide;
@@ -132,10 +177,35 @@ internal sealed class RuleDraftViewModel : ReactiveObject
             PinnedAsTab = CanPin && PinnedAsTab,
         };
 
+    private void UpdateSelectedSwatch()
+    {
+        foreach (var option in SwatchOptions)
+            option.IsSelected = string.Equals(
+                option.Color,
+                _color,
+                StringComparison.OrdinalIgnoreCase
+            );
+    }
+
     private void RaiseValidity()
     {
+        SaveError = null;
         this.RaisePropertyChanged(nameof(Error));
         this.RaisePropertyChanged(nameof(HasError));
         this.RaisePropertyChanged(nameof(CanSave));
+    }
+}
+
+/// <summary>One color swatch in the editor; <see cref="IsSelected"/> marks the draft's current color.</summary>
+internal sealed class SwatchOption(string color) : ReactiveObject
+{
+    private bool _isSelected;
+
+    public string Color { get; } = color;
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => this.RaiseAndSetIfChanged(ref _isSelected, value);
     }
 }

@@ -241,4 +241,8 @@
   <Setter Property="Padding" Value="0" />
   <Setter Property="CornerRadius" Value="8" />
 </Style>
+<Style Selector="Button.swatch.selected">
+  <Setter Property="BorderThickness" Value="2" />
+  <Setter Property="BorderBrush" Value="{DynamicResource TextBrush}" />
+</Style>
 </Styles>

@@ -2,6 +2,7 @@
   xmlns="https://github.com/avaloniaui"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:vm="using:HexTail.ViewModels"
+  xmlns:domain="using:HexTail.Domain"
   xmlns:ic="https://github.com/projektanker/icons.avalonia"
   x:Class="HexTail.Views.FilterBar"
   x:DataType="vm:FilterBarViewModel"
@@ -144,7 +145,13 @@
                           ItemsSource="{Binding Draft.Actions}"
                           SelectedItem="{Binding Draft.Action, Mode=TwoWay}"
                           AutomationProperties.Name="Rule action"
-                        />
+                        >
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="domain:RuleAction">
+                              <TextBlock Text="{Binding Converter={x:Static vm:RuleDraftViewModel.ActionText}}" />
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
                       </StackPanel>
                       <ToggleSwitch
                         Name="DraftScopeSwitch"
@@ -164,20 +171,21 @@
                         Spacing="4"
                         IsVisible="{Binding Draft.HasColor}"
                       >
-                        <ItemsControl Name="DraftSwatches" ItemsSource="{Binding Draft.Swatches}">
+                        <ItemsControl Name="DraftSwatches" ItemsSource="{Binding Draft.SwatchOptions}">
                           <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                               <StackPanel Orientation="Horizontal" Spacing="4" />
                             </ItemsPanelTemplate>
                           </ItemsControl.ItemsPanel>
                           <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="x:String">
+                            <DataTemplate x:DataType="vm:SwatchOption">
                               <Button
                                 Classes="swatch"
-                                Background="{Binding}"
+                                Classes.selected="{Binding IsSelected}"
+                                Background="{Binding Color}"
                                 Command="{Binding $parent[ItemsControl].DataContext.Draft.PickSwatchCommand}"
-                                CommandParameter="{Binding}"
-                                AutomationProperties.Name="{Binding StringFormat='Use color {0}'}"
+                                CommandParameter="{Binding Color}"
+                                AutomationProperties.Name="{Binding Color, StringFormat='Use color {0}'}"
                               />
                             </DataTemplate>
                           </ItemsControl.ItemTemplate>
@@ -197,6 +205,15 @@
                         Text="{Binding Draft.Error}"
                         IsVisible="{Binding Draft.HasError}"
                         TextWrapping="Wrap"
+                        AutomationProperties.Name="Rule problem"
+                      />
+                      <TextBlock
+                        Name="DraftSaveError"
+                        Classes="error"
+                        Text="{Binding Draft.SaveError}"
+                        IsVisible="{Binding Draft.HasSaveError}"
+                        TextWrapping="Wrap"
+                        AutomationProperties.Name="Rule could not be saved"
                       />
                       <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
                         <Button
