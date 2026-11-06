@@ -712,7 +712,17 @@ public sealed class AppState : IAsyncDisposable
                 .ConfigureAwait(false);
             return;
         }
-        // Adding first means a missing source tab cannot silently drop the rule.
+        // A Source scope on either side needs a tab that is open in this state; without one
+        // half the move would silently no-op (losing or duplicating the rule), so do nothing.
+        if (old.Scope == RuleScope.Source || updated.Scope == RuleScope.Source)
+        {
+            lock (_gate)
+            {
+                if (tab is null || !_files.Contains(tab))
+                    return;
+            }
+        }
+        // Add first so a failure part-way leaves a duplicate rather than a lost rule.
         await EditRulesAsync(
                 tab,
                 updated.Scope,
@@ -729,6 +739,7 @@ public sealed class AppState : IAsyncDisposable
             .ConfigureAwait(false);
     }
 
+    // Callers are expected on the UI thread; the read-modify-write below is not atomic.
     private async ValueTask EditRulesAsync(
         FileTabState? tab,
         RuleScope scope,
