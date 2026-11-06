@@ -246,7 +246,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         IsLoading ? "Loading data-view metadata…"
         : string.IsNullOrWhiteSpace(SelectedDataViewId)
             ? "Test connection, then choose a data view."
-        : !IsSelectionResolved ? "Metadata is unavailable. Test connection to retry."
+        : !IsSelectionResolved ? "Metadata could not be loaded. Choose Retry."
         : Fields.Count == 0 ? "No fields returned. Check the data view in Kibana."
         : "Data-view metadata loaded.";
     public string TimestampStatus =>

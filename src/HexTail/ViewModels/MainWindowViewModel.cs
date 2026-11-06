@@ -542,6 +542,11 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             return;
 
         _closed = true;
+        // The setup flow's debounce timer must not fire a connection test into a closed window.
+        if (Dispatcher.UIThread.CheckAccess())
+            ElasticSetup.CancelAutoTest();
+        else
+            Dispatcher.UIThread.Post(ElasticSetup.CancelAutoTest);
         try
         {
             _subscriptions.Dispose();

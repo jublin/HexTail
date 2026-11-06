@@ -237,7 +237,8 @@ public sealed class ElasticSetupPageTests
         next.Command!.Execute(null);
         await UiWait.Until(() => fixture.Setup.Step == ElasticSetupStep.DataView);
         fixture.Pump();
-        Assert.True(buttons[0].Classes.Contains("done") || fixture.Setup.Steps[0].IsDone);
+        Assert.Contains("done", buttons[0].Classes);
+        Assert.Contains("current", buttons[1].Classes);
         Assert.True(back.IsEffectivelyEnabled);
         Assert.True(fixture.Find<TextBox>("DataViewSearchBox").IsEffectivelyVisible);
         Assert.False(fixture.Find<TextBox>("CloudIdBox").IsEffectivelyVisible);
@@ -525,5 +526,273 @@ public sealed class ElasticSetupPageTests
             Assert.True(topLeft.X >= 0 && topLeft.X + button.Bounds.Width <= 720.5, name);
             Assert.True(topLeft.Y >= 0 && topLeft.Y + button.Bounds.Height <= 720.5, name);
         }
+    }
+
+    private static IInputElement? Focused(Fixture fixture) =>
+        TopLevel.GetTopLevel(fixture.Page)!.FocusManager!.GetFocusedElement();
+
+    private static async Task WalkToDataViewStepAsync(Fixture fixture)
+    {
+        await PassConnectionTestAsync(fixture);
+        fixture.Find<Button>("SetupNextButton").Command!.Execute(null);
+        await UiWait.Until(() => fixture.Setup.Step == ElasticSetupStep.DataView);
+        fixture.Pump();
+    }
+
+    [AvaloniaFact]
+    public async Task AStepButtonJumpsToItsStepThroughTheRealCommand()
+    {
+        await using var fixture = await CreateAsync();
+        fixture.Setup.StartNew();
+        fixture.Pump();
+        await WalkToDataViewStepAsync(fixture);
+        var buttons = fixture
+            .Find<ItemsControl>("SetupStepList")
+            .GetVisualDescendants()
+            .OfType<Button>()
+            .ToArray();
+        Assert.Same(fixture.Setup.GoToStepCommand, buttons[0].Command);
+        Assert.True(buttons[0].IsEffectivelyEnabled);
+        Assert.False(buttons[2].IsEffectivelyEnabled);
+
+        buttons[0].Command!.Execute(buttons[0].CommandParameter);
+        await UiWait.Until(() => fixture.Setup.Step == ElasticSetupStep.Connection);
+        fixture.Pump();
+
+        Assert.True(fixture.Find<TextBox>("CloudIdBox").IsEffectivelyVisible);
+        Assert.Contains("current", buttons[0].Classes);
+        Assert.True(buttons[1].IsEffectivelyEnabled);
+
+        buttons[1].Command!.Execute(buttons[1].CommandParameter);
+        await UiWait.Until(() => fixture.Setup.Step == ElasticSetupStep.DataView);
+        fixture.Pump();
+        Assert.True(fixture.Find<TextBox>("DataViewSearchBox").IsEffectivelyVisible);
+        Assert.Contains("done", buttons[0].Classes);
+    }
+
+    [AvaloniaFact]
+    public async Task ASelectedDataViewSurvivesBeingFilteredOutAndComingBack()
+    {
+        await using var fixture = await CreateAsync();
+        fixture.Setup.StartNew();
+        fixture.Pump();
+        await WalkToDataViewStepAsync(fixture);
+        var search = fixture.Find<TextBox>("DataViewSearchBox");
+        var list = fixture.Find<ListBox>("DataViewList");
+        var metrics = fixture.Setup.FilteredDataViews.Single(choice => choice.Id == "metrics");
+        // Select the way a click does, through the row, so the list's own binding stays in place.
+        list.GetVisualDescendants()
+            .OfType<ListBoxItem>()
+            .Single(row => ReferenceEquals(row.DataContext, metrics))
+            .IsSelected = true;
+        await UiWait.Until(() => fixture.Setup.View!.IsSelectionResolved);
+        fixture.Pump();
+        Assert.Same(metrics, list.SelectedItem);
+
+        search.Text = "apm";
+        fixture.Pump();
+        Assert.Equal(1, list.ItemCount);
+        Assert.Equal("metrics", fixture.Setup.View!.SelectedDataViewId);
+        Assert.True(fixture.Setup.CanGoNext);
+
+        search.Text = string.Empty;
+        fixture.Pump();
+        for (
+            var attempt = 0;
+            attempt < 100 && !ReferenceEquals(list.SelectedItem, metrics);
+            attempt++
+        )
+        {
+            fixture.Pump();
+            await Task.Delay(10);
+        }
+        Assert.True(
+            ReferenceEquals(list.SelectedItem, metrics),
+            $"selected={(list.SelectedItem as ElasticDataViewChoiceViewModel)?.Id ?? "null"} vm={fixture.Setup.View.SelectedDataViewId} items={string.Join(",", fixture.Setup.FilteredDataViews.Select(c => c.Id))} listItems={list.ItemCount}"
+        );
+
+        Assert.Equal(3, list.ItemCount);
+        Assert.Equal("metrics", fixture.Setup.View.SelectedDataViewId);
+        Assert.True(fixture.Setup.View.IsSelectionResolved);
+        var item = list.GetVisualDescendants()
+            .OfType<ListBoxItem>()
+            .Single(item => ReferenceEquals(item.DataContext, metrics));
+        Assert.True(item.IsSelected);
+    }
+
+    [AvaloniaFact]
+    public async Task TheConnectionNameIsEnteredOnTheFirstStepAndMustNotBeBlank()
+    {
+        await using var fixture = await CreateAsync();
+        fixture.Setup.AutoTestDelay = TimeSpan.FromMinutes(10);
+        fixture.Setup.StartNew();
+        fixture.Pump();
+        var name = fixture.Find<TextBox>("ConnectionNameBox");
+        var error = fixture.Find<TextBlock>("ConnectionNameError");
+        Assert.Equal("Connection name", AutomationProperties.GetName(name));
+        Assert.Equal("Name this server", name.PlaceholderText);
+        Assert.True(error.IsEffectivelyVisible);
+        Assert.Equal("Enter a connection name.", error.Text);
+
+        name.Text = "Production";
+        fixture.Pump();
+        Assert.Equal("Production", fixture.Setup.Connection!.Name);
+        Assert.False(error.IsEffectivelyVisible);
+
+        fixture.Setup.Connection.KibanaUrl = "https://kibana.example/";
+        fixture.Setup.Connection.ElasticsearchUrl = "https://elastic.example/";
+        await fixture.Setup.Connection.TestConnectionCommand.Execute().FirstAsync();
+        fixture.Pump();
+        Assert.True(fixture.Find<Button>("SetupNextButton").IsEffectivelyEnabled);
+        name.Text = string.Empty;
+        fixture.Pump();
+        Assert.True(error.IsEffectivelyVisible);
+        Assert.False(fixture.Find<Button>("SetupNextButton").IsEffectivelyEnabled);
+    }
+
+    [AvaloniaFact]
+    public async Task APassingTestFillsTheBlankNameBoxFromTheHost()
+    {
+        await using var fixture = await CreateAsync();
+        fixture.Setup.StartNew();
+        fixture.Pump();
+
+        await PassConnectionTestAsync(fixture);
+
+        Assert.Equal("elastic.example", fixture.Find<TextBox>("ConnectionNameBox").Text);
+        Assert.False(fixture.Find<TextBlock>("ConnectionNameError").IsEffectivelyVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task TheDataViewStepOffersARetryWhenTheMetadataFailedToLoad()
+    {
+        await using var fixture = await CreateAsync();
+        fixture.Setup.StartNew();
+        fixture.Pump();
+        await WalkToDataViewStepAsync(fixture);
+        var retry = fixture.Find<Button>("DataViewRetryButton");
+        Assert.Equal("Retry loading data view", AutomationProperties.GetName(retry));
+        Assert.False(retry.IsEffectivelyVisible);
+        var original = fixture.Client.DataViewHandler!;
+        fixture.Client.DataViewHandler = _ => throw new IOException("kibana is down");
+
+        fixture.Find<ListBox>("DataViewList").SelectedItem = fixture.Setup.FilteredDataViews[0];
+        await UiWait.Until(() => fixture.Setup.View!.Error is not null);
+        fixture.Pump();
+
+        Assert.True(retry.IsEffectivelyVisible);
+        Assert.Contains(
+            fixture.Page.GetVisualDescendants().OfType<TextBlock>(),
+            text =>
+                text.Text == "Metadata could not be loaded. Choose Retry."
+                && text.IsEffectivelyVisible
+        );
+        Assert.DoesNotContain(
+            fixture.Page.GetVisualDescendants().OfType<TextBlock>(),
+            text =>
+                text.Text?.Contains("Test connection to retry", StringComparison.Ordinal) is true
+        );
+
+        fixture.Client.DataViewHandler = original;
+        retry.Command!.Execute(null);
+        await UiWait.Until(() => fixture.Setup.View!.IsSelectionResolved);
+        fixture.Pump();
+
+        Assert.False(retry.IsEffectivelyVisible);
+        Assert.True(fixture.Find<Button>("SetupNextButton").IsEffectivelyEnabled);
+    }
+
+    [AvaloniaFact]
+    public async Task ButtonAccessibleNamesContainTheirVisibleText()
+    {
+        await using var fixture = await CreateAsync();
+        fixture.Setup.StartNew();
+        fixture.Pump();
+        await WalkToDataViewStepAsync(fixture);
+        fixture.Client.DataViewHandler = _ => throw new IOException("kibana is down");
+        fixture.Find<ListBox>("DataViewList").SelectedItem = fixture.Setup.FilteredDataViews[0];
+        await UiWait.Until(() => fixture.Setup.View!.Error is not null);
+        fixture.Pump();
+
+        var buttons = fixture
+            .Page.GetVisualDescendants()
+            .OfType<Button>()
+            .Where(button => button.TemplatedParent is null && button.Content is string)
+            .ToArray();
+        Assert.Contains(buttons, button => button.Name == "SetupBackButton");
+        foreach (var button in buttons)
+            Assert.Contains(
+                (string)button.Content!,
+                AutomationProperties.GetName(button),
+                StringComparison.OrdinalIgnoreCase
+            );
+    }
+
+    [AvaloniaFact]
+    public async Task TheLoginMethodsAreShownAsPlainText()
+    {
+        await using var fixture = await CreateAsync();
+        fixture.Setup.StartNew();
+        fixture.Pump();
+        var auth = fixture.Find<ComboBox>("AuthModeBox");
+
+        string Shown() =>
+            string.Join(
+                "|",
+                auth.GetVisualDescendants()
+                    .OfType<TextBlock>()
+                    .Where(text => text.IsEffectivelyVisible)
+                    .Select(text => text.Text)
+            );
+
+        Assert.Contains("Anonymous", Shown());
+        fixture.Setup.Connection!.AuthMode = ElasticAuthMode.Basic;
+        fixture.Pump();
+        Assert.Contains("Username and password", Shown());
+        fixture.Setup.Connection.AuthMode = ElasticAuthMode.ApiKey;
+        fixture.Pump();
+        Assert.Contains("API key", Shown());
+
+        // The drop-down list lives in a popup, so ask the control for its items instead.
+        Assert.Equal(
+            ["Anonymous", "Username and password", "API key"],
+            auth.Items.Cast<ElasticAuthModeChoice>().Select(choice => choice.DisplayName)
+        );
+        auth.SelectedItem = auth.Items.Cast<ElasticAuthModeChoice>().First();
+        fixture.Pump();
+        Assert.Equal(ElasticAuthMode.Anonymous, fixture.Setup.Connection.AuthMode);
+    }
+
+    [AvaloniaFact]
+    public async Task OpeningThePageMovesFocusIntoTheStartingStep()
+    {
+        await using var fixture = await CreateAsync();
+        fixture.Setup.StartNew();
+        fixture.Pump();
+        await UiWait.Until(() =>
+            ReferenceEquals(Focused(fixture), fixture.Find<TextBox>("ConnectionNameBox"))
+        );
+        await PassConnectionTestAsync(fixture);
+        fixture.Find<Button>("SetupNextButton").Command!.Execute(null);
+        await UiWait.Until(() => fixture.Setup.Step == ElasticSetupStep.DataView);
+        var connectionId = fixture.Setup.Connection!.Id;
+
+        fixture.Setup.Close();
+        fixture.Pump();
+        fixture.Setup.AddSource(connectionId);
+        fixture.Pump();
+
+        await UiWait.Until(() =>
+            ReferenceEquals(Focused(fixture), fixture.Find<TextBox>("DataViewSearchBox"))
+        );
+
+        fixture.Setup.Close();
+        fixture.Pump();
+        fixture.Setup.EditConnection(connectionId);
+        fixture.Pump();
+
+        await UiWait.Until(() =>
+            ReferenceEquals(Focused(fixture), fixture.Find<TextBox>("ConnectionNameBox"))
+        );
     }
 }

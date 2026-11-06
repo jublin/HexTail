@@ -154,7 +154,8 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         IsOpen
         && Step switch
         {
-            ElasticSetupStep.Connection => Connection is { EndpointsOk: true, IsTesting: false },
+            ElasticSetupStep.Connection => Connection
+                is { EndpointsOk: true, IsTesting: false, NameError: null },
             ElasticSetupStep.DataView => View
                 is { IsSelectionResolved: true, IsLoading: false, SelectedDataViewId: { } id }
                 && !string.IsNullOrWhiteSpace(id),
@@ -307,6 +308,10 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         if (IsOpen)
             Close();
         _session++;
+        // Nothing of an earlier flow's editing or testing may carry over into this one.
+        CancelAutoTest();
+        _editStamp = 0;
+        _testStartedStamp = 0;
         _createdConnection = false;
         DataViewSearch = string.Empty;
         OpenNow = true;
@@ -368,10 +373,23 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
             && args.PropertyName == nameof(ElasticConnectionEditorViewModel.IsTesting)
         )
         {
-            if (Connection!.IsTesting)
+            var connection = Connection!;
+            if (connection.IsTesting)
                 _testStartedStamp = _editStamp;
-            else if (_retestPending)
-                Dispatcher.UIThread.Post(TryRunAutoTest);
+            else
+            {
+                FillBlankName(connection);
+                if (_retestPending)
+                {
+                    // The flow may be replaced before the posted job runs, so it checks again.
+                    var session = _session;
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (session == _session && _retestPending)
+                            TryRunAutoTest();
+                    });
+                }
+            }
         }
         else if (
             ReferenceEquals(sender, Connection)
@@ -405,7 +423,11 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         return timer;
     }
 
-    private void CancelAutoTest()
+    /// <summary>
+    /// Stops a pending automatic test and forgets a queued retest; also used when the window closes
+    /// so no timer outlives its owner.
+    /// </summary>
+    internal void CancelAutoTest()
     {
         _retestPending = false;
         _autoTestTimer?.Stop();
@@ -434,6 +456,27 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         _retestPending = false;
         connection.TestConnectionCommand.Execute().Subscribe(_ => { }, ReportBackgroundFailure);
     }
+
+    // A test that passed names a still-unnamed connection after the server it reached, so the
+    // person only has to type a name when they want a different one.
+    private static void FillBlankName(ElasticConnectionEditorViewModel connection)
+    {
+        if (!connection.EndpointsOk || !string.IsNullOrWhiteSpace(connection.Name))
+            return;
+        var cloudId = connection.CloudId.Trim();
+        var colon = cloudId.LastIndexOf(':');
+        var cloudName =
+            colon > 0 && connection.CloudIdError is null ? cloudId[..colon].Trim() : string.Empty;
+        var host = HostOf(connection.ElasticsearchUrl) ?? HostOf(connection.KibanaUrl);
+        var name = cloudName.Length > 0 ? cloudName : host;
+        if (!string.IsNullOrWhiteSpace(name))
+            connection.Name = name;
+    }
+
+    private static string? HostOf(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && !string.IsNullOrEmpty(uri.Host)
+            ? uri.Host
+            : null;
 
     private void OnDataViewsChanged(object? sender, NotifyCollectionChangedEventArgs args) =>
         RebuildFilteredDataViews();

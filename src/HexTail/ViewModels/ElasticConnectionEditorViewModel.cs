@@ -64,9 +64,12 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         set
         {
             this.RaiseAndSetIfChanged(ref _name, value);
+            this.RaisePropertyChanged(nameof(NameError));
             NotifySavePrerequisitesChanged();
         }
     }
+
+    public string? NameError => string.IsNullOrWhiteSpace(Name) ? "Enter a connection name." : null;
 
     /// <summary>Pasting a Cloud ID fills the URLs; it is a convenience input and is never persisted.</summary>
     public string CloudId
@@ -127,6 +130,14 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         }
     }
     public IReadOnlyList<ElasticAuthMode> AuthModes { get; } = Enum.GetValues<ElasticAuthMode>();
+
+    /// <summary>The login methods with the text people read; the enum values stay what is stored.</summary>
+    public IReadOnlyList<ElasticAuthModeChoice> AuthModeChoices { get; } =
+    [
+        new(ElasticAuthMode.Anonymous, "Anonymous"),
+        new(ElasticAuthMode.Basic, "Username and password"),
+        new(ElasticAuthMode.ApiKey, "API key"),
+    ];
     public bool IsAuthenticated => AuthMode != ElasticAuthMode.Anonymous;
     public bool IsBasic => AuthMode == ElasticAuthMode.Basic;
     public string Username
@@ -174,7 +185,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
 
     /// <summary>What saving the connection on its own needs: valid endpoints and no save running.</summary>
     internal bool CanSaveConnectionOnly =>
-        !IsSaving && KibanaUrlError is null && ElasticsearchUrlError is null;
+        !IsSaving && NameError is null && KibanaUrlError is null && ElasticsearchUrlError is null;
     private ElasticConnectionSettings? SavedConnection => _owner.SavedConnection(Id);
     private bool NeedsSecret => AuthMode is ElasticAuthMode.Basic or ElasticAuthMode.ApiKey;
     private bool HasStoredSecret =>
@@ -566,7 +577,12 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     internal async Task<bool> SaveConnectionOnlyAsync()
     {
         if (!CanSaveConnectionOnly)
+        {
+            // Say why, so the setup flow has something to show instead of a silent refusal.
+            if (!IsSaving && NameError is { } nameError)
+                Error = nameError;
             return false;
+        }
         var secret = Secret;
         _saveFailed = false;
         IsSaving = true;
@@ -685,6 +701,8 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         nameof(Username),
     ];
 }
+
+internal sealed record ElasticAuthModeChoice(ElasticAuthMode Mode, string DisplayName);
 
 internal sealed class ElasticDataViewChoiceViewModel(string id, string title) : ReactiveObject
 {

@@ -71,6 +71,23 @@
                 Text="Paste an Elastic Cloud ID, or enter the Kibana and Elasticsearch addresses. The connection is tested automatically once you stop typing."
               />
               <StackPanel Spacing="4">
+                <TextBlock Text="Connection name" Classes="elastic-form-label" />
+                <TextBox
+                  x:Name="ConnectionNameBox"
+                  Text="{Binding Name, Mode=TwoWay}"
+                  PlaceholderText="Name this server"
+                  AutomationProperties.Name="Connection name"
+                  AutomationProperties.HelpText="{Binding NameError}"
+                />
+                <TextBlock
+                  x:Name="ConnectionNameError"
+                  Text="{Binding NameError}"
+                  IsVisible="{Binding NameError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                  Classes="error"
+                  TextWrapping="Wrap"
+                />
+              </StackPanel>
+              <StackPanel Spacing="4">
                 <TextBlock Text="Cloud ID" Classes="elastic-form-label" />
                 <TextBox
                   x:Name="CloudIdBox"
@@ -142,11 +159,18 @@
                 <TextBlock Text="Login method" Classes="elastic-form-label" />
                 <ComboBox
                   x:Name="AuthModeBox"
-                  ItemsSource="{Binding AuthModes}"
-                  SelectedItem="{Binding AuthMode, Mode=TwoWay}"
+                  ItemsSource="{Binding AuthModeChoices}"
+                  SelectedValueBinding="{Binding Mode}"
+                  SelectedValue="{Binding AuthMode, Mode=TwoWay}"
                   HorizontalContentAlignment="Left"
                   AutomationProperties.Name="Login method"
-                />
+                >
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ElasticAuthModeChoice">
+                      <TextBlock Text="{Binding DisplayName}" />
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
               </StackPanel>
               <StackPanel Spacing="4" IsVisible="{Binding IsBasic}">
                 <TextBlock Text="Username" Classes="elastic-form-label" />
@@ -258,6 +282,14 @@
               TextWrapping="Wrap"
               AutomationProperties.LiveSetting="Assertive"
             />
+            <Button
+              x:Name="DataViewRetryButton"
+              Content="Retry"
+              Command="{Binding View.RefreshFieldsCommand}"
+              IsVisible="{Binding View.Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+              HorizontalAlignment="Left"
+              AutomationProperties.Name="Retry loading data view"
+            />
           </StackPanel>
 
           <!-- Steps 3 to 5 (filter, columns, name and open) are filled in by the next task. -->
@@ -296,7 +328,7 @@
             Grid.Column="2"
             Content="Back"
             Command="{Binding BackCommand}"
-            AutomationProperties.Name="Previous step"
+            AutomationProperties.Name="Back to previous step"
           />
           <Button
             x:Name="SetupNextButton"

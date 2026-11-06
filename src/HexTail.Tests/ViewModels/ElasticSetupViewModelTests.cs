@@ -1081,4 +1081,273 @@ public sealed class ElasticSetupViewModelTests
         await PumpAsync(100);
         Assert.Equal(0, loads);
     }
+
+    private static string EncodeCloudId(string payload) =>
+        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(payload));
+
+    private static async Task TestWithUrlsAsync(
+        Harness harness,
+        string kibana = "https://kibana.example/",
+        string elasticsearch = "https://elastic.example/"
+    )
+    {
+        harness.Setup.Connection!.KibanaUrl = kibana;
+        harness.Setup.Connection.ElasticsearchUrl = elasticsearch;
+        await harness.Setup.Connection.TestConnectionCommand.Execute();
+    }
+
+    [AvaloniaFact]
+    public async Task Connection_ABlankNameKeepsNextDisabledAndExplainsWhy()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.StartNew();
+        await TestWithUrlsAsync(harness);
+        Assert.True(setup.CanGoNext);
+
+        setup.Connection!.Name = "   ";
+
+        Assert.False(setup.CanGoNext);
+        Assert.Equal("Enter a connection name.", setup.Connection.NameError);
+
+        setup.Connection.Name = "Ops";
+
+        Assert.Null(setup.Connection.NameError);
+        Assert.True(setup.CanGoNext);
+    }
+
+    [AvaloniaFact]
+    public async Task Connection_APassingTestFillsABlankNameFromTheElasticsearchHost()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.StartNew();
+        Assert.Equal("Enter a connection name.", setup.Connection!.NameError);
+
+        await TestWithUrlsAsync(harness, elasticsearch: "https://es.prod.example:9243/");
+
+        Assert.Equal("es.prod.example", setup.Connection.Name);
+        Assert.Null(setup.Connection.NameError);
+        Assert.True(setup.CanGoNext);
+    }
+
+    [AvaloniaFact]
+    public async Task Connection_APassingTestFillsABlankNameFromTheCloudIdName()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.StartNew();
+        setup.Connection!.CloudId =
+            $"my-deployment:{EncodeCloudId("us-east-1.aws.found.io$es123$kb456")}";
+
+        await setup.Connection.TestConnectionCommand.Execute();
+
+        Assert.Equal("my-deployment", setup.Connection.Name);
+    }
+
+    [AvaloniaFact]
+    public async Task Connection_ATypedNameIsNeverOverwrittenByThePrefill()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.StartNew();
+        setup.Connection!.Name = "Production";
+
+        await TestWithUrlsAsync(harness);
+        Assert.Equal("Production", setup.Connection.Name);
+
+        // Clearing the name by hand and testing again fills it again, since it is blank.
+        setup.Connection.Name = string.Empty;
+        await setup.Connection.TestConnectionCommand.Execute();
+        Assert.Equal("elastic.example", setup.Connection.Name);
+        setup.Connection.Name = "Renamed";
+        setup.Connection.ElasticsearchUrl = "https://other.example/";
+        await setup.Connection.TestConnectionCommand.Execute();
+        Assert.Equal("Renamed", setup.Connection.Name);
+    }
+
+    [AvaloniaFact]
+    public async Task Connection_AFailedTestDoesNotFillTheName()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.StartNew();
+        harness.Client.ElasticsearchError = new HttpRequestException("refused");
+
+        await TestWithUrlsAsync(harness);
+
+        Assert.Equal(string.Empty, setup.Connection!.Name);
+        Assert.False(setup.CanGoNext);
+    }
+
+    [AvaloniaFact]
+    public async Task Connection_SaveConnectionOnlyRefusesABlankName()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.StartNew();
+        await TestWithUrlsAsync(harness);
+        setup.Connection!.Name = string.Empty;
+
+        Assert.False(await setup.Connection.SaveConnectionOnlyAsync());
+
+        Assert.Equal("Enter a connection name.", setup.Connection.Error);
+        Assert.Empty(harness.Persistence.Config?.Settings.ElasticConnections ?? []);
+
+        setup.Connection.Name = "Ops";
+        Assert.True(await setup.Connection.SaveConnectionOnlyAsync());
+        Assert.Equal("Ops", harness.SavedConnection.Name);
+    }
+
+    [AvaloniaFact]
+    public async Task Connection_EditsDuringASlowTestRunExactlyOneMoreTest()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.AutoTestDelay = TimeSpan.FromMilliseconds(40);
+        TaskCompletionSource<IReadOnlyList<ElasticDataViewSummary>> first = new();
+        var calls = 0;
+        harness.Client.DataViewsHandler = () =>
+        {
+            calls++;
+            return calls == 1 ? first.Task : Task.FromResult(harness.Client.DataViews);
+        };
+        setup.StartNew();
+        var connection = setup.Connection!;
+        connection.KibanaUrl = "https://kibana.example/";
+        connection.ElasticsearchUrl = "https://elastic.example/";
+        await UiWait.Until(() => connection.IsTesting);
+        Assert.Equal(1, calls);
+
+        // Several edits, each followed by its own timer tick, while the first test is still running.
+        connection.ElasticsearchUrl = "https://elastic.example/a";
+        await PumpAsync(150);
+        connection.ElasticsearchUrl = "https://elastic.example/b";
+        await PumpAsync(150);
+        Assert.Equal(1, calls);
+        Assert.True(connection.IsTesting);
+
+        first.SetResult(harness.Client.DataViews);
+
+        await UiWait.Until(() => calls == 2 && setup.CanGoNext);
+        await PumpAsync(300);
+        Assert.Equal(2, calls);
+        Assert.Equal(2, harness.Client.DataViewSecrets.Count);
+        Assert.True(connection.EndpointsOk);
+    }
+
+    [AvaloniaFact]
+    public async Task Connection_EditingAnEditorThatWasSwappedOutTriggersNoTestOnTheNewFlow()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.AutoTestDelay = TimeSpan.FromMilliseconds(40);
+        setup.StartNew();
+        var old = setup.Connection!;
+
+        setup.StartNew();
+        Assert.NotSame(old, setup.Connection);
+        setup.Connection!.KibanaUrl = "https://kibana.example/";
+        setup.Connection.ElasticsearchUrl = "https://elastic.example/";
+        await UiWait.Until(() => setup.CanGoNext || setup.Connection.EndpointsOk);
+        await PumpAsync(150);
+        var tests = harness.Client.DataViewSecrets.Count;
+        Assert.Equal(1, tests);
+
+        old.KibanaUrl = "https://old.example/";
+        old.ElasticsearchUrl = "https://old.example/es";
+        await PumpAsync(300);
+
+        Assert.Equal(tests, harness.Client.DataViewSecrets.Count);
+        Assert.True(setup.Connection.EndpointsOk);
+    }
+
+    [AvaloniaFact]
+    public async Task Connection_ARetestQueuedForAReplacedFlowDoesNotRunEarly()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.AutoTestDelay = TimeSpan.FromMilliseconds(40);
+        TaskCompletionSource<IReadOnlyList<ElasticDataViewSummary>> first = new();
+        var calls = 0;
+        harness.Client.DataViewsHandler = () =>
+        {
+            calls++;
+            return calls == 1 ? first.Task : Task.FromResult(harness.Client.DataViews);
+        };
+        setup.StartNew();
+        var connection = setup.Connection!;
+        connection.KibanaUrl = "https://kibana.example/";
+        connection.ElasticsearchUrl = "https://elastic.example/";
+        await UiWait.Until(() => connection.IsTesting);
+        connection.ElasticsearchUrl = "https://elastic.example/a";
+        await PumpAsync(150);
+
+        // The slow test ends and the flow is replaced before the queued retest gets to run.
+        first.SetResult(harness.Client.DataViews);
+        setup.AutoTestDelay = TimeSpan.FromMinutes(10);
+        setup.StartNew();
+        setup.Connection!.KibanaUrl = "https://kibana.example/";
+        setup.Connection.ElasticsearchUrl = "https://elastic.example/";
+        await PumpAsync(300);
+
+        Assert.Equal(1, calls);
+    }
+
+    [AvaloniaFact]
+    public async Task Disposing_TheOwnerCancelsAPendingAutomaticTest()
+    {
+        var harness = await CreateAsync();
+        harness.Setup.AutoTestDelay = TimeSpan.FromMilliseconds(60);
+        harness.Setup.StartNew();
+        harness.Setup.Connection!.KibanaUrl = "https://kibana.example/";
+        harness.Setup.Connection.ElasticsearchUrl = "https://elastic.example/";
+
+        await harness.DisposeAsync();
+        await PumpAsync(300);
+
+        Assert.Empty(harness.Client.DataViewSecrets);
+    }
+
+    [AvaloniaFact]
+    public async Task DataViewStep_AFailedMetadataLoadSaysToRetryAndRetryReloadsIt()
+    {
+        await using var harness = await CreateAsync();
+        var setup = harness.Setup;
+        setup.StartNew();
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        var original = harness.Client.DataViewHandler!;
+        harness.Client.DataViewHandler = _ => throw new IOException("kibana is down");
+        setup.View!.SelectedDataViewId = "logs";
+        await WaitForAsync(() => !setup.View.IsLoading && setup.View.Error is not null);
+
+        Assert.Equal("Metadata could not be loaded. Choose Retry.", setup.View.MetadataStatus);
+        Assert.Equal("kibana is down", setup.View.Error);
+        Assert.False(setup.CanGoNext);
+
+        harness.Client.DataViewHandler = original;
+        await setup.View.RefreshFieldsCommand.Execute();
+
+        Assert.True(setup.View.IsSelectionResolved);
+        Assert.Null(setup.View.Error);
+        Assert.True(setup.CanGoNext);
+    }
+
+    [AvaloniaFact]
+    public async Task AuthModes_HaveHumanReadableNamesAndKeepTheStoredValue()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+        var connection = harness.Setup.Connection!;
+
+        Assert.Equal(
+            ["Anonymous", "Username and password", "API key"],
+            connection.AuthModeChoices.Select(choice => choice.DisplayName)
+        );
+        Assert.Equal(
+            [ElasticAuthMode.Anonymous, ElasticAuthMode.Basic, ElasticAuthMode.ApiKey],
+            connection.AuthModeChoices.Select(choice => choice.Mode)
+        );
+    }
 }
