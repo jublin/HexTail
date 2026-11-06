@@ -101,7 +101,11 @@ internal sealed class FilterBarViewModel : ReactiveObject
             return;
         var next = file.Levels ^ toggle.Level;
         if ((next & LogLevels.All) == LogLevels.None)
+        {
+            // The button already flipped itself locally; no state change means no Sync, so re-assert.
+            toggle.Refresh();
             return;
+        }
         await _owner.State.SetLevelsAsync(file, next);
     }
 

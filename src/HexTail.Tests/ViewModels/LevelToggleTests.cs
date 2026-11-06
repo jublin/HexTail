@@ -1,6 +1,9 @@
 using System.Reactive.Linq;
+using Avalonia;
 using Avalonia.Automation;
+using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -63,6 +66,7 @@ public sealed class LevelToggleTests
                 .FilterBar.LevelToggles.Single(t => t.Level == LogLevels.Error)
                 .ToggleCommand.Execute();
             Assert.Equal(LogLevels.Error, model.Levels);
+            Assert.True(owner.FilterBar.LevelToggles.Single(t => t.Level == LogLevels.Error).IsOn);
             window.Close();
             await owner.DisposeAsync();
         }
@@ -71,6 +75,60 @@ public sealed class LevelToggleTests
             File.Delete(path);
         }
     }
+
+    [AvaloniaFact]
+    public async Task ClickingTheLastEnabledLevelButtonKeepsItChecked()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var window = TestWindow.Create(out var owner);
+            window.Show();
+            await owner.InitializeAsync();
+            await owner.OpenPathsCommand.Execute([path]);
+            var model = owner.SelectedFile!.Model;
+            await owner.State.SetLevelsAsync(model, LogLevels.Error);
+            Dispatcher.UIThread.RunJobs();
+            owner.FilterBar.Sync();
+            await UiWait.Until(() => LevelButtons(window).Count == 5);
+            var error = LevelButtons(window)[4];
+            Assert.True(error.IsChecked);
+            var center = error
+                .TranslatePoint(
+                    new Avalonia.Point(error.Bounds.Width / 2, error.Bounds.Height / 2),
+                    window
+                )!
+                .Value;
+            window.MouseDown(
+                center,
+                Avalonia.Input.MouseButton.Left,
+                Avalonia.Input.RawInputModifiers.None
+            );
+            window.MouseUp(
+                center,
+                Avalonia.Input.MouseButton.Left,
+                Avalonia.Input.RawInputModifiers.None
+            );
+            Dispatcher.UIThread.RunJobs();
+            await UiWait.Until(() => error.IsChecked == true);
+            Assert.Equal(LogLevels.Error, model.Levels);
+            window.Close();
+            await owner.DisposeAsync();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static List<Avalonia.Controls.Primitives.ToggleButton> LevelButtons(
+        Avalonia.Controls.Window window
+    ) =>
+        Avalonia
+            .VisualTree.VisualExtensions.GetVisualDescendants(window)
+            .OfType<Avalonia.Controls.Primitives.ToggleButton>()
+            .Where(button => button.Name == "LevelToggle")
+            .ToList();
 
     [AvaloniaFact]
     public async Task TogglingALevelHidesThoseRowsInTheView()
