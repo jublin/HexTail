@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using Avalonia.Automation;
 using Avalonia.Media;
 using HexTail.Application;
@@ -22,13 +23,28 @@ internal sealed class FileTabViewModel : ReactiveObject
         SyncViews(loadRows);
     }
 
+    internal static string CompactCount(int count) =>
+        count switch
+        {
+            < 1_000 => count.ToString(CultureInfo.InvariantCulture),
+            < 1_000_000 => (Math.Floor(count / 100d) / 10).ToString(
+                "0.#",
+                CultureInfo.InvariantCulture
+            ) + "k",
+            _ => (Math.Floor(count / 100_000d) / 10).ToString("0.#", CultureInfo.InvariantCulture)
+                + "M",
+        };
+
     internal HighlightSpanCache HighlightSpans { get; } = new();
 
     public MainWindowViewModel Workspace => _owner;
     public FileTabState Model { get; }
     public string DisplayName => Model.DisplayName;
+    public string SourceDetails => Model.Source.ToolTip;
     public string Path => Model.Path;
     public string? Error => Model.Error;
+    public bool HasError => Model.Error is not null;
+    public string LineCountText => CompactCount(Model.Buffer.Count);
     public bool IsSelected => ReferenceEquals(_owner.SelectedFile, this);
 
     public IBrush SelectedTabBrush =>
@@ -67,7 +83,11 @@ internal sealed class FileTabViewModel : ReactiveObject
     public int SelectedViewIndex
     {
         get => _selectedViewIndex;
-        set => this.RaiseAndSetIfChanged(ref _selectedViewIndex, Math.Max(0, value));
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _selectedViewIndex, Math.Max(0, value));
+            this.RaisePropertyChanged(nameof(SelectedView));
+        }
     }
 
     public LogViewViewModel SelectedView => Views[SelectedViewIndex];
@@ -112,20 +132,20 @@ internal sealed class FileTabViewModel : ReactiveObject
 
             SelectedViewIndex = Math.Clamp(SelectedViewIndex, 0, Math.Max(0, Views.Count - 1));
             _viewsVersion++;
+            this.RaisePropertyChanged(nameof(SelectedView));
         }
 
         if (loadRows && Views.Count > 0)
             Views[SelectedViewIndex].Sync();
 
-        if (!loadRows)
-            return;
-
         var snapshot = new FileSnapshot(
             FollowAll,
             ShowContext,
             DisplayName,
+            SourceDetails,
             Error,
-            Model.Searches.Count
+            Model.Searches.Count,
+            Model.Buffer.Count
         );
         var previous = _lastSnapshot;
         _lastSnapshot = snapshot;
@@ -135,10 +155,17 @@ internal sealed class FileTabViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(ShowContext));
         if (previous is null || previous.Value.DisplayName != snapshot.DisplayName)
             this.RaisePropertyChanged(nameof(DisplayName));
+        if (previous is null || previous.Value.SourceDetails != snapshot.SourceDetails)
+            this.RaisePropertyChanged(nameof(SourceDetails));
         if (previous is null || previous.Value.Error != snapshot.Error)
+        {
             this.RaisePropertyChanged(nameof(Error));
+            this.RaisePropertyChanged(nameof(HasError));
+        }
         if (previous is null || previous.Value.SearchCount != snapshot.SearchCount)
             this.RaisePropertyChanged(nameof(SearchCount));
+        if (previous is null || previous.Value.LineCount != snapshot.LineCount)
+            this.RaisePropertyChanged(nameof(LineCountText));
     }
 
     private bool HasCurrentViews()
@@ -175,7 +202,9 @@ internal sealed class FileTabViewModel : ReactiveObject
         bool FollowAll,
         bool ShowContext,
         string DisplayName,
+        string SourceDetails,
         string? Error,
-        int SearchCount
+        int SearchCount,
+        int LineCount
     );
 }

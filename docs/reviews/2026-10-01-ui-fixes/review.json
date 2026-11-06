@@ -1,0 +1,372 @@
+{
+  "status": "complete",
+  "verdict": "Ready with fixes",
+  "scope": {
+    "base": "7d4a883",
+    "branch": "audit-ui",
+    "head_sha": "a54597de8678f2baad3e072696298064bcb19ece",
+    "pr_url": null,
+    "files_changed": 69
+  },
+  "intent": "Implement all 17 approved UI audit fixes with reliable Elastic setup and datetime ranges; preserve saved searches, bounded fetching, virtualization and credential-vault storage.",
+  "intent_confidence": "explicit",
+  "reviewers": [
+    "correctness",
+    "project-standards",
+    "testing",
+    "maintainability",
+    "reliability",
+    "adversarial"
+  ],
+  "findings": [
+    {
+      "#": 1,
+      "autofix_class": "gated_auto",
+      "confidence": 75,
+      "evidence": [
+        "src/HexTail/Application/AppState.cs:135 --                 await CloseFileAsync(tab).ConfigureAwait(false);",
+        "src/HexTail/Application/AppState.cs:90 --             await SaveAsync(cancellationToken).ConfigureAwait(false);",
+        "src/HexTail/Application/AppState.cs:531 --         await tab.DisposeAsync().ConfigureAwait(false);",
+        "src/HexTail/Application/AppState.cs:534 --         await SaveAsync(cancellationToken).ConfigureAwait(false);"
+      ],
+      "file": "src/HexTail/Application/AppState.cs",
+      "first_evidence": "src/HexTail/Application/AppState.cs:135 --                 await CloseFileAsync(tab).ConfigureAwait(false);",
+      "independent_reviewers": [
+        "reliability"
+      ],
+      "line": 135,
+      "owner": "downstream-resolver",
+      "pre_existing": false,
+      "requires_verification": true,
+      "reviewers": [
+        "reliability"
+      ],
+      "severity": "P2",
+      "suggested_fix": "Stage tabs for removed sources with the connection settings, perform one SaveAsync with rollback of both on failure, then dispose removed tabs after the successful save.",
+      "title": "Removing a source can fail after committing its settings",
+      "why_it_matters": "When a saved source is removed, the new connection is persisted first, then CloseFileAsync closes its open tab and saves again. If that second write fails, the save command reports failure even though the connection change is already on disk and the tab is already disposed; retrying does not restore the prior state. Include tab removal in the first persisted snapshot and dispose the old tailers only after that write succeeds.",
+      "protected_subject": "data-loss",
+      "validation_status": "confirmed",
+      "validation_reason": "In reviewed a54597d, saving a connection that omits an open source commits settings through AppState.cs:90 and :891 before the newly added reload calls CloseFileAsync at :135, which removes and disposes that tab at :526-531 then saves again at :534 outside the rollback catch, so a failing second persistence write propagates to ElasticConnectionEditorViewModel.cs:340-344 after the change is committed; incidence was not measured."
+    },
+    {
+      "#": 2,
+      "autofix_class": "gated_auto",
+      "confidence": 75,
+      "evidence": [
+        "src/HexTail/ViewModels/ElasticConnectionEditorViewModel.cs:247 --             await Task.WhenAll(viewsTask, elasticsearchTask);",
+        "src/HexTail/ViewModels/ElasticConnectionEditorViewModel.cs:59 --             Status = \"Not tested\";",
+        "src/HexTail/ViewModels/ElasticConnectionEditorViewModel.cs:249 --             UpdateDataViews(views);",
+        "src/HexTail/ViewModels/ElasticConnectionEditorViewModel.cs:256 --             Status ="
+      ],
+      "file": "src/HexTail/ViewModels/ElasticConnectionEditorViewModel.cs",
+      "first_evidence": "src/HexTail/ViewModels/ElasticConnectionEditorViewModel.cs:247 --             await Task.WhenAll(viewsTask, elasticsearchTask);",
+      "independent_reviewers": [
+        "reliability"
+      ],
+      "line": 247,
+      "owner": "downstream-resolver",
+      "pre_existing": false,
+      "requires_verification": true,
+      "reviewers": [
+        "reliability"
+      ],
+      "severity": "P2",
+      "suggested_fix": "Increment a revision when connection inputs change; capture it before starting both requests and ignore their results and status updates when the revision differs after each await.",
+      "title": "Connection test can certify changed endpoints",
+      "why_it_matters": "If a user edits an endpoint or auth mode while a connection test is running, the setter marks the new values as not tested, but the old request can finish and set status to Connected. The UI then presents old endpoint metadata and a successful test for connection values that were never tested. Capture a connection revision at test start and discard results if it changes before completion.",
+      "protected_subject": "concurrency",
+      "validation_status": "confirmed",
+      "validation_reason": "In reviewed a54597d, editing the enabled endpoint or auth controls during pending requests (SettingsPanel.axaml:411-425) executes the new Not tested setters (ElasticConnectionEditorViewModel.cs:59-94), but TestConnectionAsync unconditionally applies old results and Connected status after awaits at :247-257 or failure at :259-263 without comparing inputs, newly exposing stale certification through IsConnected at :164 and SettingsPanel.axaml:352; incidence was not measured."
+    }
+  ],
+  "actionable_findings": [
+    {
+      "#": 1,
+      "autofix_class": "gated_auto",
+      "confidence": 75,
+      "evidence": [
+        "src/HexTail/Application/AppState.cs:135 --                 await CloseFileAsync(tab).ConfigureAwait(false);",
+        "src/HexTail/Application/AppState.cs:90 --             await SaveAsync(cancellationToken).ConfigureAwait(false);",
+        "src/HexTail/Application/AppState.cs:531 --         await tab.DisposeAsync().ConfigureAwait(false);",
+        "src/HexTail/Application/AppState.cs:534 --         await SaveAsync(cancellationToken).ConfigureAwait(false);"
+      ],
+      "file": "src/HexTail/Application/AppState.cs",
+      "first_evidence": "src/HexTail/Application/AppState.cs:135 --                 await CloseFileAsync(tab).ConfigureAwait(false);",
+      "independent_reviewers": [
+        "reliability"
+      ],
+      "line": 135,
+      "owner": "downstream-resolver",
+      "pre_existing": false,
+      "requires_verification": true,
+      "reviewers": [
+        "reliability"
+      ],
+      "severity": "P2",
+      "suggested_fix": "Stage tabs for removed sources with the connection settings, perform one SaveAsync with rollback of both on failure, then dispose removed tabs after the successful save.",
+      "title": "Removing a source can fail after committing its settings",
+      "why_it_matters": "When a saved source is removed, the new connection is persisted first, then CloseFileAsync closes its open tab and saves again. If that second write fails, the save command reports failure even though the connection change is already on disk and the tab is already disposed; retrying does not restore the prior state. Include tab removal in the first persisted snapshot and dispose the old tailers only after that write succeeds.",
+      "protected_subject": "data-loss",
+      "validation_status": "confirmed",
+      "validation_reason": "In reviewed a54597d, saving a connection that omits an open source commits settings through AppState.cs:90 and :891 before the newly added reload calls CloseFileAsync at :135, which removes and disposes that tab at :526-531 then saves again at :534 outside the rollback catch, so a failing second persistence write propagates to ElasticConnectionEditorViewModel.cs:340-344 after the change is committed; incidence was not measured."
+    },
+    {
+      "#": 2,
+      "autofix_class": "gated_auto",
+      "confidence": 75,
+      "evidence": [
+        "src/HexTail/ViewModels/ElasticConnectionEditorViewModel.cs:247 --             await Task.WhenAll(viewsTask, elasticsearchTask);",
+        "src/HexTail/ViewModels/ElasticConnectionEditorViewModel.cs:59 --             Status = \"Not tested\";",
+        "src/HexTail/ViewModels/ElasticConnectionEditorViewModel.cs:249 --             UpdateDataViews(views);",
+        "src/HexTail/ViewModels/ElasticConnectionEditorViewModel.cs:256 --             Status ="
+      ],
+      "file": "src/HexTail/ViewModels/ElasticConnectionEditorViewModel.cs",
+      "first_evidence": "src/HexTail/ViewModels/ElasticConnectionEditorViewModel.cs:247 --             await Task.WhenAll(viewsTask, elasticsearchTask);",
+      "independent_reviewers": [
+        "reliability"
+      ],
+      "line": 247,
+      "owner": "downstream-resolver",
+      "pre_existing": false,
+      "requires_verification": true,
+      "reviewers": [
+        "reliability"
+      ],
+      "severity": "P2",
+      "suggested_fix": "Increment a revision when connection inputs change; capture it before starting both requests and ignore their results and status updates when the revision differs after each await.",
+      "title": "Connection test can certify changed endpoints",
+      "why_it_matters": "If a user edits an endpoint or auth mode while a connection test is running, the setter marks the new values as not tested, but the old request can finish and set status to Connected. The UI then presents old endpoint metadata and a successful test for connection values that were never tested. Capture a connection revision at test start and discard results if it changes before completion.",
+      "protected_subject": "concurrency",
+      "validation_status": "confirmed",
+      "validation_reason": "In reviewed a54597d, editing the enabled endpoint or auth controls during pending requests (SettingsPanel.axaml:411-425) executes the new Not tested setters (ElasticConnectionEditorViewModel.cs:59-94), but TestConnectionAsync unconditionally applies old results and Connected status after awaits at :247-257 or failure at :259-263 without comparing inputs, newly exposing stale certification through IsConnected at :164 and SettingsPanel.axaml:352; incidence was not measured."
+    }
+  ],
+  "triage_groups": [],
+  "pre_existing_findings": [],
+  "requirements_completeness": {
+    "plan_path": "docs/plans/2026-10-01-ui-reaudit-fixes.md",
+    "plan_source": "explicit",
+    "requirements": [],
+    "implementation_units": [
+      {
+        "id": 1,
+        "title": "1. Reject closed-instance events",
+        "status": "met",
+        "evidence": "SourceEvent, ElasticTailer, AppState; AppStateTests",
+        "note": "Instance identity and generation checks reject events from a closed opening."
+      },
+      {
+        "id": 2,
+        "title": "2. Keep selected metadata consistent",
+        "status": "met",
+        "evidence": "ElasticViewEditorViewModel; ElasticSettingsViewModelTests",
+        "note": "Metadata revision checks and loading validity protect selected views."
+      },
+      {
+        "id": 3,
+        "title": "3. Reload saved settings in open sources",
+        "status": "met",
+        "evidence": "AppState, FileTabState; AppStateTests",
+        "note": "Successful settings saves replace affected tailers and preserve searches and applied ranges; snapshot finding #1 covers removal failure ordering."
+      },
+      {
+        "id": 4,
+        "title": "4. Restore applied historical ranges",
+        "status": "met",
+        "evidence": "AppConfig, AppState, ElasticTailer; persistence and application tests",
+        "note": "Saved historical endpoints and input zone are restored before startup; relative restart assertion remains a testing gap."
+      },
+      {
+        "id": 5,
+        "title": "5. Make global rules explicit",
+        "status": "met",
+        "evidence": "AppConfig, SettingsViewModel, SettingsPanel; GlobalRuleTests",
+        "note": "Explicit Literal/Regex modes, legacy migration and regex validation are present."
+      },
+      {
+        "id": 6,
+        "title": "6. Refresh metadata and prerequisites",
+        "status": "met",
+        "evidence": "Elastic connection/view editors, SettingsPanel; ElasticSetupTests",
+        "note": "Successful tests refresh choices and prerequisites; unresolved views cannot be saved."
+      },
+      {
+        "id": 7,
+        "title": "7. Show truthful connection/open status",
+        "status": "met",
+        "evidence": "Elastic connection/source editors, MainWindowViewModel; ElasticStatusTests",
+        "note": "Reachability, opening and load-failure states are exposed; snapshot finding #2 covers stale test certification."
+      },
+      {
+        "id": 8,
+        "title": "8. Identify distinct sources",
+        "status": "met",
+        "evidence": "LogSourceDescriptor, FileTabViewModel, ElasticSourceOptionViewModel; AppStateTests",
+        "note": "Source identity includes applied filters and refreshes after saves."
+      },
+      {
+        "id": 9,
+        "title": "9. Show drafts and protect deletion",
+        "status": "met",
+        "evidence": "SettingsViewModel, ElasticConnectionEditorViewModel, modal controls; ElasticDraftTests",
+        "note": "Draft save state, close choices and deletion confirmation are implemented."
+      },
+      {
+        "id": 10,
+        "title": "10. Make fields discoverable",
+        "status": "met",
+        "evidence": "ElasticViewEditorViewModel, ElasticFieldOptionViewModel, SettingsPanel; FieldDiscoveryTests",
+        "note": "Initial field choices, search, selected metadata, stable order and preview are present."
+      },
+      {
+        "id": 11,
+        "title": "11. Improve theme differentiation",
+        "status": "met",
+        "evidence": "ThemeManager, App.axaml, CyberTail.axaml; AppThemeTests",
+        "note": "Palette, selection, accent, focus and placeholder changes are present."
+      },
+      {
+        "id": 12,
+        "title": "12. Complete accessibility/keyboard flow",
+        "status": "met",
+        "evidence": "MainWindow, SettingsPanel, SearchBar, LogLineView, tab behavior; AccessibilityTests",
+        "note": "Control names and keyboard/focus paths are represented; native assistive technology remains unverified."
+      },
+      {
+        "id": 13,
+        "title": "13. Inspect and copy full rows",
+        "status": "met",
+        "evidence": "LogLineView; LogLineInteractionTests",
+        "note": "Raw row details and copy actions use existing row state and native clipboard."
+      },
+      {
+        "id": 14,
+        "title": "14. Reflow narrow settings",
+        "status": "met",
+        "evidence": "SettingsPanel; SettingsReflowTests and render evidence",
+        "note": "Responsive stacking and vertical scrolling keep settings actions reachable."
+      },
+      {
+        "id": 15,
+        "title": "15. Explain result states and caps",
+        "status": "met",
+        "evidence": "SourceRangeLoaded, ElasticTailer, LogViewViewModel, LogWorkspace; ResultStateTests",
+        "note": "Loading, failure, empty, filtered and capped results have separate messages and counts."
+      },
+      {
+        "id": 16,
+        "title": "16. Navigate long tabs",
+        "status": "met",
+        "evidence": "FileStrip, TabReorderBehavior; TabNavigationTests",
+        "note": "Bounded names, full tooltips, overflow selection and keyboard reorder are present."
+      },
+      {
+        "id": 17,
+        "title": "17. Update onboarding and guidance",
+        "status": "met",
+        "evidence": "LogWorkspace, SettingsPanel, docs/user-guide.md; OnboardingTests",
+        "note": "Elastic onboarding and guidance describe the implemented controls."
+      }
+    ],
+    "unrequested_behavior_rules": [],
+    "note": "All 17 units are represented in the captured diff. Met denotes implementation coverage; it does not certify native-only acceptance criteria or erase the two confirmed snapshot defects."
+  },
+  "learnings": [],
+  "agent_native_gaps": [],
+  "deployment_notes": [],
+  "residual_risks": [
+    "Headless Avalonia checks cannot verify native screen-reader announcements or real Elasticsearch behavior; the plan explicitly leaves those for native and cluster validation."
+  ],
+  "testing_gaps": [
+    "RestoreElasticHistory_UsesSavedIntervalOnFirstRequest only persists fixed timestamps; the plan's relative-range-on-restart case lacks a first-request assertion using a controlled clock.",
+    "SaveElasticConnection_RestoresSecretAndSettingsWhenJsonSaveFails checks settings and vault only; an open-tab rollback case should assert its tailer, applied range, and existing rows remain usable after persistence fails."
+  ],
+  "coverage": {
+    "depth": "full",
+    "reviewer_reasons": {
+      "correctness": "State lifecycle, metadata and settings correctness",
+      "project-standards": "RootAGENTScriteria",
+      "testing": "Changed behavior and native headless checks",
+      "maintainability": "1846 executable changed lines",
+      "reliability": "Save/delete rollback and external metadata calls",
+      "adversarial": "Persistence/lifecycle ordering across components"
+    },
+    "compound_packs": {
+      "roots": [],
+      "warnings": [],
+      "errors": []
+    },
+    "cross_model": {
+      "selected": true,
+      "target": "claude",
+      "route": "claude",
+      "preference_source": "default",
+      "outcome": "in-process-fallback",
+      "artifact": null,
+      "coverage": "Cross-model dispatch rejected by automatic approval review: external code disclosure lacks user authorization; no peer started. In-process adversarial fallback used."
+    },
+    "suppressed_by_confidence": {},
+    "mode_aware_demotions": 0,
+    "first_evidence_demoted": 0,
+    "first_evidence_backfilled": 0,
+    "validator": {
+      "outcome": "verdicts",
+      "batch_count": 1,
+      "confirmed": 2,
+      "rejected": 0,
+      "unresolved": 0,
+      "malformed": 0,
+      "failed": 0,
+      "shortcut_skipped": 0,
+      "protected_subject_reclassifications": 0,
+      "degraded_blockers": [],
+      "incidence_measured": false,
+      "note": "Both actionable P2 findings were confirmed in one independent validator batch. Verdicts landed within the bound; no cross-model shortcut was available."
+    },
+    "failed_reviewers": [],
+    "timed_out_reviewers": [],
+    "discarded_findings": [
+      {
+        "reviewer": "testing",
+        "title": "Save-on-close test never observes a pending save",
+        "reason": "Current delayed-persistence test now exercises SaveDraftsAndCloseCommand while save is pending and asserts modal closure only after persistence completes."
+      }
+    ],
+    "excluded_render_harness": [
+      "UiFixRenderProbe.cs",
+      "temporary HeadlessApp render change"
+    ],
+    "untracked_excluded": [
+      "src/.codex/config.toml",
+      "docs/audits/evidence/ui-fixes-2026-10-01/"
+    ],
+    "caller_resolution": {
+      "findings_reported_resolved": [
+        1,
+        2
+      ],
+      "pending_save_test_improved": true,
+      "release_tests_reported_passed": 247,
+      "independently_rereviewed": false,
+      "note": "Caller reports resolving both confirmed findings after the captured snapshot and passing all 247 Release tests. This report preserves the snapshot verdict and actionable findings for auditability."
+    },
+    "notes": [
+      "Full depth required by1846executable changed lines.",
+      "RootAGENTS.md used as standards fallback.",
+      "Parent reports244tests passed; reviewer did not execute tests.",
+      "Native OS assistive technology and real Elastic cluster behavior unverified.",
+      "Cross-model dispatch rejected by automatic approval review: external code disclosure lacks user authorization; no peer started. In-process adversarial fallback used.",
+      "Pending-save testing candidate resolved in current tree: ElasticDraftTests.cs:86-99 holds SaveDraftsAndCloseCommand pending, asserts the modal and confirmation remain visible, completes persistence, then asserts closure. Parent reports 7 affected cases passed; merge reviewer performed read-only source verification.",
+      "Confidence suppression: none. Quote demotions: 0; first_evidence_backfilled: 0. Mode-aware soft demotions: 0.",
+      "Validator shortcut-skipped: 0; no cross-model independence established. Two actionable P2 reliability findings selected for one fresh validator batch.",
+      "Memory context, search, and save were attempted; persistent memory database is read-only in merge reviewer sandbox.",
+      "After captured review snapshot, caller applied both confirmed findings, improved pending-save test coverage and reported final247Release tests passed. Review verdict concerns captured snapshot, not a rerun of caller fixes.",
+      "Report leaf performed no builds, tests, production edits or Git mutations. Snapshot findings retain their captured locations; caller fixes were not reviewed again.",
+      "Persistent memory context, search and save were attempted by the report leaf and failed because the memory database/vault is read-only."
+    ]
+  },
+  "verdict_reason": "The captured snapshot contains two confirmed P2 reliability defects: commit source/tab removal together (#1), then invalidate pending connection tests when inputs change (#2). All 17 plan units appear in the diff. Caller reports both defects resolved afterward with 247 Release tests passing; that later state was not reviewed again.",
+  "artifact_path": "/tmp/compound-engineering-1000/ce-code-review/20261001-152603-d97761ae",
+  "run_id": "20261001-152603-d97761ae"
+}

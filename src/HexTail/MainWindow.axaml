@@ -19,165 +19,260 @@
     x:Name="SettingsDialogHost"
     IsOpen="{Binding SettingsOpen, Mode=TwoWay}"
     CloseOnClickAway="True"
+    DialogClosing="OnSettingsDialogClosing"
   >
     <dialogHost:DialogHost.DialogContent>
       <views:SettingsPanel />
     </dialogHost:DialogHost.DialogContent>
 
     <Grid
-      RowDefinitions="Auto,Auto,Auto,*"
+      x:Name="ShellGrid"
+      RowDefinitions="Auto,*,Auto"
       Background="{DynamicResource SurfaceBrush}"
-      HorizontalAlignment="Stretch"
     >
-      <Grid Grid.Row="0" ColumnDefinitions=".3*,.7*" HorizontalAlignment="Stretch">
-        <CommandBar
-          Grid.Column="0"
-          HorizontalAlignment="Left"
-          HasMirrorTransform="True"
-          VerticalAlignment="Top"
-          FlowDirection="LeftToRight"
-          DefaultLabelPosition="Collapsed"
-          BorderBrush="{DynamicResource RaisedBrush}"
-        >
-          <CommandBar.PrimaryCommands>
-            <CommandBarButton
-              x:Name="SettingsButton"
-              Foreground="{DynamicResource TextBrush}"
-              Command="{Binding ToggleSettingsCommand}"
-              Label="Settings"
-              ToolTip.Tip="Open settings"
-              AutomationProperties.Name="Open settings"
-            >
-              <CommandBarButton.Icon>
-                <i:Icon
-                  Foreground="{DynamicResource AccentBrush}"
-                  FontSize="22"
-                  Value="mdi-cogs"
-                  Background="{DynamicResource SurfaceBrush}"
-                />
-              </CommandBarButton.Icon>
-            </CommandBarButton>
-            <CommandBarButton
-              x:Name="ElasticSourcesButton"
-              IsVisible="{Binding HasElasticSources}"
-              Label="Elastic sources"
-              ToolTip.Tip="Select Elastic sources"
-              AutomationProperties.Name="Elastic sources"
-            >
-              <CommandBarButton.Icon>
-                <i:Icon Value="{Binding ElasticSourceIcon}" FontSize="22" />
-              </CommandBarButton.Icon>
-              <CommandBarButton.Flyout>
-                <Flyout>
-                  <ItemsControl ItemsSource="{Binding ElasticSources}">
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="vm:ElasticSourceOptionViewModel">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                          <i:Icon Value="{Binding StatusGlyph}" />
-                          <CheckBox
-                            Content="{Binding DisplayName}"
-                            ToolTip.Tip="{Binding ToolTip}"
-                            AutomationProperties.Name="{Binding ToolTip}"
-                            IsChecked="{Binding IsOpen, Mode=TwoWay}"
-                          />
-                        </StackPanel>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
-                </Flyout>
-              </CommandBarButton.Flyout>
-            </CommandBarButton>
-            <CommandBarSeparator />
-            <CommandBarButton
-              Command="{Binding SaveCommand}"
-              Foreground="{DynamicResource TextBrush}"
-              Label="Save Session"
-              ToolTip.Tip="Save session"
-              AutomationProperties.Name="Save session"
-            >
-              <CommandBarButton.Icon>
-                <i:Icon
-                  Foreground="{DynamicResource AccentBrush}"
-                  Value="mdi-content-save"
-                  FontSize="22"
-                  Background="{DynamicResource SurfaceBrush}"
-                />
-              </CommandBarButton.Icon>
-            </CommandBarButton>
-            <CommandBarButton
-              Label="Open"
-              Command="{Binding OpenCommand}"
-              Foreground="{DynamicResource TextBrush}"
-              ToolTip.Tip="Open log files"
-              AutomationProperties.Name="Open log files"
-            >
-              <CommandBarButton.Icon>
-                <i:Icon
-                  Foreground="{DynamicResource AccentBrush}"
-                  Value="mdi-folder-open"
-                  FontSize="22"
-                  Background="{DynamicResource SurfaceBrush}"
-                />
-              </CommandBarButton.Icon>
-            </CommandBarButton>
-          </CommandBar.PrimaryCommands>
-        </CommandBar>
-
-        <DockPanel Grid.Column="1" HorizontalAlignment="Right" Margin="0,0,5,0">
-          <views:SearchBar DataContext="{Binding }" DockPanel.Dock="Left" />
-
+      <Border
+        x:Name="TopBar"
+        Background="{DynamicResource ToolbarBrush}"
+        BorderBrush="{DynamicResource BorderBrush}"
+        BorderThickness="0,0,0,1"
+        Padding="6,4"
+      >
+        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" ColumnSpacing="6">
+          <Button
+            x:Name="SidebarToggleButton"
+            Classes="icon"
+            Command="{Binding ToggleSidebarCommand}"
+            ToolTip.Tip="Toggle sidebar (Ctrl+B)"
+            AutomationProperties.Name="Toggle sidebar"
+          >
+            <i:Icon Value="mdi-dock-left" Foreground="{DynamicResource AccentBrush}" />
+          </Button>
+          <Button
+            x:Name="OpenFileButton"
+            Grid.Column="1"
+            Classes="icon"
+            Command="{Binding OpenCommand}"
+            ToolTip.Tip="Open log files (Ctrl+O)"
+            AutomationProperties.Name="Open log files"
+          >
+            <i:Icon Value="mdi-folder-open" Foreground="{DynamicResource AccentBrush}" />
+          </Button>
+          <Button
+            x:Name="CommandPaletteButton"
+            Grid.Column="2"
+            Command="{Binding OpenPaletteCommand}"
+            ToolTip.Tip="Commands and sources (Ctrl+K)"
+            AutomationProperties.Name="Open command palette"
+          >
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <i:Icon Value="mdi-magnify" />
+              <TextBlock Text="Ctrl+K" Classes="source-count" />
+            </StackPanel>
+          </Button>
           <StackPanel
             x:Name="ElasticTimeRangePanel"
-            Orientation="Horizontal"
-            Spacing="2"
-            Margin="6,0,0,0"
+            Grid.Column="3"
             VerticalAlignment="Center"
             IsVisible="{Binding IsElasticSelected}"
           >
-            <TextBlock Text="From" VerticalAlignment="Center" />
-            <TextBox
-              Width="105"
-              Text="{Binding ElasticFrom, Mode=TwoWay}"
-              ToolTip.Tip="now-5m, now, or an ISO timestamp"
-            />
-            <TextBlock Text="To" VerticalAlignment="Center" />
-            <TextBox
-              Width="105"
-              Text="{Binding ElasticTo, Mode=TwoWay}"
-              ToolTip.Tip="now or an ISO timestamp"
-            />
             <Button
-              Content="Apply"
-              Command="{Binding ApplyElasticTimeRangeCommand}"
-              Classes="primary"
-            />
+              x:Name="ElasticTimeRangeButton"
+              Classes="range-pill"
+              HorizontalAlignment="Left"
+              ToolTip.Tip="{Binding ElasticAppliedRange}"
+              AutomationProperties.Name="Elastic log time range"
+            >
+              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                <i:Icon Value="mdi-clock-outline" />
+                <TextBlock
+                  x:Name="ElasticRangePillText"
+                  Grid.Column="1"
+                  Text="{Binding ElasticRangePill}"
+                  TextTrimming="CharacterEllipsis"
+                  MaxWidth="420"
+                />
+              </Grid>
+              <Button.Flyout>
+                <Flyout Placement="BottomEdgeAlignedLeft">
+                  <StackPanel x:Name="ElasticRangeEditor" Spacing="8" Width="360">
+                    <TextBlock Text="Quick select" Classes="sidebar-heading" />
+                    <UniformGrid Columns="3">
+                      <Button
+                        x:Name="RangePreset5m"
+                        Content="5 min"
+                        Margin="2"
+                        HorizontalAlignment="Stretch"
+                        Command="{Binding ApplyRangePresetCommand}"
+                        CommandParameter="now-5m"
+                        AutomationProperties.Name="Last 5 minutes"
+                      />
+                      <Button
+                        x:Name="RangePreset15m"
+                        Content="15 min"
+                        Margin="2"
+                        HorizontalAlignment="Stretch"
+                        Command="{Binding ApplyRangePresetCommand}"
+                        CommandParameter="now-15m"
+                        AutomationProperties.Name="Last 15 minutes"
+                      />
+                      <Button
+                        x:Name="RangePreset1h"
+                        Content="1 hour"
+                        Margin="2"
+                        HorizontalAlignment="Stretch"
+                        Command="{Binding ApplyRangePresetCommand}"
+                        CommandParameter="now-1h"
+                        AutomationProperties.Name="Last hour"
+                      />
+                      <Button
+                        x:Name="RangePreset4h"
+                        Content="4 hours"
+                        Margin="2"
+                        HorizontalAlignment="Stretch"
+                        Command="{Binding ApplyRangePresetCommand}"
+                        CommandParameter="now-4h"
+                        AutomationProperties.Name="Last 4 hours"
+                      />
+                      <Button
+                        x:Name="RangePreset24h"
+                        Content="24 hours"
+                        Margin="2"
+                        HorizontalAlignment="Stretch"
+                        Command="{Binding ApplyRangePresetCommand}"
+                        CommandParameter="now-24h"
+                        AutomationProperties.Name="Last 24 hours"
+                      />
+                      <Button
+                        x:Name="RangePreset7d"
+                        Content="7 days"
+                        Margin="2"
+                        HorizontalAlignment="Stretch"
+                        Command="{Binding ApplyRangePresetCommand}"
+                        CommandParameter="now-7d"
+                        AutomationProperties.Name="Last 7 days"
+                      />
+                    </UniformGrid>
+                    <TextBlock Text="From" Classes="sidebar-heading" />
+                    <TextBox
+                      x:Name="ElasticRangeFromBox"
+                      Text="{Binding RangeFromText, Mode=TwoWay}"
+                      FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+                      AutomationProperties.Name="Range start"
+                    >
+                      <TextBox.KeyBindings>
+                        <KeyBinding
+                          Gesture="Enter"
+                          Command="{Binding ApplyElasticTimeRangeCommand}"
+                        />
+                      </TextBox.KeyBindings>
+                    </TextBox>
+                    <TextBlock Text="{Binding RangeFromPreview}" Classes="hint" />
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="To" Classes="sidebar-heading" />
+                      <CheckBox
+                        x:Name="ElasticToNowCheckBox"
+                        Grid.Column="1"
+                        Content="Live"
+                        IsChecked="{Binding ElasticToNow, Mode=TwoWay}"
+                        AutomationProperties.Name="To now (live logs)"
+                      />
+                    </Grid>
+                    <TextBox
+                      x:Name="ElasticRangeToBox"
+                      Text="{Binding RangeToText, Mode=TwoWay}"
+                      IsEnabled="{Binding !ElasticToNow}"
+                      FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+                      AutomationProperties.Name="Range end"
+                    >
+                      <TextBox.KeyBindings>
+                        <KeyBinding
+                          Gesture="Enter"
+                          Command="{Binding ApplyElasticTimeRangeCommand}"
+                        />
+                      </TextBox.KeyBindings>
+                    </TextBox>
+                    <TextBlock Text="{Binding RangeToPreview}" Classes="hint" />
+                    <TextBlock
+                      x:Name="ElasticRangeError"
+                      Text="{Binding RangeError}"
+                      IsVisible="{Binding RangeError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                      Classes="error"
+                      TextWrapping="Wrap"
+                    />
+                    <TextBlock Text="{Binding RangeZoneHint}" Classes="hint" />
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock
+                        Text="{Binding ElasticDraftStatus}"
+                        Classes="hint"
+                        VerticalAlignment="Center"
+                      />
+                      <Button
+                        x:Name="ApplyElasticTimeRangeButton"
+                        Grid.Column="1"
+                        Content="Apply"
+                        Classes="primary"
+                        Command="{Binding ApplyElasticTimeRangeCommand}"
+                      />
+                    </Grid>
+                  </StackPanel>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
           </StackPanel>
-
-          <ToggleSwitch
-            OnContent="Following"
-            OffContent="Not Following"
-            FontSize="12"
-            DockPanel.Dock="Right"
-            DataContext="{Binding SelectedFile}"
-            Padding="{Binding Workspace.Settings.SecondaryPadding}"
-            MinHeight="{Binding Workspace.Settings.SecondaryControlHeight}"
-            IsChecked="{Binding SelectedView.IsFollowing, Mode=TwoWay}"
-          />
-          <ToggleSwitch
-            OnContent="Inline Shown"
-            OffContent="No Inline"
-            FontSize="12"
-            DockPanel.Dock="Right"
-            DataContext="{Binding SelectedFile}"
-            Padding="{Binding Workspace.Settings.SecondaryPadding}"
-            MinHeight="{Binding Workspace.Settings.SecondaryControlHeight}"
-            IsChecked="{Binding ShowContext, Mode=TwoWay}"
-          />
-        </DockPanel>
-      </Grid>
-      <views:FileStrip Grid.Column="0" Grid.Row="1" />
-      <views:WorkspaceError Grid.Column="0" Grid.Row="2" />
-      <views:LogWorkspace Grid.Column="0" Grid.Row="3" />
+          <ToggleButton
+            x:Name="PauseToggle"
+            Grid.Column="4"
+            IsChecked="{Binding IsPaused, Mode=TwoWay}"
+            ToolTip.Tip="Pause view updates; logs keep buffering (Space)"
+            AutomationProperties.Name="Pause view updates"
+          >
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <i:Icon Value="mdi-pause" />
+              <TextBlock Text="Pause" />
+            </StackPanel>
+          </ToggleButton>
+          <Button
+            x:Name="SettingsButton"
+            Grid.Column="5"
+            Classes="icon"
+            Command="{Binding ToggleSettingsCommand}"
+            ToolTip.Tip="Open settings"
+            AutomationProperties.Name="Open settings"
+          >
+            <i:Icon Value="mdi-cog" Foreground="{DynamicResource AccentBrush}" />
+          </Button>
+        </Grid>
+      </Border>
+      <SplitView
+        x:Name="ShellSplitView"
+        Grid.Row="1"
+        IsPaneOpen="{Binding SidebarPaneOpen, Mode=TwoWay}"
+        DisplayMode="{Binding SidebarDisplayMode}"
+        OpenPaneLength="{Binding SidebarWidth}"
+        CompactPaneLength="0"
+        PaneBackground="{DynamicResource SurfaceAltBrush}"
+      >
+        <SplitView.Pane>
+          <Grid ColumnDefinitions="*,4">
+            <views:SourceSidebar />
+            <Thumb
+              x:Name="SidebarResizeThumb"
+              Grid.Column="1"
+              Cursor="SizeWestEast"
+              Background="{DynamicResource BorderBrush}"
+              DragDelta="OnSidebarResize"
+              AutomationProperties.Name="Resize sidebar"
+            />
+          </Grid>
+        </SplitView.Pane>
+        <Grid RowDefinitions="Auto,Auto,*">
+          <views:SearchBar Grid.Row="0" />
+          <views:WorkspaceError Grid.Row="1" />
+          <views:LogWorkspace Grid.Row="2" />
+        </Grid>
+      </SplitView>
+      <views:StatusBar Grid.Row="2" />
+      <views:CommandPalette Grid.RowSpan="3" DataContext="{Binding Palette}" />
     </Grid>
   </dialogHost:DialogHost>
 </Window>

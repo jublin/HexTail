@@ -2,11 +2,14 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using DialogHostAvalonia;
 using HexTail.Application;
 using HexTail.Elastic;
+using HexTail.Input;
 using HexTail.Persistence;
 using HexTail.Security;
 using HexTail.Tailing;
@@ -19,6 +22,7 @@ namespace HexTail;
 public partial class MainWindow : Window
 {
     private WindowNotificationManager _notificationManager;
+    private Control? _settingsOpener;
 
     public MainWindow()
         : this((string[]?)null) { }
@@ -44,6 +48,11 @@ public partial class MainWindow : Window
         InitializeComponent();
         ViewModel = viewModel;
         DataContext = ViewModel;
+        this.FindControl<DialogHost>("SettingsDialogHost")!.PropertyChanged += (_, args) =>
+        {
+            if (args.Property == DialogHost.IsOpenProperty)
+                UpdateSettingsFocus();
+        };
         _notificationManager = new WindowNotificationManager(this)
         {
             Position = NotificationPosition.BottomRight,
@@ -55,9 +64,57 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, OnDrop);
         Opened += OnOpened;
         Closed += OnClosed;
+        SizeChanged += (_, args) => ViewModel.SetShellWidth(args.NewSize.Width);
+        AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+        ViewModel.FocusSearchRequested += (_, _) =>
+            Dispatcher.UIThread.Post(() =>
+                this.GetVisualDescendants().OfType<SearchBar>().FirstOrDefault()?.FocusQuery()
+            );
     }
 
     internal MainWindowViewModel ViewModel { get; }
+
+    private void UpdateSettingsFocus()
+    {
+        if (
+            ViewModel.SettingsOpen
+            && FocusManager?.GetFocusedElement() is Control focused
+            && !focused.GetVisualAncestors().OfType<SettingsPanel>().Any()
+        )
+            _settingsOpener = focused;
+        Dispatcher.UIThread.Post(() => ApplySettingsFocus(attemptsLeft: 5));
+    }
+
+    private void ApplySettingsFocus(int attemptsLeft)
+    {
+        if (ViewModel.SettingsOpen)
+        {
+            var closeButton = this.GetVisualDescendants()
+                .OfType<SettingsPanel>()
+                .FirstOrDefault()
+                ?.FindControl<Button>("SettingsCloseButton");
+            // The panel may not be laid out yet on the first pass, so Focus() can be refused; retry.
+            if (closeButton?.Focus() != true && attemptsLeft > 0)
+                Dispatcher.UIThread.Post(
+                    () => ApplySettingsFocus(attemptsLeft - 1),
+                    DispatcherPriority.Background
+                );
+        }
+        else if (_settingsOpener is { IsEffectivelyVisible: true } opener)
+        {
+            opener.Focus();
+            _settingsOpener = null;
+        }
+    }
+
+    private void OnSettingsDialogClosing(object? sender, DialogClosingEventArgs args)
+    {
+        if (!ViewModel.SettingsOpen)
+            return;
+        ViewModel.SettingsOpen = false;
+        if (ViewModel.SettingsOpen && args.CanBeCancelled)
+            args.Cancel();
+    }
 
     private async Task HandlePickFilesAsync(
         IInteractionContext<System.Reactive.Unit, IReadOnlyList<string>> context
@@ -90,7 +147,14 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnOpened(object? sender, EventArgs e) => await InitializeOnUiThreadAsync();
+    private async void OnOpened(object? sender, EventArgs e)
+    {
+        if (ClientSize.Width > 0)
+            ViewModel.SetShellWidth(ClientSize.Width);
+        await InitializeOnUiThreadAsync();
+        if (ViewModel.SettingsOpen)
+            UpdateSettingsFocus();
+    }
 
     private async Task InitializeOnUiThreadAsync()
     {
@@ -111,11 +175,15 @@ public partial class MainWindow : Window
                 X = Position.X,
                 Y = Position.Y,
                 ContextPaneSize = ViewModel.State.Window.ContextPaneSize,
-                VerticalFileTabs = ViewModel.State.Window.VerticalFileTabs,
+                SidebarCollapsed = !ViewModel.SidebarOpen,
+                SidebarWidth = ViewModel.SidebarWidth,
             }
         );
         await ViewModel.DisposeAsync();
     }
+
+    private void OnSidebarResize(object? sender, VectorEventArgs e) =>
+        ViewModel.SidebarWidth += e.Vector.X;
 
     private void ApplyWindowState()
     {
@@ -156,6 +224,31 @@ public partial class MainWindow : Window
         ViewModel.OpenPathsCommand.Execute(paths).Subscribe();
     }
 
+    // Tab is consumed by focus navigation, and a focused log row consumes Space for selection,
+    // before the bubbling OnKeyDown runs, so those two get a tunnel handler.
+    private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (ViewModel.SettingsOpen || ViewModel.Palette.IsOpen || e.Handled)
+            return;
+        var onLogRow =
+            e.Key == Key.Space
+            && e.Source is Visual source
+            && source.FindAncestorOfType<ListBox>(includeSelf: true)?.Name
+                is "LogList"
+                    or "ContextList";
+        if (e.Key != Key.Tab && !onLogRow)
+            return;
+        var command = ShellShortcuts.Resolve(e.Key, e.KeyModifiers, textInputFocused: false);
+        if (
+            onLogRow
+                ? command.Action != ShellAction.TogglePause
+                : command.Action is not (ShellAction.NextView or ShellAction.PreviousView)
+        )
+            return;
+        Execute(command);
+        e.Handled = true;
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
@@ -165,25 +258,69 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
-
-        if ((e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) == 0)
+        if (ViewModel.SettingsOpen || ViewModel.Palette.IsOpen || e.Handled)
             return;
 
-        switch (e.Key)
+        var command = ShellShortcuts.Resolve(
+            e.Key,
+            e.KeyModifiers,
+            FocusManager?.GetFocusedElement() is TextBox
+        );
+        if (command.Action == ShellAction.None)
+            return;
+        Execute(command);
+        e.Handled = true;
+    }
+
+    private void Execute(ShellCommand command)
+    {
+        var file = ViewModel.SelectedFile;
+        switch (command.Action)
         {
-            case Key.O:
+            case ShellAction.CommandPalette:
+                ViewModel.OpenPaletteCommand.Execute().Subscribe();
+                break;
+            case ShellAction.OpenFiles:
                 Dispatcher.UIThread.Post(() => ViewModel.OpenCommand.Execute().Subscribe());
                 break;
-            case Key.F:
+            case ShellAction.FocusSearch:
                 this.GetVisualDescendants().OfType<SearchBar>().FirstOrDefault()?.FocusQuery();
                 break;
-            case Key.S:
+            case ShellAction.SaveSession:
                 ViewModel.SaveCommand.Execute().Subscribe();
                 break;
-            default:
-                return;
+            case ShellAction.ToggleSidebar:
+                ViewModel.ToggleSidebarCommand.Execute().Subscribe();
+                break;
+            case ShellAction.TogglePause:
+                ViewModel.TogglePauseCommand.Execute().Subscribe();
+                break;
+            case ShellAction.CloseView when file is not null:
+                if (file.SelectedView.Search is not null)
+                    ViewModel.RemoveSearchCommand.Execute(file.SelectedView).Subscribe();
+                else
+                    ViewModel.CloseFileCommand.Execute(file).Subscribe();
+                break;
+            case ShellAction.NextView or ShellAction.PreviousView when file is not null:
+                var step = command.Action == ShellAction.NextView ? 1 : -1;
+                file.SelectedViewIndex =
+                    (file.SelectedViewIndex + step + file.Views.Count) % file.Views.Count;
+                break;
+            case ShellAction.SelectView when file is not null && command.Index < file.Views.Count:
+                file.SelectedViewIndex = command.Index;
+                break;
+            case ShellAction.ToggleFollow when file is not null:
+                file.SelectedView.IsFollowing = !file.SelectedView.IsFollowing;
+                break;
+            case ShellAction.ScrollToBottom when file is not null:
+                file.SelectedView.IsFollowing = true;
+                break;
+            case ShellAction.ScrollToTop:
+                this.GetVisualDescendants()
+                    .OfType<LogView>()
+                    .FirstOrDefault(view => view.IsEffectivelyVisible)
+                    ?.ScrollToTop();
+                break;
         }
-
-        e.Handled = true;
     }
 }

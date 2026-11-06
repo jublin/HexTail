@@ -1,0 +1,54 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTail.ViewModels"
+  x:Class="HexTail.Views.CommandPalette"
+  x:DataType="vm:CommandPaletteViewModel"
+  IsVisible="{Binding IsOpen}"
+  KeyboardNavigation.TabNavigation="Cycle"
+  AutomationProperties.Name="Command palette"
+>
+  <Panel>
+    <Border
+      x:Name="PaletteBackdrop"
+      Background="{DynamicResource ScrimBrush}"
+      PointerPressed="OnBackdropPressed"
+    />
+    <Border
+      Classes="palette"
+      Width="560"
+      MaxHeight="420"
+      HorizontalAlignment="Center"
+      VerticalAlignment="Top"
+      Margin="16,64,16,0"
+    >
+      <DockPanel>
+        <TextBox
+          x:Name="PaletteQuery"
+          DockPanel.Dock="Top"
+          Text="{Binding Query, Mode=TwoWay}"
+          PlaceholderText="Type a command or source name"
+          AutomationProperties.Name="Command palette search"
+          Margin="0,0,0,8"
+        />
+        <ListBox
+          x:Name="PaletteResults"
+          ItemsSource="{Binding Results}"
+          SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
+          DoubleTapped="OnResultActivated"
+          AutomationProperties.Name="Commands"
+        >
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:PaletteItem">
+              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+                <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Text="{Binding Category}" Classes="status" />
+                <TextBlock Grid.Column="2" Text="{Binding Gesture}" Classes="source-count" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+  </Panel>
+</UserControl>

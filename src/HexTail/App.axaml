@@ -24,9 +24,14 @@
     <SolidColorBrush x:Key="ErrorBackgroundBrush" Color="#2A1118" />
     <SolidColorBrush x:Key="ErrorTextBrush" Color="#FFD5DC" />
     <CornerRadius x:Key="ControlCornerRadius">10</CornerRadius>
+    <x:Double x:Key="TextControlPlaceholderOpacity">1</x:Double>
   </Application.Resources>
   <Application.Styles>
-    <FluentTheme DensityStyle="Compact" />
+    <FluentTheme DensityStyle="Compact">
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Dark" Accent="#28D7FE" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
     <dialogHost:DialogHostStyles />
     <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
     <StyleInclude Source="avares://HexTail/Styles/CyberTail.axaml" />
@@ -36,6 +41,7 @@
     <Style Selector="TextBox">
       <Setter Property="MinHeight" Value="34" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="PlaceholderForeground" Value="{DynamicResource MutedBrush}" />
     </Style>
     <Style Selector="ComboBox">
       <Setter Property="MinHeight" Value="34" />

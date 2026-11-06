@@ -155,6 +155,15 @@ public partial class LogView : UserControl
         );
     }
 
+    internal void ScrollToTop()
+    {
+        if (_viewModel is null)
+            return;
+        _viewModel.IsFollowing = false;
+        if (LogList.ItemCount > 0)
+            LogList.ScrollIntoView(0);
+    }
+
     private void ScrollContextToSelected()
     {
         if (

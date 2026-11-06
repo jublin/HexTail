@@ -13,11 +13,16 @@ public sealed class AppConfig
     public string? SelectedElasticSourceId { get; init; }
     public AppWindowState Window { get; init; } = new();
     public AppSettings Settings { get; init; } = new();
+    public List<string> RecentFiles { get; init; } = [];
+    public List<string> RecentElasticSourceIds { get; init; } = [];
 }
 
 public sealed class PersistedElasticTab
 {
     public required string SourceId { get; init; }
+    public string From { get; init; } = "now-5m";
+    public string To { get; init; } = "now";
+    public AppTimeZoneMode InputZone { get; init; } = AppTimeZoneMode.Utc;
     public List<PersistedSearch> Searches { get; init; } = [];
     public bool FollowAll { get; init; } = true;
     public List<bool> FollowSearches { get; init; } = [];
@@ -49,7 +54,8 @@ public sealed class PersistedSearch
 
 public sealed class AppWindowState
 {
-    public bool VerticalFileTabs { get; init; }
+    public bool SidebarCollapsed { get; init; }
+    public double SidebarWidth { get; init; }
     public int ContextPaneSize { get; init; } = 300;
     public double Width { get; init; } = 1280;
     public double Height { get; init; } = 800;
@@ -64,6 +70,8 @@ public sealed record AppSettings
     public int ContextBelow { get; init; } = 10;
     public List<GlobalLabel> GlobalLabels { get; init; } = [];
     public List<string> GlobalExcludeLabels { get; init; } = [];
+    public Dictionary<string, MatchMode> GlobalExcludeModes { get; init; } =
+        new(StringComparer.Ordinal);
     public string Theme { get; init; } = "cyber-tail";
     public UiDensity Density { get; init; } = UiDensity.Comfortable;
     public LogFontSize LogFontSize { get; init; } = LogFontSize.Medium;
@@ -72,7 +80,14 @@ public sealed record AppSettings
     public List<ElasticConnectionSettings> ElasticConnections { get; init; } = [];
 
     public bool Excludes(string text) =>
-        GlobalExcludeLabels.Any(label => CreateGlobalQuery(label)?.IsMatch(text) is true);
+        GlobalExcludeLabels.Any(label =>
+            CreateGlobalQuery(label, GetExcludeMode(label))?.IsMatch(text) is true
+        );
+
+    public MatchMode GetExcludeMode(string label) =>
+        GlobalExcludeModes is not null && GlobalExcludeModes.TryGetValue(label, out var mode)
+            ? mode
+            : CompiledQuery.DetectMode(label);
 
     public IEnumerable<LabelHighlight> GetLabelHighlights(
         string text,
@@ -83,7 +98,10 @@ public sealed record AppSettings
         {
             if (!includeSearchTabs && label.ShowInOpenFile)
                 continue;
-            var query = CreateGlobalQuery(label.Text);
+            var query = CreateGlobalQuery(
+                label.Text,
+                label.Mode ?? CompiledQuery.DetectMode(label.Text)
+            );
             if (query is null)
                 continue;
 
@@ -94,20 +112,25 @@ public sealed record AppSettings
 
     // Keys are immutable rule strings. Weak keys release compiled regexes when rules
     // are removed, and keep record copies/serialization independent of cache state.
-    private static readonly ConditionalWeakTable<string, CachedGlobalQuery> GlobalQueries = new();
+    private static readonly ConditionalWeakTable<string, CachedGlobalQuery> LiteralQueries = new();
+    private static readonly ConditionalWeakTable<string, CachedGlobalQuery> RegexQueries = new();
 
-    private static CompiledQuery? CreateGlobalQuery(string query) =>
-        GlobalQueries
-            .GetValue(query, static text => new CachedGlobalQuery(CompileGlobalQuery(text)))
-            .Query;
+    private static CompiledQuery? CreateGlobalQuery(string query, MatchMode mode) =>
+        mode is MatchMode.Regex
+            ? RegexQueries
+                .GetValue(query, static text => new(CompileGlobalQuery(text, MatchMode.Regex)))
+                .Query
+            : LiteralQueries
+                .GetValue(query, static text => new(CompileGlobalQuery(text, MatchMode.Literal)))
+                .Query;
 
     private sealed record CachedGlobalQuery(CompiledQuery? Query);
 
-    private static CompiledQuery? CompileGlobalQuery(string query)
+    private static CompiledQuery? CompileGlobalQuery(string query, MatchMode mode)
     {
         try
         {
-            return new CompiledQuery(query, CompiledQuery.DetectMode(query), caseSensitive: false);
+            return new CompiledQuery(query, mode, caseSensitive: false);
         }
         catch (ArgumentException)
         {
@@ -141,6 +164,7 @@ public sealed record ThemeOption(string Id, string DisplayName);
 public sealed class GlobalLabel
 {
     public string Text { get; init; } = string.Empty;
+    public MatchMode? Mode { get; init; }
     public string Color { get; init; } = "#f59e0b";
     public bool ShowInOpenFile { get; init; } = true;
 }

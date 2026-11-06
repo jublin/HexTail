@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Text.Json;
 using HexTail.Elastic;
 using HexTail.Persistence;
 using ReactiveUI;
@@ -13,10 +14,16 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     private ElasticAuthMode _authMode;
     private string? _error;
     private bool _isTesting;
+    private int _connectionVersion;
     private string _name = string.Empty;
-    private string? _status;
-    private string? _lastTestedKibanaUrl;
-    private string? _lastTestedElasticsearchUrl;
+    private string? _status = "Not tested";
+    private string _kibanaUrl = string.Empty;
+    private string _elasticsearchUrl = string.Empty;
+    private string _username = string.Empty;
+    private string _secret = string.Empty;
+    private string? _savedSnapshot;
+    private bool _isSaving;
+    private bool _saveFailed;
 
     public ElasticConnectionEditorViewModel(SettingsViewModel owner, string id)
     {
@@ -25,17 +32,49 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         AddViewCommand = ReactiveCommand.Create(AddView);
         RemoveViewCommand = ReactiveCommand.Create<ElasticViewEditorViewModel>(RemoveView);
         TestConnectionCommand = ReactiveCommand.CreateFromTask(TestConnectionAsync);
-        SaveCommand = ReactiveCommand.CreateFromTask(SaveAsync);
+        SaveCommand = ReactiveCommand.CreateFromTask(
+            SaveAsync,
+            this.WhenAnyValue(editor => editor.CanSave)
+        );
+        Views.CollectionChanged += (_, _) => NotifySavePrerequisitesChanged();
     }
 
     public string Id { get; }
     public string Name
     {
         get => _name;
-        set => this.RaiseAndSetIfChanged(ref _name, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _name, value);
+            NotifySavePrerequisitesChanged();
+        }
     }
-    public string KibanaUrl { get; set; } = string.Empty;
-    public string ElasticsearchUrl { get; set; } = string.Empty;
+    public string KibanaUrl
+    {
+        get => _kibanaUrl;
+        set
+        {
+            if (_kibanaUrl == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _kibanaUrl, value);
+            InvalidateConnectionTest();
+            this.RaisePropertyChanged(nameof(KibanaUrlError));
+            NotifySavePrerequisitesChanged();
+        }
+    }
+    public string ElasticsearchUrl
+    {
+        get => _elasticsearchUrl;
+        set
+        {
+            if (_elasticsearchUrl == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _elasticsearchUrl, value);
+            InvalidateConnectionTest();
+            this.RaisePropertyChanged(nameof(ElasticsearchUrlError));
+            NotifySavePrerequisitesChanged();
+        }
+    }
     public ElasticAuthMode AuthMode
     {
         get => _authMode;
@@ -46,33 +85,96 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             this.RaiseAndSetIfChanged(ref _authMode, value);
             this.RaisePropertyChanged(nameof(IsAuthenticated));
             this.RaisePropertyChanged(nameof(IsBasic));
+            InvalidateConnectionTest();
+            NotifySavePrerequisitesChanged();
         }
     }
     public IReadOnlyList<ElasticAuthMode> AuthModes { get; } = Enum.GetValues<ElasticAuthMode>();
     public bool IsAuthenticated => AuthMode != ElasticAuthMode.Anonymous;
     public bool IsBasic => AuthMode == ElasticAuthMode.Basic;
-    public string Username { get; set; } = string.Empty;
-    public string Secret { get; set; } = string.Empty;
+    public string Username
+    {
+        get => _username;
+        set
+        {
+            if (_username == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _username, value);
+            InvalidateConnectionTest();
+            NotifySavePrerequisitesChanged();
+        }
+    }
+    public string Secret
+    {
+        get => _secret;
+        set
+        {
+            if (_secret == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _secret, value);
+            InvalidateConnectionTest();
+            NotifySavePrerequisitesChanged();
+        }
+    }
     public ReactiveCommand<Unit, Unit> AddViewCommand { get; }
     public ReactiveCommand<ElasticViewEditorViewModel, Unit> RemoveViewCommand { get; }
     public ReactiveCommand<Unit, Unit> TestConnectionCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ObservableCollection<ElasticViewEditorViewModel> Views { get; } = [];
-    public ObservableCollection<ElasticDataViewSummary> DataViews { get; } = [];
+    public ObservableCollection<ElasticDataViewChoiceViewModel> DataViews { get; } = [];
+    public bool CanSave =>
+        !IsTesting
+        && !IsSaving
+        && KibanaUrlError is null
+        && ElasticsearchUrlError is null
+        && Views.All(view => view.CanSave);
+    public bool IsDirty => !string.IsNullOrEmpty(Secret) || _savedSnapshot != DraftSnapshot();
+    public bool IsSaving
+    {
+        get => _isSaving;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isSaving, value);
+            NotifySavePrerequisitesChanged();
+        }
+    }
+    public string SaveStatus =>
+        IsSaving ? "Saving…"
+        : _saveFailed ? "Save failed"
+        : IsDirty ? "Unsaved"
+        : "Saved";
+    public string? KibanaUrlError =>
+        IsHttpUrl(KibanaUrl) ? null : "Enter an absolute HTTP or HTTPS Kibana URL.";
+    public string? ElasticsearchUrlError =>
+        IsHttpUrl(ElasticsearchUrl) ? null : "Enter an absolute HTTP or HTTPS Elasticsearch URL.";
     public string? Error
     {
         get => _error;
-        private set => this.RaiseAndSetIfChanged(ref _error, value);
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _error, value);
+            this.RaisePropertyChanged(nameof(IsFailed));
+        }
     }
     public string? Status
     {
         get => _status;
-        private set => this.RaiseAndSetIfChanged(ref _status, value);
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _status, value);
+            this.RaisePropertyChanged(nameof(IsConnected));
+        }
     }
+    public bool IsConnected => Status?.StartsWith("Connected", StringComparison.Ordinal) is true;
+    public bool IsFailed => Error is not null;
     public bool IsTesting
     {
         get => _isTesting;
-        private set => this.RaiseAndSetIfChanged(ref _isTesting, value);
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isTesting, value);
+            NotifySavePrerequisitesChanged();
+        }
     }
 
     internal void Sync(ElasticConnectionSettings settings)
@@ -82,8 +184,6 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         ElasticsearchUrl = settings.ElasticsearchUrl;
         AuthMode = settings.AuthMode;
         Username = settings.Username ?? string.Empty;
-        _lastTestedKibanaUrl = settings.KibanaUrl;
-        _lastTestedElasticsearchUrl = settings.ElasticsearchUrl;
         DataViews.Clear();
         foreach (
             var view in settings
@@ -94,7 +194,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
                 .Select(view => new ElasticDataViewSummary(view.DataViewId!, view.DataViewTitle!))
                 .DistinctBy(view => view.Id, StringComparer.Ordinal)
         )
-            DataViews.Add(view);
+            DataViews.Add(new ElasticDataViewChoiceViewModel(view.Id, view.Title));
         while (Views.Count > settings.Views.Count)
             Views.RemoveAt(Views.Count - 1);
         for (var index = 0; index < settings.Views.Count; index++)
@@ -105,9 +205,11 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             Views.Add(view);
             view.Sync(settings.Views[index]);
         }
+        _savedSnapshot = DraftSnapshot();
+        NotifySavePrerequisitesChanged();
     }
 
-    internal ElasticConnectionSettings ToSettings() =>
+    internal ElasticConnectionSettings ToSettings(bool includeViews = true) =>
         new()
         {
             Id = Id,
@@ -116,14 +218,14 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             ElasticsearchUrl = ElasticsearchUrl,
             AuthMode = AuthMode,
             Username = Username,
-            Views = Views.Select(view => view.ToSettings()).ToList(),
+            Views = includeViews ? Views.Select(view => view.ToSettings()).ToList() : [],
         };
 
     internal Task<IReadOnlyList<ElasticDataViewSummary>> GetDataViewsAsync() =>
-        _owner.GetDataViewsAsync(ToSettings(), Secret);
+        _owner.GetDataViewsAsync(ToSettings(includeViews: false), Secret);
 
     internal Task<ElasticDataView> GetDataViewAsync(string dataViewId) =>
-        _owner.GetDataViewAsync(ToSettings(), dataViewId, Secret);
+        _owner.GetDataViewAsync(ToSettings(includeViews: false), dataViewId, Secret);
 
     private void AddView()
     {
@@ -134,34 +236,46 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
 
     private void RemoveView(ElasticViewEditorViewModel view) => Views.Remove(view);
 
+    private void InvalidateConnectionTest()
+    {
+        _connectionVersion++;
+        Status = "Not tested";
+        Error = null;
+    }
+
     private async Task TestConnectionAsync()
     {
+        var version = _connectionVersion;
         IsTesting = true;
         Error = null;
         Status = "Checking…";
         try
         {
-            var refreshDataViews =
-                DataViews.Count == 0
-                || !string.Equals(_lastTestedKibanaUrl, KibanaUrl, StringComparison.Ordinal)
-                || !string.Equals(
-                    _lastTestedElasticsearchUrl,
-                    ElasticsearchUrl,
-                    StringComparison.Ordinal
-                );
             var viewsTask = GetDataViewsAsync();
-            var elasticsearchTask = _owner.CheckElasticsearchAsync(ToSettings(), Secret);
+            var elasticsearchTask = _owner.CheckElasticsearchAsync(
+                ToSettings(includeViews: false),
+                Secret
+            );
             await Task.WhenAll(viewsTask, elasticsearchTask);
+            if (version != _connectionVersion)
+                return;
             var views = await viewsTask;
-            if (refreshDataViews)
-                UpdateDataViews(views);
-            _lastTestedKibanaUrl = KibanaUrl;
-            _lastTestedElasticsearchUrl = ElasticsearchUrl;
+            UpdateDataViews(views);
+            foreach (var editor in Views)
+                editor.NotifyDataViewSelectionChanged();
+            foreach (var editor in Views)
+                await editor.RefreshDataViewAsync(
+                    views.FirstOrDefault(view => view.Id == editor.SelectedDataViewId)
+                );
+            if (version != _connectionVersion)
+                return;
             Status =
                 $"Connected ({views.Count} data view{(views.Count == 1 ? string.Empty : "s")})";
         }
         catch (Exception exception)
         {
+            if (version != _connectionVersion)
+                return;
             Error = exception.Message;
             Status = "Connection failed";
         }
@@ -174,25 +288,93 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     private void UpdateDataViews(IReadOnlyList<ElasticDataViewSummary> views)
     {
         for (var index = DataViews.Count - 1; index >= 0; index--)
-            if (!views.Any(view => view.Id == DataViews[index].Id))
+        {
+            var current = views.FirstOrDefault(view => view.Id == DataViews[index].Id);
+            if (current is null)
                 DataViews.RemoveAt(index);
+            else
+                DataViews[index].Title = current.Title;
+        }
 
         foreach (var view in views)
             if (!DataViews.Any(existing => existing.Id == view.Id))
-                DataViews.Add(view);
+                DataViews.Add(new ElasticDataViewChoiceViewModel(view.Id, view.Title));
     }
 
-    private async Task SaveAsync()
+    internal void NotifySavePrerequisitesChanged()
     {
+        this.RaisePropertyChanged(nameof(CanSave));
+        this.RaisePropertyChanged(nameof(IsDirty));
+        this.RaisePropertyChanged(nameof(SaveStatus));
+        _owner.NotifyElasticDraftsChanged();
+    }
+
+    private string DraftSnapshot() =>
+        JsonSerializer.Serialize(
+            new
+            {
+                Name,
+                KibanaUrl,
+                ElasticsearchUrl,
+                AuthMode,
+                Username,
+                Views = Views.Select(view => new
+                {
+                    view.Id,
+                    view.Name,
+                    view.SelectedDataViewId,
+                    view.DataViewTitle,
+                    view.TimeFieldName,
+                    view.ServerField,
+                    view.NamespaceField,
+                    OutputFields = view.OutputFieldNames,
+                    Sources = view.Sources.Select(source => source.ToSettings()),
+                }),
+            }
+        );
+
+    private static bool IsHttpUrl(string value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https";
+
+    private async Task SaveAsync() => await SaveDraftAsync();
+
+    internal async Task<bool> SaveDraftAsync()
+    {
+        if (!CanSave)
+            return false;
+        var snapshot = DraftSnapshot();
+        var secret = Secret;
+        _saveFailed = false;
+        IsSaving = true;
         try
         {
-            await _owner.SaveElasticConnectionAsync(ToSettings(), Secret);
-            Secret = string.Empty;
+            await _owner.SaveElasticConnectionAsync(ToSettings(), secret);
+            if (Secret == secret)
+                Secret = string.Empty;
+            _savedSnapshot = snapshot;
             Error = null;
+            return true;
         }
         catch (Exception exception)
         {
+            _saveFailed = true;
             Error = exception.Message;
+            return false;
         }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+}
+
+internal sealed class ElasticDataViewChoiceViewModel(string id, string title) : ReactiveObject
+{
+    private string _title = title;
+    public string Id { get; } = id;
+    public string Title
+    {
+        get => _title;
+        set => this.RaiseAndSetIfChanged(ref _title, value);
     }
 }

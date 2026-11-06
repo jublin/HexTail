@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Threading.Channels;
 using HexTail.Persistence;
 using HexTail.Security;
@@ -21,6 +22,10 @@ internal sealed class ElasticTailer : ILogTailer
     private readonly Func<DateTimeOffset> _utcNow;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly CancellationTokenSource _stop = new();
+    private readonly Lock _rangeGate = new();
+    private long _generation;
+    internal Guid InstanceId { get; } = Guid.NewGuid();
+    internal long Generation => Interlocked.Read(ref _generation);
     private readonly HashSet<string> _idsAtCursor = new(StringComparer.Ordinal);
     private readonly int _maxInitialLines;
     private string _fromExpression = $"now-{InitialLookback.TotalMinutes:0}m";
@@ -60,11 +65,28 @@ internal sealed class ElasticTailer : ILogTailer
 
     internal void Start() => _completion = Task.Run(RunAsync);
 
-    internal async Task PollOnceAsync(CancellationToken cancellationToken)
+    internal async Task<SourceRangeLoaded?> PollOnceAsync(CancellationToken cancellationToken)
     {
-        var toInclusive = ParseTime(_toExpression, _utcNow());
-        var fromInclusive = _cursorTimestamp ?? ParseTime(_fromExpression, toInclusive);
-        var initialRead = _cursorTimestamp is null;
+        DateTimeOffset rangeFrom;
+        bool live;
+        long generation;
+        DateTimeOffset toInclusive,
+            fromInclusive;
+        DateTimeOffset? nextCursorTimestamp;
+        HashSet<string> nextIdsAtCursor;
+        lock (_rangeGate)
+        {
+            generation = Generation;
+            var now = _utcNow();
+            toInclusive = ParseTime(_toExpression, now);
+            rangeFrom = ParseTime(_fromExpression, now);
+            fromInclusive = _cursorTimestamp ?? rangeFrom;
+            live = string.Equals(_toExpression, "now", StringComparison.OrdinalIgnoreCase);
+            nextCursorTimestamp = _cursorTimestamp;
+            nextIdsAtCursor = new HashSet<string>(_idsAtCursor, StringComparer.Ordinal);
+        }
+        var initialRead = nextCursorTimestamp is null;
+        int? initialLimitReached = null;
         Log(
             $"source={SourceId} poll dataView={_view.DataViewTitle} "
                 + $"from={fromInclusive:O} to={toInclusive:O}"
@@ -76,11 +98,9 @@ internal sealed class ElasticTailer : ILogTailer
             cancellationToken
         );
         var accepted = new List<ElasticHit>(initialRead ? _maxInitialLines : PageSize);
-        var nextCursorTimestamp = _cursorTimestamp;
-        var nextIdsAtCursor = new HashSet<string>(_idsAtCursor, StringComparer.Ordinal);
         async ValueTask EmitAcceptedAsync()
         {
-            if (accepted.Count == 0)
+            if (accepted.Count == 0 || generation != Generation)
                 return;
             accepted.Sort(
                 static (left, right) =>
@@ -93,14 +113,23 @@ internal sealed class ElasticTailer : ILogTailer
             );
             await _events
                 .WriteAsync(
-                    new SourceLines(SourceId, accepted.Select(hit => hit.Line).ToArray()),
+                    new SourceLines(SourceId, accepted.Select(hit => hit.Line).ToArray())
+                    {
+                        Generation = generation,
+                        InstanceId = InstanceId,
+                    },
                     cancellationToken
                 )
                 .ConfigureAwait(false);
             // Commit only delivered pages, so a later page failure can resume safely.
-            _cursorTimestamp = nextCursorTimestamp;
-            _idsAtCursor.Clear();
-            _idsAtCursor.UnionWith(nextIdsAtCursor);
+            lock (_rangeGate)
+            {
+                if (generation != Generation)
+                    return;
+                _cursorTimestamp = nextCursorTimestamp;
+                _idsAtCursor.Clear();
+                _idsAtCursor.UnionWith(nextIdsAtCursor);
+            }
             accepted.Clear();
         }
 
@@ -127,6 +156,8 @@ internal sealed class ElasticTailer : ILogTailer
                     cancellationToken
                 );
                 pitId = page.PitId;
+                if (generation != Generation)
+                    return null;
                 Log($"source={SourceId} search page hits={page.Hits.Count}");
                 foreach (var hit in page.Hits)
                 {
@@ -160,6 +191,8 @@ internal sealed class ElasticTailer : ILogTailer
                     break;
                 searchAfter = page.Hits[^1].SortValues;
             }
+            if (initialRead && accepted.Count >= _maxInitialLines)
+                initialLimitReached = _maxInitialLines;
             await EmitAcceptedAsync();
         }
         finally
@@ -170,17 +203,29 @@ internal sealed class ElasticTailer : ILogTailer
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         }
+        return generation == Generation
+            ? new SourceRangeLoaded(SourceId, rangeFrom, toInclusive, initialRead, live)
+            {
+                Generation = generation,
+                InstanceId = InstanceId,
+                InitialLimitReached = initialLimitReached,
+            }
+            : null;
     }
 
     internal void SetTimeRange(string from, string to)
     {
         var now = _utcNow();
-        _ = ParseTime(from, now);
-        _ = ParseTime(to, now);
-        _fromExpression = from.Trim();
-        _toExpression = to.Trim();
-        _cursorTimestamp = null;
-        _idsAtCursor.Clear();
+        if (ParseTime(from, now) > ParseTime(to, now))
+            throw new ArgumentException("From must be at or before To.");
+        lock (_rangeGate)
+        {
+            Interlocked.Increment(ref _generation);
+            _fromExpression = from.Trim();
+            _toExpression = to.Trim();
+            _cursorTimestamp = null;
+            _idsAtCursor.Clear();
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -203,14 +248,40 @@ internal sealed class ElasticTailer : ILogTailer
     {
         var reportedError = false;
         var transientAttempt = 0;
+        var lastGeneration = Generation;
+        long? completedHistoricalGeneration = null;
         while (!_stop.IsCancellationRequested)
         {
+            var generation = Generation;
+            if (generation != lastGeneration)
+            {
+                reportedError = false;
+                transientAttempt = 0;
+                lastGeneration = generation;
+            }
             try
             {
-                await PollOnceAsync(_stop.Token).ConfigureAwait(false);
+                if (completedHistoricalGeneration == generation)
+                {
+                    await _delay(PollInterval, _stop.Token).ConfigureAwait(false);
+                    continue;
+                }
+                var loaded = await PollOnceAsync(_stop.Token).ConfigureAwait(false);
+                if (loaded is null)
+                    continue;
+                await _events.WriteAsync(loaded, _stop.Token).ConfigureAwait(false);
+                if (!loaded.Live)
+                    completedHistoricalGeneration = generation;
                 if (reportedError)
                     await _events
-                        .WriteAsync(new SourceRecovered(SourceId), _stop.Token)
+                        .WriteAsync(
+                            new SourceRecovered(SourceId)
+                            {
+                                Generation = generation,
+                                InstanceId = InstanceId,
+                            },
+                            _stop.Token
+                        )
                         .ConfigureAwait(false);
                 reportedError = false;
                 transientAttempt = 0;
@@ -223,14 +294,16 @@ internal sealed class ElasticTailer : ILogTailer
             catch (ElasticUnauthorizedException exception)
             {
                 Log($"source={SourceId} unauthorized: {exception.Message}");
-                await ReportErrorAsync(exception.Message, reportedError).ConfigureAwait(false);
+                await ReportErrorAsync(exception.Message, reportedError, generation)
+                    .ConfigureAwait(false);
                 reportedError = true;
                 await _delay(UnauthorizedDelay, _stop.Token).ConfigureAwait(false);
             }
             catch (ElasticTransientException exception)
             {
                 Log($"source={SourceId} transient failure: {exception.Message}");
-                await ReportErrorAsync(exception.Message, reportedError).ConfigureAwait(false);
+                await ReportErrorAsync(exception.Message, reportedError, generation)
+                    .ConfigureAwait(false);
                 reportedError = true;
                 var seconds = Math.Min(30, 1 << Math.Min(transientAttempt++, 4));
                 await _delay(TimeSpan.FromSeconds(seconds), _stop.Token).ConfigureAwait(false);
@@ -238,25 +311,33 @@ internal sealed class ElasticTailer : ILogTailer
             catch (Exception exception)
             {
                 Log($"source={SourceId} failure: {exception.Message}");
-                await ReportErrorAsync(exception.Message, reportedError).ConfigureAwait(false);
+                await ReportErrorAsync(exception.Message, reportedError, generation)
+                    .ConfigureAwait(false);
                 reportedError = true;
                 await _delay(PollInterval, _stop.Token).ConfigureAwait(false);
             }
         }
     }
 
-    private async ValueTask ReportErrorAsync(string message, bool reportedError)
+    private async ValueTask ReportErrorAsync(string message, bool reportedError, long generation)
     {
         if (!reportedError)
             await _events
-                .WriteAsync(new SourceError(SourceId, message), _stop.Token)
+                .WriteAsync(
+                    new SourceError(SourceId, message)
+                    {
+                        Generation = generation,
+                        InstanceId = InstanceId,
+                    },
+                    _stop.Token
+                )
                 .ConfigureAwait(false);
     }
 
     private static void Log(string message) =>
         Console.Error.WriteLine($"[Elastic] {DateTimeOffset.UtcNow:O} {message}");
 
-    private static DateTimeOffset ParseTime(string expression, DateTimeOffset now)
+    internal static DateTimeOffset ParseTime(string expression, DateTimeOffset now)
     {
         var value = expression.Trim();
         if (string.Equals(value, "now", StringComparison.OrdinalIgnoreCase))
@@ -264,21 +345,51 @@ internal sealed class ElasticTailer : ILogTailer
         if (value.StartsWith("now-", StringComparison.OrdinalIgnoreCase))
         {
             var relative = value[4..];
-            if (relative.Length > 1 && double.TryParse(relative[..^1], out var amount))
+            if (
+                relative.Length > 1
+                && double.TryParse(
+                    relative[..^1],
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out var amount
+                )
+                && double.IsFinite(amount)
+                && amount >= 0
+            )
             {
-                var duration = relative[^1] switch
+                var seconds =
+                    amount
+                    * (
+                        relative[^1] switch
+                        {
+                            's' => 1d,
+                            'm' => 60d,
+                            'h' => 3600d,
+                            'd' => 86400d,
+                            _ => double.NaN,
+                        }
+                    );
+                if (
+                    double.IsFinite(seconds)
+                    && seconds <= (now - DateTimeOffset.MinValue).TotalSeconds
+                )
                 {
-                    's' => TimeSpan.FromSeconds(amount),
-                    'm' => TimeSpan.FromMinutes(amount),
-                    'h' => TimeSpan.FromHours(amount),
-                    'd' => TimeSpan.FromDays(amount),
-                    _ => TimeSpan.MinValue,
-                };
-                if (duration != TimeSpan.MinValue)
-                    return now - duration;
+                    try
+                    {
+                        return now.AddSeconds(-seconds);
+                    }
+                    catch (ArgumentOutOfRangeException) { }
+                }
             }
         }
-        if (DateTimeOffset.TryParse(value, out var timestamp))
+        else if (
+            DateTimeOffset.TryParse(
+                value,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out var timestamp
+            )
+        )
             return timestamp;
         throw new ArgumentException(
             $"Invalid Elastic time expression '{expression}'. Use now, now-5m, or an ISO timestamp."

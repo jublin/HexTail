@@ -27,19 +27,6 @@ namespace HexTail.Tests.Ui;
 public sealed class MainWindowInteractionTests
 {
     [AvaloniaFact]
-    public void ElasticToolbarButtonIsHiddenWhenNoSourcesAreConfigured()
-    {
-        var window = TestWindow.Create(out var viewModel);
-        window.Show();
-
-        var button = window.FindControl<CommandBarButton>("ElasticSourcesButton")!;
-
-        Assert.False(viewModel.HasElasticSources);
-        Assert.False(button.IsVisible);
-        window.Close();
-    }
-
-    [AvaloniaFact]
     public void SettingsModalClosesWhenTheBackdropIsClicked()
     {
         var window = TestWindow.Create(out var viewModel);
@@ -92,7 +79,8 @@ public sealed class MainWindowInteractionTests
             new LogSourceService(),
             new TestPersistence(),
             new AppSettings { ElasticConnections = [connection] },
-            elastic: new FakeElasticApiClient()
+            elastic: new FakeElasticApiClient(),
+            credentials: new InMemoryCredentialVault()
         );
         var viewModel = new MainWindowViewModel(
             state,
@@ -106,7 +94,216 @@ public sealed class MainWindowInteractionTests
 
         Assert.True(viewModel.IsElasticSelected);
         Assert.True(window.FindControl<StackPanel>("ElasticTimeRangePanel")!.IsVisible);
+        foreach (var width in new[] { 720, 1280, 1920 })
+        foreach (var density in viewModel.Settings.DensityOptions)
+        {
+            window.Width = width;
+            window.FontSize = 24;
+            viewModel.Settings.Density = density;
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            foreach (
+                var name in new[]
+                {
+                    "SettingsButton",
+                    "CommandPaletteButton",
+                    "OpenFileButton",
+                    "SidebarToggleButton",
+                    "AutoScrollToggle",
+                    "InlineContextToggle",
+                    "PauseToggle",
+                    "ElasticTimeRangeButton",
+                }
+            )
+            {
+                var control =
+                    window.FindControl<Control>(name)
+                    ?? window
+                        .GetVisualDescendants()
+                        .OfType<Control>()
+                        .First(control => control.Name == name && control.IsEffectivelyVisible);
+                Assert.NotNull(control);
+                var position = control.TranslatePoint(default, window)!.Value;
+                Assert.True(control.IsVisible && control.Bounds.Width > 0);
+                Assert.True(
+                    position.X >= 0 && position.X + control.Bounds.Width <= window.Bounds.Width,
+                    name
+                );
+            }
+        }
+        window.Width = 720;
+        window.UpdateLayout();
+        var rangeButton = window.FindControl<Button>("ElasticTimeRangeButton")!;
+        Assert.True(
+            rangeButton.TranslatePoint(default, window)!.Value.X + rangeButton.Bounds.Width
+                <= window.Bounds.Width
+        );
+        var flyout = Assert.IsType<Flyout>(rangeButton.Flyout);
+        flyout.ShowAt(rangeButton);
+        Dispatcher.UIThread.RunJobs();
+        var editor = Assert.IsType<StackPanel>(flyout.Content);
+        Assert.Empty(editor.GetVisualDescendants().OfType<DatePicker>());
+        Assert.Empty(editor.GetVisualDescendants().OfType<TimePicker>());
+        Assert.Equal(2, editor.GetVisualDescendants().OfType<TextBox>().Count());
+
+        viewModel.Settings.TimeZoneMode = AppTimeZoneMode.Utc;
+        await WaitFor(() => state.Settings.TimeZoneMode == AppTimeZoneMode.Utc);
+        viewModel.RangeFromText = "2026-08-20 10:15:30";
+        viewModel.ElasticToNow = false;
+        viewModel.RangeToText = "2026-08-20 10:16:45";
+        Assert.True(viewModel.ElasticRangeDirty);
+        Assert.Equal("= 2026-08-20 10:15:30 UTC", viewModel.RangeFromPreview);
+        await viewModel.ApplyElasticTimeRangeCommand.Execute().FirstAsync();
+        Assert.False(viewModel.ElasticRangeDirty);
+        Assert.Null(viewModel.RangeError);
+        Assert.Equal("2026-08-20T10:15:30.0000000+00:00", state.SelectedFile!.ElasticFrom);
+        Assert.Equal("2026-08-20T10:16:45.0000000+00:00", state.SelectedFile.ElasticTo);
+        Assert.Equal(
+            "2026-08-20 10:15:30 → 2026-08-20 10:16:45 · loading…",
+            viewModel.ElasticRangePill
+        );
+
+        viewModel.RangeToText = "2026-08-20 10:14:00";
+        await viewModel.ApplyElasticTimeRangeCommand.Execute().FirstAsync();
+        Assert.Contains("From must be at or before To", viewModel.RangeError);
+        Assert.Equal("2026-08-20T10:16:45.0000000+00:00", state.SelectedFile.ElasticTo);
+
+        viewModel.RangeFromText = "tomorrowish";
+        await viewModel.ApplyElasticTimeRangeCommand.Execute().FirstAsync();
+        Assert.StartsWith("From:", viewModel.RangeError);
+
+        foreach (
+            var expression in new[] { "now-5m", "now-15m", "now-1h", "now-4h", "now-24h", "now-7d" }
+        )
+        {
+            await viewModel.ApplyRangePresetCommand.Execute(expression).FirstAsync();
+            Assert.Equal(expression, state.SelectedFile.ElasticFrom);
+            Assert.Equal("now", state.SelectedFile.ElasticTo);
+            Assert.False(viewModel.ElasticRangeDirty);
+        }
+        Assert.StartsWith("Last 7 days", viewModel.ElasticRangePill);
+
+        viewModel.Settings.TimeZoneMode = AppTimeZoneMode.Local;
+        await WaitFor(() => state.Settings.TimeZoneMode == AppTimeZoneMode.Local);
+        viewModel.RangeFromText = "2026-08-20 10:00";
+        await viewModel.ApplyElasticTimeRangeCommand.Execute().FirstAsync();
+        var wall = new DateTime(2026, 8, 20, 10, 0, 0);
+        Assert.Equal(
+            new DateTimeOffset(wall, TimeZoneInfo.Local.GetUtcOffset(wall)),
+            DateTimeOffset.Parse(state.SelectedFile.ElasticFrom)
+        );
+        Assert.Equal(AppTimeZoneMode.Local, state.SelectedFile.ElasticInputZone);
+        flyout.Hide();
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task LongRangePillTrimsInsteadOfPushingPastTheSettingsButtonAtMinimumWidth()
+    {
+        await using var viewModel = ElasticFixtures.Workspace(
+            ElasticFixtures.Connection("c-1", "prod", "app")
+        );
+        await viewModel.InitializeAsync();
+        await viewModel.State.OpenElasticSourceAsync("c-1-app", save: false);
+        var window = new MainWindow(viewModel, registerNativePicker: false);
+        window.Width = 720;
+        window.Height = 720;
+        window.FontSize = 24;
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        viewModel.Settings.TimeZoneMode = AppTimeZoneMode.Utc;
+        await WaitFor(() => viewModel.State.Settings.TimeZoneMode == AppTimeZoneMode.Utc);
+        viewModel.RangeFromText = "2026-08-20 10:15:30";
+        viewModel.ElasticToNow = false;
+        viewModel.RangeToText = "2026-08-21 11:16:45";
+        await viewModel.ApplyElasticTimeRangeCommand.Execute().FirstAsync();
+        Assert.Null(viewModel.RangeError);
+
+        foreach (var density in viewModel.Settings.DensityOptions)
+        {
+            viewModel.Settings.Density = density;
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            var pill = window.FindControl<Button>("ElasticTimeRangeButton")!;
+            var settings = window.FindControl<Button>("SettingsButton")!;
+            var text = window.FindControl<TextBlock>("ElasticRangePillText")!;
+            var pillRight = pill.TranslatePoint(default, window)!.Value.X + pill.Bounds.Width;
+            Assert.True(
+                pillRight <= settings.TranslatePoint(default, window)!.Value.X,
+                density.ToString()
+            );
+            Assert.True(
+                text.TextLayout.TextLines.Any(line => line.HasCollapsed),
+                $"pill text should be trimmed ({density})"
+            );
+        }
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task SearchPlaceholderAndTextFitAtMinimumWidthInEveryDensity()
+    {
+        var window = TestWindow.Create(out var vm);
+        await vm.InitializeAsync();
+        var path = Path.Combine(Path.GetTempPath(), $"hextail-search-{Guid.NewGuid():N}.log");
+        await File.WriteAllTextAsync(path, "ready", TestContext.Current.CancellationToken);
+        try
+        {
+            await vm.State.OpenFileAsync(path, save: false);
+            window.Width = 720;
+            window.Height = 720;
+            window.Show();
+            foreach (var density in vm.Settings.DensityOptions)
+            {
+                vm.Settings.Density = density;
+                vm.Query = string.Empty;
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                var query = FindVisual<TextBox>(window, "QueryBox");
+                Assert.Equal(VerticalAlignment.Center, query.VerticalContentAlignment);
+                Assert.False(query.UseFloatingPlaceholder);
+                var placeholder = query
+                    .GetVisualDescendants()
+                    .OfType<TextBlock>()
+                    .Single(text => text.Text == "Search this file" && text.IsVisible);
+                Assert.True(placeholder.IsVisible);
+                var hintPosition = placeholder.TranslatePoint(default, query)!.Value;
+                Assert.True(hintPosition.Y >= 0);
+                Assert.True(hintPosition.Y + placeholder.Bounds.Height <= query.Bounds.Height);
+                var queryPosition = query.TranslatePoint(default, window)!.Value;
+                Assert.True(
+                    queryPosition.X >= 0
+                        && queryPosition.X + query.Bounds.Width <= window.Bounds.Width
+                );
+                var add = FindVisual<Button>(window, "AddSearchButton");
+                var addPosition = add.TranslatePoint(default, window)!.Value;
+                Assert.True(addPosition.X + add.Bounds.Width <= window.Bounds.Width);
+                query.Text = "visible search input";
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                var presenter = query
+                    .GetVisualDescendants()
+                    .OfType<Avalonia.Controls.Presenters.TextPresenter>()
+                    .Single();
+                var textPosition = presenter.TranslatePoint(default, query)!.Value;
+                Assert.True(
+                    textPosition.Y >= 0
+                        && textPosition.Y + presenter.Bounds.Height <= query.Bounds.Height
+                );
+                Assert.Equal("visible search input", vm.Query);
+                var toggle = FindVisual<ToggleButton>(window, "CaseToggle");
+                Assert.True(
+                    toggle.TranslatePoint(default, window)!.Value.X
+                        >= queryPosition.X + query.Bounds.Width
+                );
+            }
+        }
+        finally
+        {
+            window.Close();
+            File.Delete(path);
+        }
     }
 
     [AvaloniaFact]
@@ -120,7 +317,7 @@ public sealed class MainWindowInteractionTests
             .Select(control => control.GetType().Name)
             .ToHashSet();
 
-        Assert.Contains("FileStrip", controlNames);
+        Assert.Contains("SourceSidebar", controlNames);
         Assert.Contains("WorkspaceError", controlNames);
         Assert.Contains("LogWorkspace", controlNames);
         window.Close();
@@ -145,11 +342,9 @@ public sealed class MainWindowInteractionTests
                 .OfType<TabControl>()
                 .Where(tab => tab.DataContext is MainWindowViewModel or FileTabViewModel)
                 .ToArray();
-            Assert.Equal(2, tabs.Length);
-            Assert.All(tabs, tab => Assert.Equal(typeof(TabControl), tab.GetType()));
-            Assert.NotNull(
-                tabs.Single(tab => tab.DataContext is MainWindowViewModel).ContentTemplate
-            );
+            var tab = Assert.Single(tabs);
+            Assert.IsType<FileTabViewModel>(tab.DataContext);
+            Assert.NotNull(tab.ContentTemplate);
             window.Close();
         }
         finally
@@ -241,7 +436,11 @@ public sealed class MainWindowInteractionTests
             },
         };
         var viewModel = new MainWindowViewModel(
-            new AppState(new LogSourceService(), persistence),
+            new AppState(
+                new LogSourceService(),
+                persistence,
+                credentials: new InMemoryCredentialVault()
+            ),
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
@@ -260,7 +459,7 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
-    public void SettingsContentCanScrollHorizontally()
+    public void SettingsContentUsesVerticalScrollingWithoutHorizontalPan()
     {
         var window = TestWindow.Create(out var viewModel);
         viewModel.SettingsOpen = true;
@@ -269,8 +468,10 @@ public sealed class MainWindowInteractionTests
         var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
         var labels = panel.FindControl<ScrollViewer>("LabelsSettingsScrollViewer");
         var elastic = panel.FindControl<ScrollViewer>("ElasticSettingsScrollViewer");
-        Assert.Equal(ScrollBarVisibility.Auto, labels!.HorizontalScrollBarVisibility);
-        Assert.Equal(ScrollBarVisibility.Auto, elastic!.HorizontalScrollBarVisibility);
+        Assert.Equal(ScrollBarVisibility.Disabled, labels!.HorizontalScrollBarVisibility);
+        Assert.Equal(ScrollBarVisibility.Auto, labels.VerticalScrollBarVisibility);
+        Assert.Equal(ScrollBarVisibility.Disabled, elastic!.HorizontalScrollBarVisibility);
+        Assert.Equal(ScrollBarVisibility.Auto, elastic.VerticalScrollBarVisibility);
 
         window.Close();
     }
@@ -293,7 +494,7 @@ public sealed class MainWindowInteractionTests
         var window = TestWindow.Create(out var viewModel);
         window.Show();
         Dispatcher.UIThread.RunJobs();
-        var button = window.FindControl<CommandBarButton>("SettingsButton")!;
+        var button = window.FindControl<Button>("SettingsButton")!;
 
         Assert.True(button.Command!.CanExecute(button.CommandParameter));
         button.Command.Execute(button.CommandParameter);
@@ -356,7 +557,13 @@ public sealed class MainWindowInteractionTests
             .Single(textBox => textBox.PlaceholderText == "Text to highlight")
             .Text = "WARN";
         await WaitFor(() => viewModel.State.Settings.GlobalLabels[0].Text == "WARN");
-        Click(labelControls.OfType<Button>().Single(button => button.Content is Icon));
+        Click(
+            labelControls
+                .OfType<Button>()
+                .Single(button =>
+                    ReferenceEquals(button.Command, viewModel.Settings.RemoveLabelCommand)
+                )
+        );
         await WaitFor(() => viewModel.Settings.Labels.Count == 0);
 
         viewModel.Settings.NewExclusionText = "healthcheck";
@@ -368,9 +575,18 @@ public sealed class MainWindowInteractionTests
             .GetVisualDescendants()
             .Where(control => ReferenceEquals(control.DataContext, exclusion))
             .ToArray();
-        exclusionControls.OfType<TextBox>().Single().Text = "probe";
+        exclusionControls
+            .OfType<TextBox>()
+            .Single(textBox => textBox.PlaceholderText == "Text to hide")
+            .Text = "probe";
         await WaitFor(() => viewModel.State.Settings.GlobalExcludeLabels[0] == "probe");
-        Click(exclusionControls.OfType<Button>().Single());
+        Click(
+            exclusionControls
+                .OfType<Button>()
+                .Single(button =>
+                    ReferenceEquals(button.Command, viewModel.Settings.RemoveExclusionCommand)
+                )
+        );
         await WaitFor(() => viewModel.Settings.Exclusions.Count == 0);
 
         Assert.True(persistence.SaveCount >= 6);
@@ -468,6 +684,53 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
+    public async Task LiteralSearchDoesNotInterpretPunctuationAndRegexIsExplicit()
+    {
+        var path = Path.GetTempFileName();
+        var persistence = new TestPersistence();
+        var window = TestWindow.Create(persistence, out var vm);
+        try
+        {
+            await vm.InitializeAsync();
+            await vm.OpenPathsCommand.Execute([path]);
+            window.Show();
+            vm.State.SelectedFile!.Buffer.Append([
+                new Line("[ERROR] failed"),
+                new Line("ERROR plain"),
+            ]);
+            vm.Query = "[ERROR]";
+            Assert.Equal(MatchMode.Literal, vm.MatchMode);
+            Click(FindVisual<Button>(window, "AddSearchButton"));
+            await WaitFor(() => vm.State.SelectedFile.Searches.Count == 1);
+            var literal = Assert.Single(vm.State.SelectedFile.Searches);
+            Assert.Equal(MatchMode.Literal, literal.Query.Mode);
+            Assert.Equal([0], literal.Results);
+            FindVisual<ComboBox>(window, "SearchModePicker").SelectedItem = MatchMode.Regex;
+            vm.Query = "^ERROR";
+            var queryBox = FindVisual<TextBox>(window, "QueryBox");
+            queryBox.Focus();
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            await WaitFor(() => vm.State.SelectedFile.Searches.Count == 2);
+            var regex = vm.State.SelectedFile.Searches[1];
+            Assert.Equal(MatchMode.Regex, regex.Query.Mode);
+            Assert.Equal([1], regex.Results);
+            Assert.Equal(MatchMode.Regex, vm.MatchMode);
+            await vm.SaveCommand.Execute().FirstAsync();
+            Assert.Equal(
+                [MatchMode.Literal, MatchMode.Regex],
+                Assert.Single(persistence.Config!.OpenFiles).Searches.Select(search => search.Mode)
+            );
+            Assert.Equal("Literal", vm.SelectedFile!.Views[1].SearchModeLabel);
+            Assert.Equal("Regex", vm.SelectedFile.Views[2].SearchModeLabel);
+        }
+        finally
+        {
+            window.Close();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task InvalidRegexStaysVisibleAndPreservesQuery()
     {
         var path = Path.GetTempFileName();
@@ -476,6 +739,7 @@ public sealed class MainWindowInteractionTests
             var window = TestWindow.Create(out var viewModel);
             await viewModel.OpenPathsCommand.Execute([path]);
             window.Show();
+            viewModel.MatchMode = MatchMode.Regex;
             viewModel.Query = "[";
             Dispatcher.UIThread.RunJobs();
 
@@ -518,6 +782,7 @@ public sealed class MainWindowInteractionTests
         try
         {
             var window = TestWindow.Create(out var viewModel);
+            window.Width = 1280;
             window.Show();
             await viewModel.OpenPathsCommand.Execute([firstPath, secondPath]);
             Dispatcher.UIThread.RunJobs();
@@ -526,7 +791,7 @@ public sealed class MainWindowInteractionTests
             var tabs = window
                 .GetVisualDescendants()
                 .OfType<Border>()
-                .Where(border => border.Classes.Contains("file-tab"))
+                .Where(border => border.Classes.Contains("source-row"))
                 .ToDictionary(border => Assert.IsType<FileTabViewModel>(border.DataContext));
 
             Click(
@@ -543,15 +808,6 @@ public sealed class MainWindowInteractionTests
 
             Assert.Contains("selected", tabs[first].Classes);
             Assert.DoesNotContain("selected", tabs[second].Classes);
-            Assert.NotNull(tabs[first].Background);
-            Assert.Equal(new Thickness(2, 0, 2, 2), tabs[first].BorderThickness);
-            Assert.Equal(
-                "#FF4822FE",
-                Assert
-                    .IsType<SolidColorBrush>(tabs[first].BorderBrush)
-                    .Color.ToString()
-                    .ToUpperInvariant()
-            );
             Assert.Equal(firstPath, ToolTip.GetTip(tabs[first]));
             var closeButton = window
                 .GetVisualDescendants()
@@ -579,6 +835,7 @@ public sealed class MainWindowInteractionTests
         try
         {
             var window = TestWindow.Create(out var viewModel);
+            window.Width = 1280;
             window.Show();
             await viewModel.OpenPathsCommand.Execute([firstPath, secondPath]);
             Dispatcher.UIThread.RunJobs();
@@ -639,6 +896,7 @@ public sealed class MainWindowInteractionTests
             var second = viewModel.Files[1];
             viewModel.State.SelectFile(first.Model);
             Dispatcher.UIThread.RunJobs();
+            window.Width = 1280;
             window.Show();
             Dispatcher.UIThread.RunJobs();
             var firstButton = window
@@ -662,8 +920,8 @@ public sealed class MainWindowInteractionTests
             Dispatcher.UIThread.RunJobs();
             var following = window
                 .GetVisualDescendants()
-                .OfType<ToggleSwitch>()
-                .Single(toggle => Equals(toggle.OnContent, "Following"));
+                .OfType<ToggleButton>()
+                .Single(toggle => toggle.Name == "AutoScrollToggle" && toggle.IsEffectivelyVisible);
             following.IsChecked = false;
             Dispatcher.UIThread.RunJobs();
 
@@ -687,7 +945,11 @@ public sealed class MainWindowInteractionTests
     public async Task OpenShortcutAcceptsControlOrMeta()
     {
         var viewModel = new MainWindowViewModel(
-            new AppState(new LogSourceService(), new TestPersistence()),
+            new AppState(
+                new LogSourceService(),
+                new TestPersistence(),
+                credentials: new InMemoryCredentialVault()
+            ),
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
@@ -781,7 +1043,11 @@ public sealed class MainWindowInteractionTests
             },
         };
         var viewModel = new MainWindowViewModel(
-            new AppState(new LogSourceService(), persistence),
+            new AppState(
+                new LogSourceService(),
+                persistence,
+                credentials: new InMemoryCredentialVault()
+            ),
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );

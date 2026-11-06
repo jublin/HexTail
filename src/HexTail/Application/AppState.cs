@@ -17,6 +17,9 @@ public sealed class AppState : IAsyncDisposable
     private readonly CancellationTokenSource _healthStop = new();
     private readonly SemaphoreSlim _healthSignal = new(0, 1);
     private readonly List<FileTabState> _files = [];
+    public const int MaxRecent = 10;
+    private readonly List<string> _recentFiles = [];
+    private readonly List<string> _recentElasticSourceIds = [];
     private AppSettings _settings;
     private int _nextFileId;
     private Task? _healthLoop;
@@ -51,6 +54,24 @@ public sealed class AppState : IAsyncDisposable
                 return _files.ToArray();
         }
     }
+    public IReadOnlyList<string> RecentFiles
+    {
+        get
+        {
+            lock (_gate)
+                return _recentFiles.ToArray();
+        }
+    }
+
+    public IReadOnlyList<string> RecentElasticSourceIds
+    {
+        get
+        {
+            lock (_gate)
+                return _recentElasticSourceIds.ToArray();
+        }
+    }
+
     public FileTabState? SelectedFile { get; private set; }
     public AppWindowState Window { get; private set; } = new();
     public AppSettings Settings => _settings;
@@ -104,8 +125,70 @@ public sealed class AppState : IAsyncDisposable
         }
         if (!authenticated && previous is not null)
             _credentials.Delete(connection.Id);
+        await ReloadElasticConnectionAsync(connection, previous, secret ?? string.Empty)
+            .ConfigureAwait(false);
         NotifyChanged();
         SignalHealthCheck();
+    }
+
+    private async ValueTask ReloadElasticConnectionAsync(
+        ElasticConnectionSettings connection,
+        ElasticConnectionSettings? previous,
+        string secret
+    )
+    {
+        var previousIds =
+            previous
+                ?.Views.SelectMany(view => view.Sources)
+                .Select(source => source.Id)
+                .ToHashSet(StringComparer.Ordinal)
+            ?? [];
+        var tabs = Files
+            .Where(tab => tab.Source.Kind == LogSourceKind.Elastic && previousIds.Contains(tab.Id))
+            .ToArray();
+        foreach (var tab in tabs)
+        {
+            var match = connection
+                .Views.SelectMany(view => view.Sources.Select(source => (view, source)))
+                .FirstOrDefault(item => item.source.Id == tab.Id);
+            if (match.source is null)
+            {
+                await CloseFileAsync(tab, save: false).ConfigureAwait(false);
+                continue;
+            }
+            var replacement = _tailers.CreateElastic(
+                connection,
+                match.view,
+                match.source,
+                secret,
+                _elastic,
+                Now
+            );
+            replacement.SetTimeRange(
+                tab.ElasticResolvedFrom?.ToString("O") ?? tab.ElasticFrom,
+                tab.ElasticTo
+            );
+            var old = tab.Tailer;
+            await old.DisposeAsync().ConfigureAwait(false);
+            var installed = false;
+            lock (_gate)
+            {
+                if (_files.Contains(tab))
+                {
+                    installed = true;
+                    tab.Tailer = replacement;
+                    tab.Source = LogSourceDescriptor.Elastic(connection, match.view, match.source);
+                    tab.Buffer.Clear();
+                    tab.Error = null;
+                    tab.ElasticLoading = true;
+                    tab.ElasticInitialLimitReached = null;
+                    tab.ElasticResolvedTo = null;
+                    replacement.Start();
+                }
+            }
+            if (!installed)
+                await replacement.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     public async ValueTask RemoveElasticConnectionAsync(
@@ -114,7 +197,27 @@ public sealed class AppState : IAsyncDisposable
     )
     {
         var previous = _settings;
+        var sourceIds = previous
+            .ElasticConnections.Where(connection => connection.Id == connectionId)
+            .SelectMany(connection => connection.Views)
+            .SelectMany(view => view.Sources)
+            .Select(source => source.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        (FileTabState Tab, int Index)[] removed;
+        FileTabState? previousSelection;
         lock (_gate)
+        {
+            previousSelection = SelectedFile;
+            removed = _files
+                .Select((tab, index) => (Tab: tab, Index: index))
+                .Where(item =>
+                    item.Tab.Source.Kind == LogSourceKind.Elastic && sourceIds.Contains(item.Tab.Id)
+                )
+                .ToArray();
+            foreach (var item in removed)
+                _files.Remove(item.Tab);
+            if (removed.Any(item => item.Tab == SelectedFile))
+                SelectedFile = _files.FirstOrDefault();
             _settings = NormalizeSettings(
                 previous with
                 {
@@ -123,6 +226,7 @@ public sealed class AppState : IAsyncDisposable
                         .ToList(),
                 }
             );
+        }
         try
         {
             await SaveAsync(cancellationToken).ConfigureAwait(false);
@@ -130,9 +234,16 @@ public sealed class AppState : IAsyncDisposable
         catch
         {
             lock (_gate)
+            {
                 _settings = previous;
+                foreach (var item in removed)
+                    _files.Insert(Math.Min(item.Index, _files.Count), item.Tab);
+                SelectedFile = previousSelection;
+            }
             throw;
         }
+        foreach (var item in removed)
+            await item.Tab.DisposeAsync().ConfigureAwait(false);
         try
         {
             _credentials.Delete(connectionId);
@@ -179,6 +290,14 @@ public sealed class AppState : IAsyncDisposable
             cancellationToken
         );
 
+    private static void Remember(List<string> list, string value, StringComparer comparer)
+    {
+        list.RemoveAll(item => comparer.Equals(item, value));
+        list.Insert(0, value);
+        if (list.Count > MaxRecent)
+            list.RemoveRange(MaxRecent, list.Count - MaxRecent);
+    }
+
     public async ValueTask RestoreAsync(CancellationToken cancellationToken = default)
     {
         var config = await _persistence.LoadAsync(cancellationToken).ConfigureAwait(false);
@@ -192,7 +311,12 @@ public sealed class AppState : IAsyncDisposable
         }
         foreach (var persisted in config.OpenFiles)
         {
-            var tab = await OpenFileAsync(persisted.Path, save: false, cancellationToken)
+            var tab = await OpenFileAsync(
+                    persisted.Path,
+                    save: false,
+                    cancellationToken,
+                    remember: false
+                )
                 .ConfigureAwait(false);
             tab.FollowAll = persisted.FollowAll;
             tab.ShowContext = persisted.ShowContext;
@@ -227,7 +351,11 @@ public sealed class AppState : IAsyncDisposable
                 var tab = await OpenElasticSourceAsync(
                         persisted.SourceId,
                         save: false,
-                        cancellationToken
+                        cancellationToken,
+                        persisted.From,
+                        persisted.To,
+                        persisted.InputZone,
+                        remember: false
                     )
                     .ConfigureAwait(false);
                 tab.FollowAll = persisted.FollowAll;
@@ -262,6 +390,14 @@ public sealed class AppState : IAsyncDisposable
 
         lock (_gate)
         {
+            _recentFiles.Clear();
+            _recentFiles.AddRange(config.RecentFiles.Take(MaxRecent));
+            _recentElasticSourceIds.Clear();
+            _recentElasticSourceIds.AddRange(config.RecentElasticSourceIds.Take(MaxRecent));
+        }
+
+        lock (_gate)
+        {
             if (config.SelectedFilePath is not null)
                 SelectedFile = _files.FirstOrDefault(file =>
                     string.Equals(
@@ -283,7 +419,9 @@ public sealed class AppState : IAsyncDisposable
     public async ValueTask<FileTabState> OpenFileAsync(
         string path,
         bool save = true,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        bool remember = true,
+        bool ephemeral = false
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -308,11 +446,14 @@ public sealed class AppState : IAsyncDisposable
                     ContextAbove = _settings.ContextAbove,
                     ContextBelow = _settings.ContextBelow,
                     Error = File.Exists(fullPath) ? null : "File missing",
+                    Ephemeral = ephemeral,
                 };
                 tab.SyncGlobalLabelSearches(_settings.GlobalLabels);
                 _files.Add(tab);
                 SelectedFile = tab;
             }
+            if (remember)
+                Remember(_recentFiles, fullPath, StringComparer.OrdinalIgnoreCase);
         }
 
         NotifyChanged();
@@ -328,7 +469,11 @@ public sealed class AppState : IAsyncDisposable
     public async ValueTask<FileTabState> OpenElasticSourceAsync(
         string sourceId,
         bool save = true,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        string from = "now-5m",
+        string to = "now",
+        AppTimeZoneMode inputZone = AppTimeZoneMode.Utc,
+        bool remember = true
     )
     {
         var match = _settings
@@ -346,6 +491,8 @@ public sealed class AppState : IAsyncDisposable
             if (existing is not null)
             {
                 SelectedFile = existing;
+                if (remember)
+                    Remember(_recentElasticSourceIds, sourceId, StringComparer.Ordinal);
                 return existing;
             }
         }
@@ -364,16 +511,9 @@ public sealed class AppState : IAsyncDisposable
             ? _credentials.Get(connection.Id)
                 ?? throw new InvalidOperationException("The Elastic credential is unavailable.")
             : string.Empty;
-        var viewName = string.IsNullOrWhiteSpace(view.Name) ? view.DataViewTitle! : view.Name;
-        var tailer = _tailers.StartElastic(connection, view, match.source, secret, _elastic, Now);
+        var tailer = _tailers.CreateElastic(connection, view, match.source, secret, _elastic, Now);
         var tab = new FileTabState(
-            new LogSourceDescriptor(
-                sourceId,
-                LogSourceKind.Elastic,
-                $"{match.connection.Name}-{viewName}",
-                $"{match.connection.Name} / {viewName}",
-                ElasticSourceId: sourceId
-            ),
+            LogSourceDescriptor.Elastic(connection, view, match.source),
             new FileBuffer(_settings.MaxLines),
             new PlainTextParser(),
             tailer
@@ -382,12 +522,23 @@ public sealed class AppState : IAsyncDisposable
             ContextAbove = _settings.ContextAbove,
             ContextBelow = _settings.ContextBelow,
         };
+        if (tailer is ElasticTailer elasticTailer)
+        {
+            if (from != "now-5m" || to != "now")
+                elasticTailer.SetTimeRange(from, to);
+            tab.ElasticFrom = from;
+            tab.ElasticTo = to;
+            tab.ElasticInputZone = inputZone;
+        }
         tab.SyncGlobalLabelSearches(_settings.GlobalLabels);
         lock (_gate)
         {
             _files.Add(tab);
             SelectedFile = tab;
+            if (remember)
+                Remember(_recentElasticSourceIds, sourceId, StringComparer.Ordinal);
         }
+        tailer.Start();
         NotifyChanged();
         if (save)
             await SaveAsync(cancellationToken).ConfigureAwait(false);
@@ -403,8 +554,15 @@ public sealed class AppState : IAsyncDisposable
         if (tab.Source.Kind != LogSourceKind.Elastic || tab.Tailer is not ElasticTailer tailer)
             throw new ArgumentException("The selected tab is not an Elastic tab.", nameof(tab));
         tailer.SetTimeRange(from, to);
+        tab.Buffer.Clear();
+        tab.Error = null;
         tab.ElasticFrom = from.Trim();
         tab.ElasticTo = to.Trim();
+        tab.ElasticLoading = true;
+        tab.ElasticInitialLimitReached = null;
+        tab.ElasticResolvedFrom = null;
+        tab.ElasticResolvedTo = null;
+        NotifyChanged();
     }
 
     public IReadOnlyDictionary<string, ElasticSourceHealth> ElasticSourceStatuses =>
@@ -413,7 +571,8 @@ public sealed class AppState : IAsyncDisposable
 
     public async ValueTask CloseFileAsync(
         FileTabState tab,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        bool save = true
     )
     {
         lock (_gate)
@@ -426,7 +585,8 @@ public sealed class AppState : IAsyncDisposable
         await tab.DisposeAsync().ConfigureAwait(false);
         NotifyChanged();
         SignalHealthCheck();
-        await SaveAsync(cancellationToken).ConfigureAwait(false);
+        if (save)
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public Search AddSearch(
@@ -602,90 +762,110 @@ public sealed class AppState : IAsyncDisposable
 
     public bool DrainTailerEvents()
     {
-        var changed = false;
-        var pendingLines = new Dictionary<string, List<Line>>(StringComparer.Ordinal);
-
-        void FlushLines(string sourceId)
+        // ponytail: one lock for the bounded UI drain; split per source if draining causes contention.
+        lock (_gate)
         {
-            if (!pendingLines.Remove(sourceId, out var lines) || lines.Count == 0)
-                return;
-            FileTabState? tab;
-            lock (_gate)
-                tab = _files.FirstOrDefault(file => file.Id == sourceId);
-            tab?.Buffer.Append(lines);
-        }
+            var changed = false;
+            var pendingLines = new Dictionary<string, List<Line>>(StringComparer.Ordinal);
 
-        var remainingLines = MaxLinesPerDrain;
-        var started = System.Diagnostics.Stopwatch.GetTimestamp();
-        for (var events = 0; events < MaxEventsPerDrain && remainingLines > 0; events++)
-        {
-            if (
-                events > 0
-                && System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds >= 8
-            )
-                break;
-            SourceEvent sourceEvent;
-            if (_pendingBatch is not null)
-                sourceEvent = _pendingBatch;
-            else if (!_tailers.Events.TryRead(out sourceEvent!))
-                break;
-            FileTabState? tab;
-            lock (_gate)
-                tab = _files.FirstOrDefault(file => file.Id == sourceEvent.SourceId);
-            if (tab is null)
+            void FlushLines(string sourceId)
             {
-                _pendingBatch = null;
-                _pendingBatchOffset = 0;
-                continue;
+                if (!pendingLines.Remove(sourceId, out var lines) || lines.Count == 0)
+                    return;
+                var tab = _files.FirstOrDefault(file => file.Id == sourceId);
+                tab?.Buffer.Append(lines);
             }
 
-            switch (sourceEvent)
+            var remainingLines = MaxLinesPerDrain;
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            for (var events = 0; events < MaxEventsPerDrain && remainingLines > 0; events++)
             {
-                case SourceLines newLines:
-                    tab.Error = null;
-                    if (!pendingLines.TryGetValue(sourceEvent.SourceId, out var lines))
-                        pendingLines[sourceEvent.SourceId] = lines = [];
-                    var count = Math.Min(
-                        remainingLines,
-                        newLines.Lines.Count - _pendingBatchOffset
-                    );
-                    for (var index = 0; index < count; index++)
-                        lines.Add(newLines.Lines[_pendingBatchOffset + index]);
-                    remainingLines -= count;
-                    _pendingBatchOffset += count;
-                    if (_pendingBatchOffset < newLines.Lines.Count)
-                        _pendingBatch = newLines;
-                    else
-                    {
-                        _pendingBatch = null;
-                        _pendingBatchOffset = 0;
-                    }
+                if (
+                    events > 0
+                    && System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds >= 8
+                )
                     break;
-                case SourceReset:
-                    FlushLines(sourceEvent.SourceId);
-                    tab.Error = null;
-                    tab.Buffer.Clear();
+                SourceEvent sourceEvent;
+                if (_pendingBatch is not null)
+                    sourceEvent = _pendingBatch;
+                else if (!_tailers.Events.TryRead(out sourceEvent!))
                     break;
-                case SourceError error:
-                    FlushLines(sourceEvent.SourceId);
-                    tab.Error = $"Source error: {error.Message}";
-                    break;
-                case SourceRecovered:
-                    FlushLines(sourceEvent.SourceId);
-                    tab.Error = null;
-                    break;
+                var tab = _files.FirstOrDefault(file => file.Id == sourceEvent.SourceId);
+                if (
+                    tab is null
+                    || (
+                        tab.Tailer is ElasticTailer elastic
+                        && (
+                            sourceEvent.InstanceId != elastic.InstanceId
+                            || sourceEvent.Generation != elastic.Generation
+                        )
+                    )
+                )
+                {
+                    _pendingBatch = null;
+                    _pendingBatchOffset = 0;
+                    continue;
+                }
+
+                switch (sourceEvent)
+                {
+                    case SourceLines newLines:
+                        tab.Error = null;
+                        if (!pendingLines.TryGetValue(sourceEvent.SourceId, out var lines))
+                            pendingLines[sourceEvent.SourceId] = lines = [];
+                        var count = Math.Min(
+                            remainingLines,
+                            newLines.Lines.Count - _pendingBatchOffset
+                        );
+                        for (var index = 0; index < count; index++)
+                            lines.Add(newLines.Lines[_pendingBatchOffset + index]);
+                        remainingLines -= count;
+                        _pendingBatchOffset += count;
+                        if (_pendingBatchOffset < newLines.Lines.Count)
+                            _pendingBatch = newLines;
+                        else
+                        {
+                            _pendingBatch = null;
+                            _pendingBatchOffset = 0;
+                        }
+                        break;
+                    case SourceReset:
+                        FlushLines(sourceEvent.SourceId);
+                        tab.Error = null;
+                        tab.Buffer.Clear();
+                        break;
+                    case SourceRangeLoaded loaded:
+                        FlushLines(sourceEvent.SourceId);
+                        tab.ElasticLoading = false;
+                        tab.Error = null;
+                        if (loaded.Initial || tab.ElasticResolvedFrom is null)
+                            tab.ElasticResolvedFrom = loaded.From;
+                        if (loaded.Initial)
+                            tab.ElasticInitialLimitReached = loaded.InitialLimitReached;
+                        tab.ElasticResolvedTo = loaded.To;
+                        break;
+                    case SourceError error:
+                        tab.ElasticLoading = false;
+                        FlushLines(sourceEvent.SourceId);
+                        tab.Error = $"Source error: {error.Message}";
+                        break;
+                    case SourceRecovered:
+                        FlushLines(sourceEvent.SourceId);
+                        tab.Error = null;
+                        break;
+                }
+
+                changed = true;
             }
 
-            changed = true;
+            foreach (var sourceId in pendingLines.Keys.ToArray())
+                FlushLines(sourceId);
+
+            if (changed)
+                NotifyChanged();
+
+            return changed;
         }
-
-        foreach (var sourceId in pendingLines.Keys.ToArray())
-            FlushLines(sourceId);
-
-        if (changed)
-            NotifyChanged();
-
-        return changed;
     }
 
     public async ValueTask SaveAsync(CancellationToken cancellationToken = default)
@@ -693,10 +873,19 @@ public sealed class AppState : IAsyncDisposable
         AppConfig config;
         lock (_gate)
         {
+            var sourceIds = _settings
+                .ElasticConnections.SelectMany(connection => connection.Views)
+                .SelectMany(view => view.Sources)
+                .Select(source => source.Id)
+                .ToHashSet(StringComparer.Ordinal);
+            // Sources removed from the settings must not keep occupying recent slots.
+            _recentElasticSourceIds.RemoveAll(id => !sourceIds.Contains(id));
             config = new AppConfig
             {
+                RecentFiles = [.. _recentFiles],
+                RecentElasticSourceIds = [.. _recentElasticSourceIds],
                 OpenFiles = _files
-                    .Where(tab => tab.Source.Kind == LogSourceKind.File)
+                    .Where(tab => tab.Source.Kind == LogSourceKind.File && !tab.Ephemeral)
                     .Select(tab => new PersistedFileTab
                     {
                         Path = tab.Path,
@@ -723,10 +912,15 @@ public sealed class AppState : IAsyncDisposable
                     })
                     .ToList(),
                 OpenElasticTabs = _files
-                    .Where(tab => tab.Source.Kind == LogSourceKind.Elastic)
+                    .Where(tab =>
+                        tab.Source.Kind == LogSourceKind.Elastic && sourceIds.Contains(tab.Id)
+                    )
                     .Select(tab => new PersistedElasticTab
                     {
                         SourceId = tab.Source.ElasticSourceId!,
+                        From = tab.ElasticFrom,
+                        To = tab.ElasticTo,
+                        InputZone = tab.ElasticInputZone,
                         FollowAll = tab.FollowAll,
                         FollowSearches = tab
                             .Searches.Select((search, index) => (search, index))
@@ -750,8 +944,15 @@ public sealed class AppState : IAsyncDisposable
                     })
                     .ToList(),
                 SelectedFilePath =
-                    SelectedFile?.Source.Kind == LogSourceKind.File ? SelectedFile.Path : null,
-                SelectedElasticSourceId = SelectedFile?.Source.ElasticSourceId,
+                    SelectedFile is { Ephemeral: false } selected
+                    && selected.Source.Kind == LogSourceKind.File
+                        ? selected.Path
+                        : null,
+                SelectedElasticSourceId =
+                    SelectedFile?.Source.ElasticSourceId is { } selectedId
+                    && sourceIds.Contains(selectedId)
+                        ? selectedId
+                        : null,
                 Window = Window,
                 Settings = _settings,
             };
@@ -826,6 +1027,7 @@ public sealed class AppState : IAsyncDisposable
                 Text = label.Text.Trim(),
                 Color = NormalizeColor(label.Color),
                 ShowInOpenFile = label.ShowInOpenFile,
+                Mode = label.Mode ?? CompiledQuery.DetectMode(label.Text),
             })
             .DistinctBy(label => label.Text, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -842,6 +1044,14 @@ public sealed class AppState : IAsyncDisposable
             ContextBelow = settings.ContextBelow,
             GlobalLabels = labels,
             GlobalExcludeLabels = exclusions,
+            GlobalExcludeModes = (settings.GlobalExcludeLabels ?? [])
+                .Where(label => !string.IsNullOrWhiteSpace(label))
+                .GroupBy(label => label.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => settings.GetExcludeMode(group.First()),
+                    StringComparer.OrdinalIgnoreCase
+                ),
             Theme = ThemeCatalog.Normalize(settings.Theme),
             Density = Enum.IsDefined(settings.Density) ? settings.Density : UiDensity.Comfortable,
             LogFontSize = Enum.IsDefined(settings.LogFontSize)

@@ -37,10 +37,11 @@ public sealed class FileTabState : IAsyncDisposable
         Buffer = buffer;
         Parser = parser;
         Tailer = tailer;
+        ElasticLoading = source.Kind == LogSourceKind.Elastic;
         Buffer.Changed += OnBufferChanged;
     }
 
-    public LogSourceDescriptor Source { get; }
+    public LogSourceDescriptor Source { get; internal set; }
     public string Id => Source.Id;
     public string Path => Source.LocalPath ?? string.Empty;
     public FileBuffer Buffer { get; }
@@ -53,10 +54,18 @@ public sealed class FileTabState : IAsyncDisposable
     public int? ExpandedLine { get; set; }
     public int ContextAbove { get; set; } = 3;
     public int ContextBelow { get; set; } = 10;
+    public AppTimeZoneMode ElasticInputZone { get; set; } = AppTimeZoneMode.Utc;
     public string ElasticFrom { get; set; } = "now-5m";
     public string ElasticTo { get; set; } = "now";
+    public bool ElasticLoading { get; internal set; }
+    public int? ElasticInitialLimitReached { get; internal set; }
+    public DateTimeOffset? ElasticResolvedFrom { get; internal set; }
+    public DateTimeOffset? ElasticResolvedTo { get; internal set; }
     public string? Error { get; internal set; }
-    public ILogTailer Tailer { get; }
+
+    /// <summary>A tab backed by a temporary file the app owns; it is never saved to the session.</summary>
+    public bool Ephemeral { get; internal init; }
+    public ILogTailer Tailer { get; internal set; }
     public string DisplayName => Source.DisplayName;
 
     public IReadOnlyList<Line> ContextLines =>
@@ -100,7 +109,11 @@ public sealed class FileTabState : IAsyncDisposable
             {
                 AddSearch(
                     new Search(
-                        new CompiledQuery(label.Text, CompiledQuery.DetectMode(label.Text), false),
+                        new CompiledQuery(
+                            label.Text,
+                            label.Mode ?? CompiledQuery.DetectMode(label.Text),
+                            false
+                        ),
                         label.Color,
                         Buffer,
                         true

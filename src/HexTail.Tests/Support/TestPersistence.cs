@@ -2,9 +2,9 @@ using HexTail.Persistence;
 
 namespace HexTail.Tests.Support;
 
-internal sealed class TestPersistence : IAppPersistence
+internal sealed class TestPersistence(AppConfig? config = null) : IAppPersistence
 {
-    public AppConfig? Config { get; private set; } = new();
+    public AppConfig? Config { get; private set; } = config ?? new();
     public Exception? SaveError { get; set; }
     public int SaveCount { get; private set; }
 

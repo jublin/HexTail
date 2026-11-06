@@ -49,7 +49,7 @@ public sealed class LogSourceService : IAsyncDisposable
         return tailer;
     }
 
-    public ILogTailer StartElastic(
+    internal Elastic.ElasticTailer CreateElastic(
         Persistence.ElasticConnectionSettings connection,
         Persistence.ElasticViewSettings view,
         Persistence.ElasticSourceSettings source,
@@ -70,7 +70,6 @@ public sealed class LogSourceService : IAsyncDisposable
         );
         lock (_gate)
             _tailers.Add(tailer);
-        tailer.Start();
         return tailer;
     }
 

@@ -1,0 +1,74 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTail.ViewModels"
+  x:Class="HexTail.Views.StatusBar"
+  x:DataType="vm:MainWindowViewModel"
+  AutomationProperties.Name="Status"
+>
+  <Border
+    Background="{DynamicResource ToolbarBrush}"
+    BorderBrush="{DynamicResource BorderBrush}"
+    BorderThickness="0,1,0,0"
+    Padding="10,2"
+  >
+    <!-- DockPanel hands each child only the width left after the earlier ones, so declaration
+         order is priority order: the picker and the paused indicator (the pause feedback, docked
+         right) are always protected, then SourceSummary, then ResultCount; StatusRange (the fill
+         child, last) is the first text to shrink and be sacrificed. Texts show in full while
+         there is room and ellipsize only when the bar is tight. -->
+    <DockPanel x:Name="StatusGrid" LastChildFill="True">
+      <ComboBox
+        x:Name="DisplayZonePicker"
+        DockPanel.Dock="Right"
+        Margin="12,0,0,0"
+        MinHeight="0"
+        Padding="6,0"
+        FontSize="12"
+        ItemsSource="{Binding Settings.TimeZoneModes}"
+        SelectedItem="{Binding Settings.TimeZoneMode, Mode=TwoWay}"
+        ToolTip.Tip="Time zone for typed range times and the range display. Log text is unchanged."
+        AutomationProperties.Name="Display time zone"
+      />
+      <TextBlock
+        x:Name="PausedIndicator"
+        DockPanel.Dock="Right"
+        Margin="12,0,0,0"
+        Classes="status"
+        Foreground="{DynamicResource AccentBrush}"
+        Text="Paused — rows are buffering"
+        IsVisible="{Binding IsPaused}"
+        TextTrimming="CharacterEllipsis"
+        ToolTip.Tip="Paused — rows are buffering"
+      />
+      <TextBlock
+        x:Name="SourceSummary"
+        DockPanel.Dock="Left"
+        Margin="0,0,12,0"
+        Classes="status"
+        Text="{Binding SourceSummary}"
+        TextTrimming="CharacterEllipsis"
+        ToolTip.Tip="{Binding SourceSummary}"
+      />
+      <TextBlock
+        x:Name="ResultCount"
+        DockPanel.Dock="Left"
+        Margin="0,0,12,0"
+        Classes="status"
+        Text="{Binding SelectedFile.SelectedView.ResultCount}"
+        IsVisible="{Binding HasFile}"
+        TextTrimming="CharacterEllipsis"
+        ToolTip.Tip="{Binding SelectedFile.SelectedView.ResultCount}"
+      />
+      <TextBlock
+        x:Name="StatusRange"
+        Classes="status"
+        HorizontalAlignment="Right"
+        Text="{Binding ElasticRangeStatus}"
+        IsVisible="{Binding IsElasticSelected}"
+        TextTrimming="CharacterEllipsis"
+        ToolTip.Tip="{Binding ElasticRangeStatus}"
+      />
+    </DockPanel>
+  </Border>
+</UserControl>

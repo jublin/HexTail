@@ -10,6 +10,410 @@ namespace HexTail.Tests.Application;
 public sealed class AppStateTests
 {
     [Fact]
+    public async Task RemovingConfiguredSource_SavesOnceAndClosesItsTab()
+    {
+        var persistence = new MemoryPersistence { FailOnSaveNumber = 2 };
+        var connection = ElasticConnection("Ops") with
+        {
+            Views =
+            [
+                new ElasticViewSettings
+                {
+                    Id = "view",
+                    Name = "Logs",
+                    DataViewId = "view",
+                    DataViewTitle = "logs-*",
+                    TimeFieldName = "@timestamp",
+                    ServerField = "server",
+                    OutputFields = ["message"],
+                    Sources = [new ElasticSourceSettings { Id = "source-1", ServerValue = "api" }],
+                },
+            ],
+        };
+        var client = new FakeElasticApiClient
+        {
+            SearchHandler = _ => Task.FromResult(new ElasticSearchPage("pit", [])),
+        };
+        await using var state = new AppState(
+            new LogSourceService(),
+            persistence,
+            new AppSettings { ElasticConnections = [connection] },
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
+        );
+        try
+        {
+            await state.OpenElasticSourceAsync("source-1", save: false);
+            await state.SaveElasticConnectionAsync(connection with { Views = [] }, null);
+            Assert.Empty(state.Files);
+            Assert.Equal(1, persistence.SaveCount);
+            Assert.Empty(persistence.Config!.OpenElasticTabs);
+            Assert.Null(persistence.Config.SelectedElasticSourceId);
+        }
+        finally
+        {
+            persistence.FailOnSaveNumber = null;
+        }
+    }
+
+    [Fact]
+    public async Task ElasticSourceIdentity_DistinguishesFiltersAndRefreshesAfterSave()
+    {
+        var connection = ElasticConnection("ops") with
+        {
+            Sources =
+            [
+                new ElasticSourceSettings
+                {
+                    Id = "api",
+                    ServerValue = "api",
+                    NamespaceValue = "prod",
+                },
+                new ElasticSourceSettings
+                {
+                    Id = "worker",
+                    ServerValue = "worker",
+                    NamespaceValue = "stage",
+                },
+            ],
+        };
+        await using var state = new AppState(
+            NewTailers(),
+            new MemoryPersistence(),
+            new AppSettings { ElasticConnections = [connection] },
+            elastic: new FakeElasticApiClient
+            {
+                SearchHandler = _ => Task.FromResult(new ElasticSearchPage("pit", [])),
+            },
+            credentials: new InMemoryCredentialVault()
+        );
+        var api = await state.OpenElasticSourceAsync(
+            "api",
+            false,
+            TestContext.Current.CancellationToken
+        );
+        var worker = await state.OpenElasticSourceAsync(
+            "worker",
+            false,
+            TestContext.Current.CancellationToken
+        );
+        Assert.NotEqual(api.DisplayName, worker.DisplayName);
+        Assert.Contains("api", api.Source.ToolTip);
+        var saved = state.Settings.ElasticConnections[0];
+        var view = saved.Views[0];
+        await state.SaveElasticConnectionAsync(
+            saved with
+            {
+                Name = "Renamed",
+                Views =
+                [
+                    view with
+                    {
+                        Sources =
+                        [
+                            view.Sources[0] with
+                            {
+                                ServerValue = "changed-api",
+                            },
+                            view.Sources[1],
+                        ],
+                    },
+                ],
+            },
+            null,
+            TestContext.Current.CancellationToken
+        );
+        Assert.Contains("Renamed", api.DisplayName);
+        Assert.Contains("changed-api", api.DisplayName);
+        Assert.Contains("prod", api.Source.ToolTip);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RestoreElasticHistory_UsesSavedIntervalOnFirstRequest(bool relative)
+    {
+        var from = relative ? "now-15m" : "2026-08-20T10:00:00Z";
+        var to = relative ? "now" : "2026-08-20T11:00:00Z";
+        var persistence = new MemoryPersistence();
+        var connection = ElasticConnection("ops") with
+        {
+            Sources = [new ElasticSourceSettings { Id = "source-1", ServerValue = "api" }],
+        };
+        await using (
+            var original = new AppState(
+                NewTailers(),
+                persistence,
+                new AppSettings { ElasticConnections = [connection] },
+                elastic: new FakeElasticApiClient(),
+                credentials: new InMemoryCredentialVault()
+            )
+        )
+        {
+            var tab = await original.OpenElasticSourceAsync(
+                "source-1",
+                save: false,
+                cancellationToken: TestContext.Current.CancellationToken
+            );
+            original.SetElasticTimeRange(tab, from, to);
+            tab.ElasticInputZone = AppTimeZoneMode.Local;
+            await original.SaveAsync(TestContext.Current.CancellationToken);
+        }
+        var requested = new TaskCompletionSource<ElasticSearchRequest>();
+        var client = new FakeElasticApiClient
+        {
+            SearchHandler = request =>
+            {
+                requested.TrySetResult(request);
+                return Task.FromResult(new ElasticSearchPage("pit", []));
+            },
+        };
+        await using var restored = new AppState(
+            NewTailers(),
+            persistence,
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
+        );
+        var beforeRestore = DateTimeOffset.UtcNow;
+        await restored.RestoreAsync(TestContext.Current.CancellationToken);
+        var first = await requested.Task.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken
+        );
+        if (relative)
+        {
+            var afterRequest = DateTimeOffset.UtcNow;
+            Assert.InRange(
+                first.FromInclusive,
+                beforeRestore.AddMinutes(-15),
+                afterRequest.AddMinutes(-15)
+            );
+            Assert.InRange(first.ToInclusive, beforeRestore, afterRequest);
+        }
+        else
+        {
+            Assert.Equal(DateTimeOffset.Parse(from), first.FromInclusive);
+            Assert.Equal(DateTimeOffset.Parse(to), first.ToInclusive);
+        }
+        Assert.Equal(from, restored.SelectedFile!.ElasticFrom);
+        Assert.Equal(to, restored.SelectedFile.ElasticTo);
+        Assert.Equal(AppTimeZoneMode.Local, restored.SelectedFile.ElasticInputZone);
+    }
+
+    [Fact]
+    public async Task SavingOpenElasticSettings_ReloadsTheSavedFilterAndPreservesInvestigation()
+    {
+        var connection = ElasticConnection("ops") with
+        {
+            Sources = [new ElasticSourceSettings { Id = "source-1", ServerValue = "api" }],
+        };
+        var changedRequested = new TaskCompletionSource<ElasticSearchRequest>();
+        var client = new FakeElasticApiClient
+        {
+            SearchHandler = request =>
+            {
+                if (request.FilterValue == "changed-api")
+                    changedRequested.TrySetResult(request);
+                return Task.FromResult(new ElasticSearchPage("pit", []));
+            },
+        };
+        await using var state = new AppState(
+            NewTailers(),
+            new MemoryPersistence(),
+            new AppSettings { ElasticConnections = [connection] },
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
+        );
+        var tab = await state.OpenElasticSourceAsync(
+            "source-1",
+            save: false,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        var oldTailer = tab.Tailer;
+        await oldTailer.DisposeAsync();
+        var from = "2026-08-20T10:00:00Z";
+        var to = "2026-08-20T11:00:00Z";
+        state.SetElasticTimeRange(tab, from, to);
+        tab.Buffer.Append(new Line("old results"));
+        tab.AddSearch(
+            new Search(
+                new CompiledQuery("message", MatchMode.Literal, false),
+                "#ff0000",
+                tab.Buffer
+            )
+        );
+        tab.FollowAll = false;
+        var saved = state.Settings.ElasticConnections[0];
+        var view = saved.Views[0];
+        var updated = saved with
+        {
+            Views =
+            [
+                view with
+                {
+                    Sources = [view.Sources[0] with { ServerValue = "changed-api" }],
+                },
+            ],
+        };
+
+        await state.SaveElasticConnectionAsync(
+            updated,
+            null,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Same(tab, state.SelectedFile);
+        Assert.NotSame(oldTailer, tab.Tailer);
+        Assert.Empty(tab.Buffer.Lines);
+        Assert.Single(tab.Searches);
+        Assert.False(tab.FollowAll);
+        Assert.Equal(from, tab.ElasticFrom);
+        Assert.Equal(to, tab.ElasticTo);
+        var request = await changedRequested.Task.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken
+        );
+        Assert.Equal(DateTimeOffset.Parse(from), request.FromInclusive);
+        Assert.Equal(DateTimeOffset.Parse(to), request.ToInclusive);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReopeningElasticSource_RejectsQueuedEventsFromItsPreviousOpening(bool partial)
+    {
+        var connection = ElasticConnection("ops") with
+        {
+            Sources = [new ElasticSourceSettings { Id = "source-1", ServerValue = "api" }],
+        };
+        var payload = "old opening";
+        var client = new FakeElasticApiClient
+        {
+            SearchHandler = _ =>
+                Task.FromResult(
+                    new ElasticSearchPage(
+                        "pit",
+                        [
+                            new ElasticHit(
+                                Guid.NewGuid().ToString(),
+                                DateTimeOffset.UtcNow,
+                                new Line(payload),
+                                []
+                            ),
+                        ]
+                    )
+                ),
+        };
+        await using var service = NewTailers();
+        await using var state = new AppState(
+            service,
+            new MemoryPersistence(),
+            new AppSettings { ElasticConnections = [connection] },
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
+        );
+        var old = await state.OpenElasticSourceAsync(
+            "source-1",
+            save: false,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        await old.Tailer.DisposeAsync();
+        await ((ElasticTailer)old.Tailer).PollOnceAsync(TestContext.Current.CancellationToken);
+        SourceLines? oldRows = null;
+        while (service.Events.TryRead(out var sourceEvent))
+            if (sourceEvent is SourceLines rows)
+                oldRows = rows;
+        Assert.NotNull(oldRows);
+        var queued = oldRows with
+        {
+            Lines = Enumerable.Repeat(new Line("old opening"), partial ? 20_000 : 1).ToArray(),
+        };
+        Assert.True(service.Publish(queued));
+        if (partial)
+        {
+            state.DrainTailerEvents();
+            Assert.NotEmpty(old.Buffer.Lines);
+        }
+        await state.CloseFileAsync(old, TestContext.Current.CancellationToken);
+        payload = "new opening";
+        var current = await state.OpenElasticSourceAsync(
+            "source-1",
+            save: false,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        await current.Tailer.DisposeAsync();
+        await ((ElasticTailer)current.Tailer).PollOnceAsync(TestContext.Current.CancellationToken);
+        while (state.DrainTailerEvents()) { }
+        Assert.DoesNotContain(current.Buffer.Lines, line => line.Raw == "old opening");
+        Assert.Contains(current.Buffer.Lines, line => line.Raw == "new opening");
+    }
+
+    [Fact]
+    public async Task FailedSettingsSave_PreservesOpenTailerRangeAndRows()
+    {
+        var connection = ElasticConnection("ops") with
+        {
+            Sources = [new ElasticSourceSettings { Id = "source-1", ServerValue = "api" }],
+        };
+        var persistence = new MemoryPersistence();
+        var client = new FakeElasticApiClient
+        {
+            SearchHandler = _ => Task.FromResult(new ElasticSearchPage("pit", [])),
+        };
+        await using var state = new AppState(
+            NewTailers(),
+            persistence,
+            new AppSettings { ElasticConnections = [connection] },
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
+        );
+        var tab = await state.OpenElasticSourceAsync("source-1", save: false);
+        const string from = "2026-08-20T10:00:00Z";
+        const string to = "2026-08-20T11:00:00Z";
+        state.SetElasticTimeRange(tab, from, to);
+        var tailer = tab.Tailer;
+        tab.Buffer.Append(new Line("preserved row"));
+        var saved = state.Settings.ElasticConnections[0];
+        var updated = saved with
+        {
+            Views =
+            [
+                saved.Views[0] with
+                {
+                    Sources = [saved.Views[0].Sources[0] with { ServerValue = "changed-api" }],
+                },
+            ],
+        };
+        try
+        {
+            persistence.SaveError = new IOException("disk full");
+            await Assert.ThrowsAsync<IOException>(() =>
+                state.SaveElasticConnectionAsync(updated, null).AsTask()
+            );
+            Assert.Same(tailer, tab.Tailer);
+            Assert.Same(tab, state.SelectedFile);
+            Assert.Equal(from, tab.ElasticFrom);
+            Assert.Equal(to, tab.ElasticTo);
+            Assert.Equal("preserved row", Assert.Single(tab.Buffer.Lines).Raw);
+            Assert.Equal(
+                "api",
+                state.Settings.ElasticConnections[0].Views[0].Sources[0].ServerValue
+            );
+            var completed = await ((ElasticTailer)tailer).PollOnceAsync(
+                TestContext.Current.CancellationToken
+            );
+            Assert.NotNull(completed);
+            Assert.Equal(DateTimeOffset.Parse(from), completed.From);
+            Assert.Equal(DateTimeOffset.Parse(to), completed.To);
+            Assert.Equal("api", client.Searches[^1].FilterValue);
+        }
+        finally
+        {
+            persistence.SaveError = null;
+        }
+    }
+
+    [Fact]
     public async Task SaveElasticConnection_PreservesExistingApiKeyWhenSecretIsBlank()
     {
         var connection = ElasticConnection("Ops") with { AuthMode = ElasticAuthMode.ApiKey };
@@ -103,7 +507,7 @@ public sealed class AppStateTests
 
         Assert.Same(first, second);
         Assert.Equal(LogSourceKind.Elastic, first.Source.Kind);
-        Assert.Equal("ops-logs-*", first.DisplayName);
+        Assert.Equal("ops / logs-* · api", first.DisplayName);
         Assert.Empty(Assert.IsType<AppConfig>(persistence.Config).OpenFiles);
         Assert.Equal(
             "source-1",
@@ -127,7 +531,11 @@ public sealed class AppStateTests
                 UseFileSystemWatcher = false,
             }
         );
-        await using var state = new AppState(tailers, persistence);
+        await using var state = new AppState(
+            tailers,
+            persistence,
+            credentials: new InMemoryCredentialVault()
+        );
 
         var tab = await state.OpenFileAsync(path);
         await DrainUntilAsync(state, () => tab.Buffer.Count == 1);
@@ -152,7 +560,13 @@ public sealed class AppStateTests
         var path = CreateTempFile("error\n");
         var persistence = new MemoryPersistence();
         await using (var tailers = NewTailers())
-        await using (var state = new AppState(tailers, persistence))
+        await using (
+            var state = new AppState(
+                tailers,
+                persistence,
+                credentials: new InMemoryCredentialVault()
+            )
+        )
         {
             var tab = await state.OpenFileAsync(path);
             await DrainUntilAsync(state, () => tab.Buffer.Count == 1);
@@ -165,7 +579,11 @@ public sealed class AppStateTests
         }
 
         await using var restoredTailers = NewTailers();
-        await using var restored = new AppState(restoredTailers, persistence);
+        await using var restored = new AppState(
+            restoredTailers,
+            persistence,
+            credentials: new InMemoryCredentialVault()
+        );
         await restored.RestoreAsync();
 
         var restoredTab = Assert.Single(restored.Files);
@@ -196,7 +614,11 @@ public sealed class AppStateTests
     public async Task UpdateSettings_PersistsNormalizedGlobalRules()
     {
         var persistence = new MemoryPersistence();
-        await using var state = new AppState(NewTailers(), persistence);
+        await using var state = new AppState(
+            NewTailers(),
+            persistence,
+            credentials: new InMemoryCredentialVault()
+        );
 
         await state.UpdateSettingsAsync(
             new AppSettings
@@ -225,7 +647,11 @@ public sealed class AppStateTests
     public async Task UpdateSettings_ShowsGlobalLabelsAsSearchTabsInOpenViews()
     {
         var path = CreateTempFile("error\n");
-        await using var state = new AppState(NewTailers(), new MemoryPersistence());
+        await using var state = new AppState(
+            NewTailers(),
+            new MemoryPersistence(),
+            credentials: new InMemoryCredentialVault()
+        );
         try
         {
             var tab = await state.OpenFileAsync(path, save: false);
@@ -279,7 +705,11 @@ public sealed class AppStateTests
     [Fact]
     public async Task DrainTailerEvents_WithoutEventsDoesNotNotify()
     {
-        await using var state = new AppState(NewTailers(), new MemoryPersistence());
+        await using var state = new AppState(
+            NewTailers(),
+            new MemoryPersistence(),
+            credentials: new InMemoryCredentialVault()
+        );
         var notifications = 0;
         state.Changed += () => notifications++;
 
@@ -292,7 +722,11 @@ public sealed class AppStateTests
     {
         var path = CreateTempFile(string.Empty);
         await using var tailers = NewTailers();
-        await using var state = new AppState(tailers, new MemoryPersistence());
+        await using var state = new AppState(
+            tailers,
+            new MemoryPersistence(),
+            credentials: new InMemoryCredentialVault()
+        );
         var tab = await state.OpenFileAsync(path, save: false);
         var bufferChanges = 0;
         tab.Buffer.Changed += _ => bufferChanges++;
@@ -315,7 +749,11 @@ public sealed class AppStateTests
         try
         {
             await using var tailers = NewTailers();
-            await using var state = new AppState(tailers, new MemoryPersistence());
+            await using var state = new AppState(
+                tailers,
+                new MemoryPersistence(),
+                credentials: new InMemoryCredentialVault()
+            );
             var tab = await state.OpenFileAsync(path, save: false);
             var lines = Enumerable.Range(0, 20_000).Select(i => new Line(i.ToString())).ToArray();
             Assert.True(tailers.Publish(new SourceLines(tab.Id, lines)));
@@ -337,7 +775,11 @@ public sealed class AppStateTests
     public async Task Files_ReturnsSnapshotWhileWorkspaceChanges()
     {
         var path = CreateTempFile(string.Empty);
-        await using var state = new AppState(NewTailers(), new MemoryPersistence());
+        await using var state = new AppState(
+            NewTailers(),
+            new MemoryPersistence(),
+            credentials: new InMemoryCredentialVault()
+        );
 
         var beforeOpen = state.Files;
         await state.OpenFileAsync(path, save: false);
@@ -372,6 +814,114 @@ public sealed class AppStateTests
         Assert.Equal("42", fields["count"]);
     }
 
+    [Fact]
+    public async Task ElasticRangeChange_ClearsRowsAndRejectsQueuedAndPartialOldBatches()
+    {
+        var client = new HexTail.Tests.Support.FakeElasticApiClient
+        {
+            SearchHandler = _ => Task.FromResult(new HexTail.Elastic.ElasticSearchPage("pit", [])),
+        };
+        await using var tailers = NewTailers();
+        await using var state = new AppState(
+            tailers,
+            new MemoryPersistence(),
+            elastic: client,
+            credentials: new InMemoryCredentialVault()
+        );
+        var connection = ElasticConnection("ops") with
+        {
+            Views =
+            [
+                new ElasticViewSettings
+                {
+                    Id = "v1",
+                    DataViewTitle = "logs-*",
+                    TimeFieldName = "@timestamp",
+                    ServerField = "server",
+                    Sources = [new ElasticSourceSettings { Id = "s1", ServerValue = "api" }],
+                },
+            ],
+        };
+        await state.UpdateSettingsAsync(new AppSettings { ElasticConnections = [connection] });
+        var tab = await state.OpenElasticSourceAsync("s1", save: false);
+        // This test supplies events directly; stop the producer to avoid injected-event races.
+        await tab.Tailer.DisposeAsync();
+        tab.AddSearch(
+            new Search(
+                new CompiledQuery("old", CompiledQuery.DetectMode("old"), false),
+                "#ff0000",
+                tab.Buffer
+            )
+        );
+        var oldBatch = new SourceLines(
+            tab.Id,
+            Enumerable.Range(0, 20_000).Select(_ => new Line("old")).ToArray()
+        )
+        {
+            Generation = 0,
+            InstanceId = ((ElasticTailer)tab.Tailer).InstanceId,
+        };
+        Assert.True(tailers.Publish(oldBatch));
+        state.DrainTailerEvents();
+        Assert.NotEmpty(tab.Buffer.Lines);
+        tab.SelectedLine = 0;
+        tab.ExpandedLine = 0;
+        state.SetElasticTimeRange(tab, "now-2m", "now");
+        Assert.Empty(tab.Buffer.Lines);
+        Assert.Single(tab.Searches);
+        Assert.Null(tab.SelectedLine);
+        Assert.Null(tab.ExpandedLine);
+        Assert.True(
+            tailers.Publish(
+                new SourceError(tab.Id, "old failure")
+                {
+                    Generation = 0,
+                    InstanceId = ((ElasticTailer)tab.Tailer).InstanceId,
+                }
+            )
+        );
+        Assert.True(
+            tailers.Publish(
+                new SourceLines(tab.Id, [new Line("new")])
+                {
+                    Generation = 1,
+                    InstanceId = ((ElasticTailer)tab.Tailer).InstanceId,
+                }
+            )
+        );
+        while (state.DrainTailerEvents()) { }
+        Assert.Equal("new", Assert.Single(tab.Buffer.Lines).Raw);
+        Assert.Null(tab.Error);
+        Assert.True(tab.ElasticLoading);
+        var from = DateTimeOffset.Parse("2026-08-20T10:00:00Z");
+        var to = from.AddHours(1);
+        Assert.True(
+            tailers.Publish(
+                new SourceRangeLoaded(tab.Id, from, to, true, true)
+                {
+                    Generation = 1,
+                    InstanceId = ((ElasticTailer)tab.Tailer).InstanceId,
+                }
+            )
+        );
+        while (state.DrainTailerEvents()) { }
+        Assert.False(tab.ElasticLoading);
+        Assert.Equal(from, tab.ElasticResolvedFrom);
+        Assert.Equal(to, tab.ElasticResolvedTo);
+        Assert.True(
+            tailers.Publish(
+                new SourceRangeLoaded(tab.Id, from.AddMinutes(1), to.AddMinutes(1), false, true)
+                {
+                    Generation = 1,
+                    InstanceId = ((ElasticTailer)tab.Tailer).InstanceId,
+                }
+            )
+        );
+        while (state.DrainTailerEvents()) { }
+        Assert.Equal(from, tab.ElasticResolvedFrom);
+        Assert.Equal(to.AddMinutes(1), tab.ElasticResolvedTo);
+    }
+
     private static LogSourceService NewTailers() =>
         new(
             new TailerOptions
@@ -402,6 +952,9 @@ public sealed class AppStateTests
 
     private sealed class MemoryPersistence : IAppPersistence
     {
+        public int SaveCount { get; private set; }
+        public int? FailOnSaveNumber { get; set; }
+
         public AppConfig? Config { get; private set; }
         public Exception? SaveError { get; set; }
 
@@ -410,6 +963,8 @@ public sealed class AppStateTests
 
         public ValueTask SaveAsync(AppConfig config, CancellationToken cancellationToken = default)
         {
+            if (++SaveCount == FailOnSaveNumber)
+                throw new IOException("second write failed");
             if (SaveError is not null)
                 throw SaveError;
             Config = AppConfigJson.Deserialize(AppConfigJson.Serialize(config));

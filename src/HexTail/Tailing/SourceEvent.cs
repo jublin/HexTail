@@ -5,7 +5,11 @@ namespace HexTail.Tailing;
 /// via <see cref="TailerService.Events"/>. Tailers never touch UI state directly.
 /// </summary>
 /// <param name="FileId">Identifier of the tailed file, as assigned by the caller of <see cref="TailerService.StartTailer"/>.</param>
-public abstract record SourceEvent(string SourceId);
+public abstract record SourceEvent(string SourceId)
+{
+    public Guid? InstanceId { get; init; }
+    public long? Generation { get; init; }
+}
 
 /// <summary>
 /// One or more complete lines were read from the file. Lines are emitted in file order;
@@ -28,3 +32,15 @@ public sealed record SourceReset(string SourceId) : SourceEvent(SourceId);
 public sealed record SourceError(string SourceId, string Message) : SourceEvent(SourceId);
 
 public sealed record SourceRecovered(string SourceId) : SourceEvent(SourceId);
+
+public sealed record SourceRangeLoaded(
+    string SourceId,
+    DateTimeOffset From,
+    DateTimeOffset To,
+    bool Initial,
+    bool Live
+) : SourceEvent(SourceId)
+{
+    // Reaching the initial limit does not establish the interval's total row count.
+    public int? InitialLimitReached { get; init; }
+}

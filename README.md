@@ -11,13 +11,13 @@ Elastic sources use separate Kibana and Elasticsearch URLs, generic
 server/namespace mappings, ordered output fields, a five-minute initial
 lookback, and native OS credential storage for authenticated connections.
 
-![HexTail desktop UI](assets/hextail-ui.png)
+![HexTail desktop UI: source sidebar, search bar, and a live log view](assets/hextail-ui.png)
 
 ## Features
 
 - Live tailing with append, truncate, rotation, and missing-file recovery.
-- Multiple files in tabs, opened from the native picker, drag-and-drop, or the
-  command line.
+- Multiple files listed in a source sidebar, opened from the native picker,
+  drag-and-drop, or the command line.
 - Literal and regular-expression searches with optional case sensitivity and a
   separate highlight color for each search.
 - Independent follow-tail toggles for the All view and each search view.
@@ -79,23 +79,49 @@ dotnet run --project src/HexTail.LogGenerator -- --format jsonl --output /tmp/he
 ## Using HexTail
 
 1. Open one or more files with the folder button, `Ctrl+O`/`Cmd+O`, or
-   drag-and-drop.
-2. Select a file tab. The **All** view shows the complete buffered tail.
+   drag-and-drop. With nothing open, the empty state also offers recent files
+   and Elastic sources, **Connect to Elastic**, and **Try a sample log**, a
+   generated log that is kept out of the saved session and the recents list.
+2. Pick a source in the sidebar, which lists open files and Elastic sources.
+   Each source has an **All** view with the complete buffered tail. Toggle the
+   sidebar with the toolbar button or `Ctrl+B`; below 1000 px wide it becomes an
+   overlay that closes after a selection.
 3. Enter a query in **Search this file** and press Enter or **Add Search**.
    Search tabs show matching lines; the All view highlights the same matches.
-4. Choose **Following** to keep a view at the newest line or match. Turn on
-   **Inline Shown** to display the selected line with surrounding context.
-5. Use **Settings** to manage global labels and exclusions or change display
-   preferences.
+4. **Follow** and **Context** are on each view's toolbar. Follow keeps a view at
+   the newest line or match; scrolling away shows a **↓ N new lines** pill that
+   jumps back and resumes following. **Context** shows the selected line with
+   its surrounding lines. **Pause** on the top toolbar freezes row updates in
+   the view while logs keep buffering.
+5. The status bar shows source and row counts and the display time zone
+   (**Local** or **Utc**). For an Elastic source, the clock pill in the top
+   toolbar (for example **Last 5 min · live**) opens the time range: quick
+   presets, or typed **From** and **To** times.
+6. Press `Ctrl+K` for the command palette. **Settings** manages global labels
+   and exclusions, Elastic servers, and display preferences.
 
 ### Keyboard shortcuts
 
 | Shortcut | Action |
 | --- | --- |
+| `Ctrl+K` / `Cmd+K` (or `Ctrl+Shift+P`) | Open the command palette: commands, views, sources |
 | `Ctrl+O` / `Cmd+O` | Open files |
-| `Ctrl+F` / `Cmd+F` | Focus the search box |
-| `Ctrl+S` / `Cmd+S` | Save the current session |
-| `Esc` | Close the settings pane |
+| `Ctrl+F` / `Cmd+F`, or `/` | Focus the search box |
+| `Ctrl+B` / `Cmd+B` | Toggle the source sidebar |
+| `Ctrl+W` / `Cmd+W` | Close the selected search view, or the source when **All** is selected |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous view |
+| `Ctrl+1`…`Ctrl+9` | Select a view |
+| `F` | Toggle follow for the selected view |
+| `Space` | Pause / resume view updates (logs keep buffering) |
+| `g` / `Shift+G` | Jump to the first line / the newest line (and follow) |
+| `Alt+Up` / `Alt+Down` | Move the focused file up or down in the sidebar |
+| `Alt+Left` / `Alt+Right` | Move the focused view tab left or right |
+| `Ctrl+S` / `Cmd+S` | Save the session now (it also saves automatically) |
+| `Esc` | Close Settings or the command palette |
+
+The single-key shortcuts (`/`, `F`, `Space`, `g`, `Shift+G`) do not fire while a
+text box has focus. While the palette or Settings is open, the other shortcuts
+are paused; `Esc` closes the palette.
 
 ### Input formats
 

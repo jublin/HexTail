@@ -22,6 +22,10 @@ internal sealed class LogViewViewModel : ReactiveObject
     private int? _lastExpandedLine;
     private int _lastViewsVersion;
     private ViewSnapshot? _lastSnapshot;
+    internal const int UnseenScanLimit = 10_000;
+    private Line? _seenAnchor;
+    private bool _rowRefreshPending;
+    private int _unseenCount;
 
     internal LogViewViewModel(MainWindowViewModel owner, FileTabViewModel file, Search? search)
     {
@@ -30,6 +34,7 @@ internal sealed class LogViewViewModel : ReactiveObject
         Search = search;
         SelectLineCommand = ReactiveCommand.Create<Line>(line => _file.SelectLine(line));
         ToggleExpandedCommand = ReactiveCommand.Create<Line>(line => _file.ToggleExpanded(line));
+        JumpToLatestCommand = ReactiveCommand.Create(JumpToLatest, owner.Scheduler);
     }
 
     public Search? Search { get; }
@@ -38,7 +43,26 @@ internal sealed class LogViewViewModel : ReactiveObject
     public AppSettings Settings => _owner.State.Settings;
     public bool IsAllView => Search is null;
     public string Header => Search is null ? "All" : Truncate(Search.Query.Query);
+    public string SearchModeLabel => Search?.Query.Mode.ToString() ?? string.Empty;
     public string MatchSummary => Search is null ? string.Empty : $"({Search.Results.Count:N0})";
+    public string ResultCount =>
+        $"{Lines.Count:N0} visible · {File.Buffer.Count:N0} loaded from source";
+    public string ResultMessage =>
+        File.Error is { } error ? error
+        : File.ElasticLoading ? "Loading logs for the applied interval…"
+        : Lines.Count > 0 ? string.Empty
+        : File.Buffer.Count == 0
+            ? File.Source.Kind == LogSourceKind.Elastic
+                    ? "No logs returned for the applied interval."
+                : "No logs in this source yet."
+        : Search is not null && Search.Results.Count == 0 ? "No logs match this search."
+        : "All matching logs are hidden by global exclusions.";
+    public bool HasResultMessage => ResultMessage.Length > 0;
+    public string InitialLimitMessage =>
+        File.ElasticInitialLimitReached is { } limit
+            ? $"Initial limit reached ({limit:N0} newest logs). The applied interval may contain more logs; narrow the interval to inspect earlier history."
+            : string.Empty;
+    public bool HasInitialLimitMessage => InitialLimitMessage.Length > 0;
 
     public override string ToString() => Header;
 
@@ -46,6 +70,14 @@ internal sealed class LogViewViewModel : ReactiveObject
     public AvaloniaList<LogLineViewModel> ContextLines { get; } = [];
     public ReactiveCommand<Line, Unit> SelectLineCommand { get; }
     public ReactiveCommand<Line, Unit> ToggleExpandedCommand { get; }
+    public ReactiveCommand<Unit, Unit> JumpToLatestCommand { get; }
+
+    public int UnseenCount => _unseenCount;
+    public bool HasUnseen => _unseenCount > 0;
+    public string UnseenLabel =>
+        _unseenCount >= UnseenScanLimit ? $"↓ {UnseenScanLimit:N0}+ new lines"
+        : _unseenCount == 1 ? "↓ 1 new line"
+        : $"↓ {_unseenCount:N0} new lines";
     public bool ShowContext
     {
         get => _file.Model.ShowContext;
@@ -81,14 +113,60 @@ internal sealed class LogViewViewModel : ReactiveObject
                 _ = _owner.SetFollowAllAsync(_file, value);
             else
                 _ = _file.SetSearchFollowAsync(Search, value);
+            if (!value)
+                _seenAnchor = DisplayedTail;
             this.RaisePropertyChanged(nameof(IsFollowing));
         }
+    }
+
+    private void JumpToLatest()
+    {
+        _owner.IsPaused = false;
+        IsFollowing = true;
+        Sync();
+    }
+
+    private Line? DisplayedTail => Lines.Count > 0 ? Lines[^1].Line : null;
+
+    private void UpdateUnseen(IReadOnlyList<Line> lines, bool frozen)
+    {
+        var count = 0;
+        if (!frozen && IsFollowing)
+            _seenAnchor = lines.Count > 0 ? lines[^1] : null;
+        else
+        {
+            _seenAnchor ??= DisplayedTail;
+            var anchorSeen = _seenAnchor is null;
+            var index = lines.Count - 1;
+            for (; index >= 0 && count < UnseenScanLimit; index--)
+            {
+                if (ReferenceEquals(lines[index], _seenAnchor))
+                {
+                    anchorSeen = true;
+                    break;
+                }
+                count++;
+            }
+            // The anchor left the list (exclusion change, eviction, elastic re-apply): restart from the tail.
+            // Trade-off: lines that arrived after the anchor was removed are not counted; the count restarts from the current tail.
+            if (!anchorSeen && index < 0)
+            {
+                _seenAnchor = lines.Count > 0 ? lines[^1] : null;
+                count = 0;
+            }
+        }
+        if (count == _unseenCount)
+            return;
+        _unseenCount = count;
+        this.RaisePropertyChanged(nameof(UnseenCount));
+        this.RaisePropertyChanged(nameof(HasUnseen));
+        this.RaisePropertyChanged(nameof(UnseenLabel));
     }
 
     public void Sync(bool resetItems = false)
     {
         var settings = Settings;
-        var refreshRows = !ReferenceEquals(_lastSettings, settings);
+        var settingsChanged = !ReferenceEquals(_lastSettings, settings);
         var expandedChanged = _lastExpandedLine != _file.Model.ExpandedLine;
         var viewsChanged = _lastViewsVersion != _file.ViewsVersion;
         _lastSettings = settings;
@@ -105,10 +183,25 @@ internal sealed class LogViewViewModel : ReactiveObject
             InvalidateRows(ContextLines);
         }
         var lines = LinesFor();
-        SyncRows(Lines, lines, isContext: false, resetItems, refreshRows);
+        var frozen = _owner.IsPaused && Lines.Count > 0;
+        if (!frozen)
+        {
+            // A settings change seen while frozen still has to reach the retained rows once they sync.
+            SyncRows(
+                Lines,
+                lines,
+                isContext: false,
+                resetItems,
+                settingsChanged || _rowRefreshPending
+            );
+            _rowRefreshPending = false;
+        }
+        else
+            _rowRefreshPending |= settingsChanged;
+        UpdateUnseen(lines, frozen);
 
         var context = _file.Model.ShowContext ? ContextLinesFor() : [];
-        SyncRows(ContextLines, context, isContext: true, resetItems, refreshRows);
+        SyncRows(ContextLines, context, isContext: true, resetItems, settingsChanged);
 
         var snapshot = new ViewSnapshot(
             MatchSummary,
@@ -118,7 +211,10 @@ internal sealed class LogViewViewModel : ReactiveObject
             ContextSplitterHeight,
             ContextEmpty,
             ContextEmptyVisible,
-            IsFollowing
+            IsFollowing,
+            ResultCount,
+            ResultMessage,
+            InitialLimitMessage
         );
         var previous = _lastSnapshot;
         _lastSnapshot = snapshot;
@@ -141,6 +237,18 @@ internal sealed class LogViewViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(ContextEmptyVisible));
         if (previous is null || previous.Value.IsFollowing != snapshot.IsFollowing)
             this.RaisePropertyChanged(nameof(IsFollowing));
+        if (previous is null || previous.Value.ResultCount != snapshot.ResultCount)
+            this.RaisePropertyChanged(nameof(ResultCount));
+        if (previous is null || previous.Value.ResultMessage != snapshot.ResultMessage)
+        {
+            this.RaisePropertyChanged(nameof(ResultMessage));
+            this.RaisePropertyChanged(nameof(HasResultMessage));
+        }
+        if (previous is null || previous.Value.InitialLimitMessage != snapshot.InitialLimitMessage)
+        {
+            this.RaisePropertyChanged(nameof(InitialLimitMessage));
+            this.RaisePropertyChanged(nameof(HasInitialLimitMessage));
+        }
     }
 
     private static void InvalidateRows(AvaloniaList<LogLineViewModel> rows)
@@ -183,6 +291,9 @@ internal sealed class LogViewViewModel : ReactiveObject
 
             if (lastIndex >= 0 && lastIndex < desired.Count - 1)
             {
+                if (refreshRows)
+                    foreach (var row in current)
+                        row.Refresh();
                 current.AddRange(
                     desired
                         .Skip(lastIndex + 1)
@@ -364,6 +475,9 @@ internal sealed class LogViewViewModel : ReactiveObject
         GridLength ContextSplitterHeight,
         bool ContextEmpty,
         bool ContextEmptyVisible,
-        bool IsFollowing
+        bool IsFollowing,
+        string ResultCount,
+        string ResultMessage,
+        string InitialLimitMessage
     );
 }

@@ -73,8 +73,10 @@ public sealed class ElasticTailerTests
             () => new DateTimeOffset(2026, 8, 20, 10, 5, 0, TimeSpan.Zero)
         );
 
-        await tailer.PollOnceAsync(CancellationToken.None);
+        var loaded = await tailer.PollOnceAsync(CancellationToken.None);
 
+        Assert.NotNull(loaded);
+        Assert.Equal(10_000, loaded.InitialLimitReached);
         var lines = Assert.IsType<SourceLines>(await channel.Reader.ReadAsync());
         Assert.Equal(10_000, lines.Lines.Count);
         Assert.Equal("line-2", lines.Lines[0].Raw);
@@ -284,6 +286,149 @@ public sealed class ElasticTailerTests
         );
         Assert.False(channel.Reader.TryRead(out _));
         Assert.Equal(3, client.ClosedPitIds.Count);
+    }
+
+    [Fact]
+    public async Task RangeChange_DiscardsInFlightRowsAndOldCursor()
+    {
+        var response = new TaskCompletionSource<ElasticSearchPage>();
+        var client = new FakeElasticApiClient { SearchHandler = _ => response.Task };
+        var connection = Connection();
+        var channel = Channel.CreateUnbounded<SourceEvent>();
+        var now = new DateTimeOffset(2026, 8, 20, 10, 5, 0, TimeSpan.Zero);
+        await using var tailer = new ElasticTailer(
+            connection,
+            connection.Views[0],
+            connection.Views[0].Sources[0],
+            "secret",
+            client,
+            channel.Writer,
+            () => now
+        );
+        var oldPoll = tailer.PollOnceAsync(TestContext.Current.CancellationToken);
+        tailer.SetTimeRange("now-2m", "now");
+        response.SetResult(
+            new ElasticSearchPage(
+                "pit-old",
+                [new ElasticHit("old", now.AddMinutes(-4), new Line("old"), [])]
+            )
+        );
+        await oldPoll;
+        Assert.False(channel.Reader.TryRead(out _));
+        client.SearchHandler = null;
+        client.Pages.Enqueue(new ElasticSearchPage("pit-new", []));
+        await tailer.PollOnceAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(now.AddMinutes(-2), client.Searches[^1].FromInclusive);
+        Assert.True(client.Searches[^1].SortDescending);
+        Assert.Contains("pit-old", client.ClosedPitIds);
+    }
+
+    [Fact]
+    public async Task RelativeRange_UsesOneClockReadingForBothEndpoints()
+    {
+        var client = new FakeElasticApiClient();
+        client.Pages.Enqueue(new ElasticSearchPage("pit", []));
+        var connection = Connection();
+        var now = new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero);
+        await using var tailer = new ElasticTailer(
+            connection,
+            connection.Views[0],
+            connection.Views[0].Sources[0],
+            "",
+            client,
+            Channel.CreateUnbounded<SourceEvent>().Writer,
+            () => now
+        );
+        tailer.SetTimeRange("now-5m", "now-1m");
+        await tailer.PollOnceAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(now.AddMinutes(-5), client.Searches[0].FromInclusive);
+        Assert.Equal(now.AddMinutes(-1), client.Searches[0].ToInclusive);
+    }
+
+    [Theory]
+    [InlineData("now", "now-1m")]
+    [InlineData("now-1e100d", "now")]
+    [InlineData("now-NaNd", "now")]
+    [InlineData("now--5m", "now")]
+    [InlineData("invalid", "now")]
+    public async Task InvalidRange_IsRejectedWithoutChangingCurrentRange(string from, string to)
+    {
+        var client = new FakeElasticApiClient();
+        client.Pages.Enqueue(new ElasticSearchPage("pit", []));
+        var connection = Connection();
+        var now = new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero);
+        await using var tailer = new ElasticTailer(
+            connection,
+            connection.Views[0],
+            connection.Views[0].Sources[0],
+            "",
+            client,
+            Channel.CreateUnbounded<SourceEvent>().Writer,
+            () => now
+        );
+        Assert.Throws<ArgumentException>(() => tailer.SetTimeRange(from, to));
+        await tailer.PollOnceAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(now.AddMinutes(-5), client.Searches[0].FromInclusive);
+    }
+
+    [Fact]
+    public async Task HistoricalRange_ReportsEmptyLoadAndDoesNotKeepRequesting()
+    {
+        var client = new FakeElasticApiClient
+        {
+            SearchHandler = _ => Task.FromResult(new ElasticSearchPage("pit", [])),
+        };
+        var connection = Connection();
+        var channel = Channel.CreateUnbounded<SourceEvent>();
+        var firstDelay = new TaskCompletionSource();
+        var secondDelay = new TaskCompletionSource();
+        var resume = new TaskCompletionSource();
+        var resumeSecond = new TaskCompletionSource();
+        var thirdDelay = new TaskCompletionSource();
+        var delays = 0;
+        await using var tailer = new ElasticTailer(
+            connection,
+            connection.Views[0],
+            connection.Views[0].Sources[0],
+            "",
+            client,
+            channel.Writer,
+            delay: async (_, token) =>
+            {
+                if (Interlocked.Increment(ref delays) == 1)
+                {
+                    firstDelay.SetResult();
+                    await resume.Task.WaitAsync(token);
+                }
+                else if (delays == 2)
+                {
+                    secondDelay.TrySetResult();
+                    await resumeSecond.Task.WaitAsync(token);
+                }
+                else
+                {
+                    thirdDelay.TrySetResult();
+                    await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                }
+            }
+        );
+        tailer.SetTimeRange("2026-08-20T10:00:00Z", "2026-08-20T11:00:00Z");
+        tailer.Start();
+        await firstDelay.Task.WaitAsync(TestContext.Current.CancellationToken);
+        resume.SetResult();
+        await secondDelay.Task.WaitAsync(TestContext.Current.CancellationToken);
+        Assert.Single(client.Searches);
+        Assert.True(channel.Reader.TryRead(out var completed));
+        Assert.NotNull(completed);
+        Assert.Equal("SourceRangeLoaded", completed.GetType().Name);
+        tailer.SetTimeRange("2026-08-20T09:00:00Z", "2026-08-20T10:00:00Z");
+        resumeSecond.SetResult();
+        await thirdDelay.Task.WaitAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(2, client.Searches.Count);
+        Assert.Equal(
+            DateTimeOffset.Parse("2026-08-20T09:00:00Z"),
+            client.Searches[^1].FromInclusive
+        );
     }
 
     private static ElasticHit Hit(string id, string timestamp, IReadOnlyList<JsonElement> sort) =>

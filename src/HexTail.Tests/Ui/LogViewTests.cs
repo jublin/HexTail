@@ -44,7 +44,8 @@ public sealed class LogViewTests
             await using var state = new AppState(
                 new LogSourceService(),
                 new TestPersistence(),
-                settings
+                settings,
+                credentials: new InMemoryCredentialVault()
             );
             await using var viewModel = new MainWindowViewModel(
                 state,
@@ -293,7 +294,11 @@ public sealed class LogViewTests
         try
         {
             await using var viewModel = new MainWindowViewModel(
-                new AppState(new LogSourceService(), new TestPersistence()),
+                new AppState(
+                    new LogSourceService(),
+                    new TestPersistence(),
+                    credentials: new InMemoryCredentialVault()
+                ),
                 scheduler: ImmediateScheduler.Instance,
                 startPolling: false
             );

@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -28,13 +30,18 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         "#F97316",
         "#E879F9",
     ];
+    internal const double NarrowShellWidth = 1000;
+    internal const double MinSidebarWidth = 160;
+    internal const double MaxSidebarWidth = 480;
     private readonly AppState _state;
     private readonly string[] _startupPaths;
     private readonly IScheduler _scheduler;
+    private bool _isPaused;
     private readonly bool _startPolling;
     private readonly CompositeDisposable _subscriptions = new();
     private FileTabViewModel? _selectedFile;
     private string _query = string.Empty;
+    private string _sourceSummary = "No sources open";
     private MatchMode _matchMode = MatchMode.Literal;
     private bool _caseSensitive;
     private Color _searchColor = Color.Parse("#F59E0B");
@@ -46,8 +53,19 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private bool _closed;
     private bool _restoring;
     private int _syncQueued;
-    private string _elasticFrom = "now-5m";
-    private string _elasticTo = "now";
+    private SampleLogWriter? _sample;
+    private Task _sampleStopping = Task.CompletedTask;
+    private string _recentKey = string.Empty;
+    private bool _elasticToNow = true;
+    private bool _syncingRange;
+    private bool _elasticRangeDirty;
+    private string _rangeFromText = "now-5m";
+    private string _rangeToText = "now";
+    private string? _rangeError;
+    private bool _sidebarOpen = true;
+    private bool _narrowShell;
+    private bool _narrowPaneOpen;
+    private double _sidebarWidth = 240;
 
     public MainWindowViewModel(
         AppState state,
@@ -62,12 +80,16 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         _startPolling = startPolling;
         Settings = new SettingsViewModel(this, _scheduler);
         PickFiles = new Interaction<Unit, IReadOnlyList<string>>(_scheduler);
+        Palette = new CommandPaletteViewModel(BuildPaletteItems, SetFileError);
+        OpenPaletteCommand = ReactiveCommand.Create(Palette.Open, _scheduler);
 
         OpenCommand = ReactiveCommand.CreateFromTask(OpenFilesAsync, _scheduler);
         OpenPathsCommand = ReactiveCommand.CreateFromTask<IEnumerable<string>>(
             OpenPathsAsync,
             _scheduler
         );
+        OpenRecentCommand = ReactiveCommand.CreateFromTask<string>(OpenRecentAsync, _scheduler);
+        OpenSampleCommand = ReactiveCommand.CreateFromTask(OpenSampleAsync, _scheduler);
         SaveCommand = ReactiveCommand.CreateFromTask(SaveAsync, _scheduler);
         ToggleSettingsCommand = ReactiveCommand.Create(
             () =>
@@ -76,8 +98,31 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             },
             _scheduler
         );
+        SetUpElasticCommand = ReactiveCommand.Create(
+            () =>
+            {
+                Settings.SectionIndex = 2;
+                SettingsOpen = true;
+            },
+            _scheduler
+        );
+        ToggleSidebarCommand = ReactiveCommand.Create(
+            () =>
+            {
+                SidebarPaneOpen = !SidebarPaneOpen;
+            },
+            _scheduler
+        );
+        TogglePauseCommand = ReactiveCommand.Create(
+            () =>
+            {
+                IsPaused = !IsPaused;
+            },
+            _scheduler
+        );
         SelectFileCommand = ReactiveCommand.Create<FileTabViewModel>(SelectFile, _scheduler);
         ApplyElasticTimeRangeCommand = ReactiveCommand.Create(ApplyElasticTimeRange, _scheduler);
+        ApplyRangePresetCommand = ReactiveCommand.Create<string>(ApplyRangePreset, _scheduler);
         CloseFileCommand = ReactiveCommand.CreateFromTask<FileTabViewModel>(
             CloseFileAsync,
             _scheduler
@@ -112,12 +157,15 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 })
                 .Subscribe(_ => QueueSyncFromState())
         );
+        FileTabs.CollectionChanged += (_, _) => this.RaisePropertyChanged(nameof(HasFileTabs));
 
         _subscriptions.Add(
             Observable
                 .Merge(
                     OpenCommand.ThrownExceptions,
                     OpenPathsCommand.ThrownExceptions,
+                    OpenRecentCommand.ThrownExceptions,
+                    OpenSampleCommand.ThrownExceptions,
                     SaveCommand.ThrownExceptions,
                     CloseFileCommand.ThrownExceptions,
                     RemoveSearchCommand.ThrownExceptions,
@@ -128,19 +176,36 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     }
 
     public AppState State => _state;
+    public ObservableCollection<RecentFileViewModel> RecentFiles { get; } = [];
+    public ObservableCollection<ElasticSourceOptionViewModel> RecentElasticSources { get; } = [];
+    public bool HasRecents => RecentFiles.Count > 0 || RecentElasticSources.Count > 0;
+    public ReactiveCommand<string, Unit> OpenRecentCommand { get; }
+    public ReactiveCommand<Unit, Unit> OpenSampleCommand { get; }
     public ObservableCollection<FileTabViewModel> Files { get; } = [];
+    public ObservableCollection<FileTabViewModel> FileTabs { get; } = [];
+    public bool HasFileTabs => FileTabs.Count > 0;
     public ObservableCollection<ElasticSourceOptionViewModel> ElasticSources { get; } = [];
+    public ObservableCollection<ElasticConnectionGroupViewModel> ElasticConnectionGroups { get; } =
+    [];
+    internal IScheduler Scheduler => _scheduler;
     public bool HasElasticSources => ElasticSources.Count > 0;
     public bool HasElasticWarning => _state.HasElasticWarning;
     public string ElasticSourceIcon => HasElasticWarning ? "mdi-cloud-alert" : "mdi-cloud-check";
     public SettingsViewModel Settings { get; }
     public Interaction<Unit, IReadOnlyList<string>> PickFiles { get; }
+    public CommandPaletteViewModel Palette { get; }
+    public ReactiveCommand<Unit, Unit> OpenPaletteCommand { get; }
+    internal event EventHandler? FocusSearchRequested;
     public ReactiveCommand<Unit, Unit> OpenCommand { get; }
     public ReactiveCommand<IEnumerable<string>, Unit> OpenPathsCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSettingsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleSidebarCommand { get; }
+    public ReactiveCommand<Unit, Unit> TogglePauseCommand { get; }
+    public ReactiveCommand<Unit, Unit> SetUpElasticCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> SelectFileCommand { get; }
     public ReactiveCommand<Unit, Unit> ApplyElasticTimeRangeCommand { get; }
+    public ReactiveCommand<string, Unit> ApplyRangePresetCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> CloseFileCommand { get; }
     public ReactiveCommand<LogViewViewModel, Unit> RemoveSearchCommand { get; }
     public ReactiveCommand<Unit, Unit> AddSearchCommand { get; }
@@ -159,26 +224,180 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             this.RaisePropertyChanged(nameof(IsElasticSelected));
             previous?.RaiseSelectionChanged();
             if (value is not null)
-            {
-                ElasticFrom = value.Model.ElasticFrom;
-                ElasticTo = value.Model.ElasticTo;
-            }
+                LoadRangeInputs(value.Model);
             value?.RaiseSelectionChanged();
         }
     }
 
     public bool HasFile => SelectedFile is not null;
+
+    public bool IsPaused
+    {
+        get => _isPaused;
+        set
+        {
+            if (_isPaused == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _isPaused, value);
+            if (!value)
+                SelectedFile?.SelectedView.Sync();
+        }
+    }
+
+    public string SourceSummary
+    {
+        get => _sourceSummary;
+        private set => this.RaiseAndSetIfChanged(ref _sourceSummary, value);
+    }
+
+    internal static string DescribeSources(IReadOnlyCollection<FileTabState> files)
+    {
+        if (files.Count == 0)
+            return "No sources open";
+        var text = files.Count == 1 ? "1 source open" : $"{files.Count} sources open";
+        var failing = files.Count(file => file.Error is not null);
+        return failing == 0 ? text : $"{text} · {failing} with errors";
+    }
+
     public bool IsElasticSelected => SelectedFile?.Model.Source.Kind == LogSourceKind.Elastic;
-    public string ElasticFrom
+    public string RangeFromText
     {
-        get => _elasticFrom;
-        set => this.RaiseAndSetIfChanged(ref _elasticFrom, value);
+        get => _rangeFromText;
+        set
+        {
+            if (_rangeFromText == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _rangeFromText, value);
+            this.RaisePropertyChanged(nameof(RangeFromPreview));
+            if (!_syncingRange)
+                ElasticRangeDirty = true;
+        }
     }
-    public string ElasticTo
+
+    public string RangeToText
     {
-        get => _elasticTo;
-        set => this.RaiseAndSetIfChanged(ref _elasticTo, value);
+        get => _rangeToText;
+        set
+        {
+            if (_rangeToText == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _rangeToText, value);
+            this.RaisePropertyChanged(nameof(RangeToPreview));
+            if (!_syncingRange)
+                ElasticRangeDirty = true;
+        }
     }
+
+    public bool ElasticToNow
+    {
+        get => _elasticToNow;
+        set
+        {
+            if (_elasticToNow == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _elasticToNow, value);
+            this.RaisePropertyChanged(nameof(RangeToPreview));
+            if (!_syncingRange)
+                ElasticRangeDirty = true;
+        }
+    }
+
+    public string RangeFromPreview => Preview(RangeFromText);
+    public string RangeToPreview =>
+        ElasticToNow ? "Live — new logs keep appending" : Preview(RangeToText);
+    public string RangeZoneHint =>
+        $"Times without an offset are read as {ZoneLabel}. Try now-15m, -2h, 14:00, yesterday 09:00.";
+
+    public string? RangeError
+    {
+        get => _rangeError;
+        private set => this.RaiseAndSetIfChanged(ref _rangeError, value);
+    }
+
+    private AppTimeZoneMode DisplayZone => _state.Settings.TimeZoneMode;
+    private string ZoneLabel => DisplayZone == AppTimeZoneMode.Utc ? "UTC" : "local";
+
+    public bool ElasticRangeDirty
+    {
+        get => _elasticRangeDirty;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _elasticRangeDirty, value);
+            this.RaisePropertyChanged(nameof(ElasticDraftStatus));
+        }
+    }
+    public string ElasticDraftStatus =>
+        ElasticRangeDirty ? "Unapplied — press Enter or Apply" : string.Empty;
+
+    public string ElasticRangePill =>
+        SelectedFile?.Model is not { } tab || !IsElasticSelected
+            ? string.Empty
+            : $"{TimeRangeLabel.Describe(tab.ElasticFrom, tab.ElasticTo, DisplayZone)} · {RangeState(tab)}";
+    public string ElasticAppliedRange
+    {
+        get
+        {
+            var tab = SelectedFile?.Model;
+            if (tab is null)
+                return string.Empty;
+            string Display(DateTimeOffset? time, string expression) =>
+                time is null
+                    ? expression
+                    : (
+                        DisplayZone == AppTimeZoneMode.Utc
+                            ? time.Value.ToUniversalTime()
+                            : time.Value.ToLocalTime()
+                    ).ToString("yyyy-MM-dd HH:mm:ss zzz");
+            return $"Applied: {Display(tab.ElasticResolvedFrom, tab.ElasticFrom)} → {Display(tab.ElasticResolvedTo, tab.ElasticTo)}";
+        }
+    }
+    public string ElasticRangeStatus =>
+        SelectedFile?.Model is not { } tab ? string.Empty
+        : tab.Error is not null ? $"Failed: {tab.Error}"
+        : tab.ElasticLoading ? "Loading logs…"
+        : tab.ElasticTo == "now" ? "Live — fetching new logs"
+        : "Historical — loaded; Apply to refresh";
+
+    private static string RangeState(FileTabState tab) =>
+        tab.Error is not null ? "failed"
+        : tab.ElasticLoading ? "loading…"
+        : tab.ElasticTo == "now" ? "live"
+        : "historical";
+
+    private string Preview(string text) =>
+        TimeExpression.TryParse(
+            text,
+            DateTimeOffset.UtcNow,
+            DisplayZone,
+            out var parsed,
+            out var error
+        )
+            ? $"= {TimeExpression.FormatForInput(parsed.Resolved.ToString("O", CultureInfo.InvariantCulture), DisplayZone)} {ZoneLabel}"
+            : error!;
+
+    private void LoadRangeInputs(FileTabState tab)
+    {
+        _syncingRange = true;
+        RangeFromText = TimeExpression.FormatForInput(tab.ElasticFrom, DisplayZone);
+        ElasticToNow = string.Equals(tab.ElasticTo, "now", StringComparison.OrdinalIgnoreCase);
+        RangeToText = ElasticToNow
+            ? "now"
+            : TimeExpression.FormatForInput(tab.ElasticTo, DisplayZone);
+        _syncingRange = false;
+        ElasticRangeDirty = false;
+        RangeError = null;
+    }
+
+    private void ApplyRangePreset(string expression)
+    {
+        _syncingRange = true;
+        RangeFromText = expression;
+        ElasticToNow = true;
+        RangeToText = "now";
+        _syncingRange = false;
+        ApplyElasticTimeRange();
+    }
+
     public bool ShowEmpty => !HasFile;
     public int FileCount => Files.Count;
     public int LineCount => SelectedFile?.Model.Buffer.Count ?? 0;
@@ -242,13 +461,88 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public bool SettingsOpen
     {
         get => _settingsOpen;
-        set => this.RaiseAndSetIfChanged(ref _settingsOpen, value);
+        set
+        {
+            if (!value && _settingsOpen && !Settings.TryClose())
+            {
+                this.RaisePropertyChanged(nameof(SettingsOpen));
+                return;
+            }
+            this.RaiseAndSetIfChanged(ref _settingsOpen, value);
+        }
     }
+
+    internal void CloseSettingsAfterDraftChoice() =>
+        this.RaiseAndSetIfChanged(ref _settingsOpen, false, nameof(SettingsOpen));
 
     public int SelectedViewIndex
     {
         get => _selectedViewIndex;
         set => this.RaiseAndSetIfChanged(ref _selectedViewIndex, Math.Max(0, value));
+    }
+
+    /// <summary>Persisted preference for wide windows.</summary>
+    public bool SidebarOpen
+    {
+        get => _sidebarOpen;
+        set
+        {
+            if (_sidebarOpen == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _sidebarOpen, value);
+            if (!_narrowShell)
+                this.RaisePropertyChanged(nameof(SidebarPaneOpen));
+        }
+    }
+
+    /// <summary>Effective pane state: the preference when wide, a transient overlay when narrow.</summary>
+    public bool SidebarPaneOpen
+    {
+        get => _narrowShell ? _narrowPaneOpen : _sidebarOpen;
+        set
+        {
+            if (_narrowShell)
+            {
+                if (_narrowPaneOpen == value)
+                    return;
+                _narrowPaneOpen = value;
+                this.RaisePropertyChanged();
+            }
+            else
+                SidebarOpen = value;
+        }
+    }
+
+    public double SidebarWidth
+    {
+        get => _sidebarWidth;
+        set =>
+            this.RaiseAndSetIfChanged(
+                ref _sidebarWidth,
+                Math.Clamp(value, MinSidebarWidth, MaxSidebarWidth)
+            );
+    }
+
+    public bool IsNarrowShell => _narrowShell;
+    public SplitViewDisplayMode SidebarDisplayMode =>
+        _narrowShell ? SplitViewDisplayMode.Overlay : SplitViewDisplayMode.Inline;
+
+    internal void SetShellWidth(double width)
+    {
+        var narrow = width < NarrowShellWidth;
+        if (narrow == _narrowShell)
+            return;
+        _narrowShell = narrow;
+        _narrowPaneOpen = false;
+        this.RaisePropertyChanged(nameof(IsNarrowShell));
+        this.RaisePropertyChanged(nameof(SidebarDisplayMode));
+        this.RaisePropertyChanged(nameof(SidebarPaneOpen));
+    }
+
+    internal void DismissNarrowSidebar()
+    {
+        if (_narrowShell)
+            SidebarPaneOpen = false;
     }
 
     public async Task InitializeAsync()
@@ -261,6 +555,9 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         try
         {
             await _state.RestoreAsync();
+            SidebarOpen = !_state.Window.SidebarCollapsed;
+            if (_state.Window.SidebarWidth > 0)
+                SidebarWidth = _state.Window.SidebarWidth;
             if (Dispatcher.UIThread.CheckAccess())
                 ThemeManager.Apply(_state.Settings.Theme);
             else
@@ -296,8 +593,31 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             return;
 
         _closed = true;
-        _subscriptions.Dispose();
-        await _state.DisposeAsync();
+        try
+        {
+            _subscriptions.Dispose();
+        }
+        finally
+        {
+            try
+            {
+                // Close the tabs (and the tailer's handle on the sample file) first, so the writer's
+                // cleanup can delete the file on Windows.
+                await _state.DisposeAsync();
+            }
+            finally
+            {
+                try
+                {
+                    if (_sample is not null)
+                        await _sample.DisposeAsync();
+                }
+                finally
+                {
+                    await _sampleStopping.ConfigureAwait(false);
+                }
+            }
+        }
     }
 
     internal async Task UpdateSettingsAsync(AppSettings settings)
@@ -370,6 +690,57 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         await OpenPathsAsync(paths);
     }
 
+    private async Task OpenRecentAsync(string path)
+    {
+        if (!File.Exists(path))
+        {
+            SetFileError($"Could not open {path}: the file no longer exists.");
+            return;
+        }
+        await OpenPathsAsync([path]);
+    }
+
+    private async Task OpenSampleAsync()
+    {
+        await _sampleStopping.ConfigureAwait(true);
+        var sample = _sample ?? SampleLogWriter.Start(TimeSpan.FromMilliseconds(500));
+        try
+        {
+            await _state.OpenFileAsync(sample.Path, remember: false, ephemeral: true);
+            // Publish the writer only once its tab exists, so a concurrent sync cannot mistake
+            // the not-yet-open sample for a closed one and stop it.
+            _sample = sample;
+        }
+        catch
+        {
+            if (!ReferenceEquals(sample, _sample))
+                await sample.DisposeAsync();
+            throw;
+        }
+    }
+
+    private void SyncRecents()
+    {
+        var files = _state.RecentFiles;
+        var sources = _state.RecentElasticSourceIds;
+        var resolved = sources
+            .Select(id => ElasticSources.FirstOrDefault(option => option.SourceId == id))
+            .OfType<ElasticSourceOptionViewModel>()
+            .ToArray();
+        var key =
+            $"{string.Join('\n', files)}\0{string.Join('\n', resolved.Select(option => option.SourceId))}";
+        if (key == _recentKey)
+            return;
+        _recentKey = key;
+        RecentFiles.Clear();
+        foreach (var path in files)
+            RecentFiles.Add(new RecentFileViewModel(path, File.Exists(path)));
+        RecentElasticSources.Clear();
+        foreach (var option in resolved)
+            RecentElasticSources.Add(option);
+        this.RaisePropertyChanged(nameof(HasRecents));
+    }
+
     private async Task OpenPathsAsync(IEnumerable<string> paths)
     {
         foreach (var path in paths.Where(path => !string.IsNullOrWhiteSpace(path)))
@@ -424,13 +795,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
         try
         {
-            _state.AddSearch(
-                file.Model,
-                Query,
-                CompiledQuery.DetectMode(Query),
-                CaseSensitive,
-                ColorToHex(SearchColor)
-            );
+            _state.AddSearch(file.Model, Query, MatchMode, CaseSensitive, ColorToHex(SearchColor));
             SearchColor = Color.Parse(
                 NextSearchColor(
                     file.Model.Searches.Select(search => search.Color),
@@ -447,10 +812,107 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         }
     }
 
+    internal IEnumerable<PaletteItem> BuildPaletteItems()
+    {
+        yield return new("Open files…", "File", "Ctrl+O", async () => await OpenCommand.Execute());
+        yield return new(
+            "Set up Elastic",
+            "Elastic",
+            null,
+            async () => await SetUpElasticCommand.Execute()
+        );
+        yield return new(
+            "Settings",
+            "App",
+            null,
+            async () => await ToggleSettingsCommand.Execute()
+        );
+        yield return new(
+            "Toggle sidebar",
+            "View",
+            "Ctrl+B",
+            async () => await ToggleSidebarCommand.Execute()
+        );
+        yield return new(
+            IsPaused ? "Resume view updates" : "Pause view updates",
+            "View",
+            "Space",
+            async () => await TogglePauseCommand.Execute()
+        );
+        if (SelectedFile is { } file)
+        {
+            yield return new(
+                "Focus search",
+                "Search",
+                "/",
+                () =>
+                {
+                    FocusSearchRequested?.Invoke(this, EventArgs.Empty);
+                    return Task.CompletedTask;
+                }
+            );
+            yield return new(
+                "Follow newest lines",
+                "View",
+                "F",
+                () =>
+                {
+                    file.SelectedView.IsFollowing = true;
+                    return Task.CompletedTask;
+                }
+            );
+            foreach (var view in file.Views)
+                yield return new(
+                    $"View: {view.Header}",
+                    "View",
+                    null,
+                    () =>
+                    {
+                        file.SelectedViewIndex = file.Views.IndexOf(view);
+                        return Task.CompletedTask;
+                    }
+                );
+        }
+        if (IsElasticSelected)
+            foreach (
+                var (label, expression) in new[]
+                {
+                    ("last 15 min", "now-15m"),
+                    ("last hour", "now-1h"),
+                    ("last 24 hours", "now-24h"),
+                }
+            )
+                yield return new(
+                    $"Time range: {label}",
+                    "Elastic",
+                    null,
+                    async () => await ApplyRangePresetCommand.Execute(expression)
+                );
+        foreach (var tab in Files)
+            yield return new(
+                tab.DisplayName,
+                "Open source",
+                null,
+                () =>
+                {
+                    SelectFile(tab);
+                    return Task.CompletedTask;
+                }
+            );
+        foreach (var option in ElasticSources.Where(option => !option.IsOpen))
+            yield return new(
+                option.DisplayName,
+                "Elastic source",
+                null,
+                async () => await option.ActivateCommand.Execute()
+            );
+    }
+
     internal void SelectFile(FileTabViewModel file)
     {
         _state.SelectFile(file.Model);
         SelectedViewIndex = 0;
+        DismissNarrowSidebar();
     }
 
     private void DrainTailer()
@@ -485,6 +947,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
         var previous = Snapshot();
         var files = _state.Files;
+        SourceSummary = DescribeSources(files);
 
         for (var index = Files.Count - 1; index >= 0; index--)
         {
@@ -506,6 +969,13 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 viewModel.SyncViews(loadRows);
         }
 
+        for (var index = FileTabs.Count - 1; index >= 0; index--)
+            if (!Files.Contains(FileTabs[index]))
+                FileTabs.RemoveAt(index);
+        foreach (var file in Files)
+            if (file.Model.Source.Kind == LogSourceKind.File && !FileTabs.Contains(file))
+                FileTabs.Add(file);
+
         SelectedFile = _state.SelectedFile is null
             ? null
             : Files.FirstOrDefault(item => ReferenceEquals(item.Model, _state.SelectedFile));
@@ -515,29 +985,67 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 connection.Views.SelectMany(view =>
                     view.Sources.Select(source =>
                         (
-                            source.Id,
-                            DisplayName: $"{connection.Name}-{view.Name}",
-                            ToolTip: $"{connection.Name} / {view.Name}"
+                            ConnectionId: connection.Id,
+                            Descriptor: LogSourceDescriptor.Elastic(connection, view, source),
+                            ShortName: $"{(string.IsNullOrWhiteSpace(view.Name) ? view.DataViewTitle : view.Name)} · {source.ServerValue}"
                         )
                     )
                 )
             )
             .ToArray();
         for (var index = ElasticSources.Count - 1; index >= 0; index--)
-            if (!configured.Any(item => item.Id == ElasticSources[index].SourceId))
+            if (!configured.Any(item => item.Descriptor.Id == ElasticSources[index].SourceId))
                 ElasticSources.RemoveAt(index);
         foreach (var item in configured)
-            if (!ElasticSources.Any(option => option.SourceId == item.Id))
+            if (!ElasticSources.Any(option => option.SourceId == item.Descriptor.Id))
                 ElasticSources.Add(
-                    new ElasticSourceOptionViewModel(this, item.Id, item.DisplayName, item.ToolTip)
+                    new ElasticSourceOptionViewModel(
+                        this,
+                        item.Descriptor.Id,
+                        item.Descriptor.DisplayName,
+                        item.Descriptor.ToolTip
+                    )
                 );
+        var selectedSourceId = SelectedFile?.Model.Source.ElasticSourceId;
         foreach (var option in ElasticSources)
         {
+            var item = configured.First(source => source.Descriptor.Id == option.SourceId);
+            option.SyncIdentity(item.Descriptor);
+            option.SyncConnection(item.ConnectionId, item.ShortName);
+            option.SyncSelection(option.SourceId == selectedSourceId);
             var status =
                 _state.ElasticSourceStatuses.GetValueOrDefault(option.SourceId)?.Status.ToString()
                 ?? "Checking";
-            option.Sync(_state.IsElasticSourceOpen(option.SourceId), status);
+            var health = _state.ElasticSourceStatuses.GetValueOrDefault(option.SourceId);
+            var tab = _state.Files.FirstOrDefault(tab => tab.Id == option.SourceId);
+            var load =
+                tab is null ? "Logs: closed"
+                : tab.Error is not null ? $"Logs: {tab.Error}"
+                : tab.ElasticLoading ? "Logs: loading…"
+                : tab.ElasticTo == "now" ? "Logs: live"
+                : "Logs: historical";
+            option.Sync(tab is not null, status, health?.Message, load);
         }
+        SyncConnectionGroups();
+        SyncRecents();
+        if (
+            _sample is { } sample
+            && !_state.Files.Any(file =>
+                string.Equals(file.Path, sample.Path, StringComparison.OrdinalIgnoreCase)
+            )
+        )
+        {
+            _sample = null;
+            _sampleStopping = Task.WhenAll(_sampleStopping, sample.DisposeAsync().AsTask());
+        }
+        this.RaisePropertyChanged(nameof(ElasticAppliedRange));
+        this.RaisePropertyChanged(nameof(ElasticRangeStatus));
+        if (SelectedFile is not null && !ElasticRangeDirty)
+            LoadRangeInputs(SelectedFile.Model);
+        this.RaisePropertyChanged(nameof(ElasticRangePill));
+        this.RaisePropertyChanged(nameof(RangeFromPreview));
+        this.RaisePropertyChanged(nameof(RangeToPreview));
+        this.RaisePropertyChanged(nameof(RangeZoneHint));
         var current = Snapshot();
         if (previous.FileCount != current.FileCount)
             this.RaisePropertyChanged(nameof(FileCount));
@@ -561,6 +1069,30 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             this.RaisePropertyChanged(nameof(ElasticSourceIcon));
     }
 
+    private void SyncConnectionGroups()
+    {
+        var connections = _state.Settings.ElasticConnections;
+        for (var index = ElasticConnectionGroups.Count - 1; index >= 0; index--)
+            if (!connections.Any(connection => connection.Id == ElasticConnectionGroups[index].Id))
+                ElasticConnectionGroups.RemoveAt(index);
+        for (var index = 0; index < connections.Count; index++)
+        {
+            var connection = connections[index];
+            var group = ElasticConnectionGroups.FirstOrDefault(item => item.Id == connection.Id);
+            if (group is null)
+            {
+                group = new ElasticConnectionGroupViewModel(connection.Id);
+                ElasticConnectionGroups.Insert(index, group);
+            }
+            else if (ElasticConnectionGroups.IndexOf(group) is var current && current != index)
+                ElasticConnectionGroups.Move(current, index);
+            group.Sync(
+                connection.Name,
+                ElasticSources.Where(option => option.ConnectionId == connection.Id).ToArray()
+            );
+        }
+    }
+
     private MainSnapshot Snapshot() =>
         new(
             FileCount,
@@ -579,14 +1111,49 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     {
         if (!IsElasticSelected || SelectedFile is null)
             return;
+        var now = DateTimeOffset.UtcNow;
+        if (
+            !TimeExpression.TryParse(
+                RangeFromText,
+                now,
+                DisplayZone,
+                out var from,
+                out var fromError
+            )
+        )
+        {
+            RangeError = $"From: {fromError}";
+            return;
+        }
+        var to = "now";
+        if (!ElasticToNow)
+        {
+            if (
+                !TimeExpression.TryParse(
+                    RangeToText,
+                    now,
+                    DisplayZone,
+                    out var parsedTo,
+                    out var toError
+                )
+            )
+            {
+                RangeError = $"To: {toError}";
+                return;
+            }
+            to = parsedTo.Expression;
+        }
         try
         {
-            _state.SetElasticTimeRange(SelectedFile.Model, ElasticFrom, ElasticTo);
+            _state.SetElasticTimeRange(SelectedFile.Model, from.Expression, to);
+            SelectedFile.Model.ElasticInputZone = DisplayZone;
+            ElasticRangeDirty = false;
+            RangeError = null;
             SetFileError(null);
         }
         catch (ArgumentException exception)
         {
-            SetFileError(exception.Message);
+            RangeError = exception.Message;
         }
     }
 

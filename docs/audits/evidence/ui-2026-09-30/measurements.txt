@@ -1,0 +1,34 @@
+probe.txt
+width=1920 QueryBox origin=919, 7 size=250, 34
+width=1920 AddSearchButton origin=1233, 8 size=89, 32
+width=1920 ElasticTimeRangePanel origin=1332, 7 size=328, 34
+width=1280 QueryBox origin=388, 7 size=250, 34
+width=1280 AddSearchButton origin=702, 8 size=89, 32
+width=1280 ElasticTimeRangePanel origin=801, 7 size=328, 34
+width=720 QueryBox origin=220, 7 size=250, 34
+width=720 AddSearchButton origin=534, 8 size=89, 32
+width=720 ElasticTimeRangePanel origin=633, 7 size=82, 34
+After applying disjoint range: old range row retained=True
+Editor round-trip: sources 2 -> 1; namespace prod -> ''
+
+time-ranges.txt
+now-5m -> now-1m: 2026-09-30T11:54:00.0000000+00:00 -> 2026-09-30T11:59:00.0000000+00:00
+2026-09-30T13:00:00Z -> 2026-09-30T11:00:00Z: 2026-09-30T13:00:00.0000000+00:00 -> 2026-09-30T11:00:00.0000000+00:00
+now-1e100d throws OverflowException; Apply handles only ArgumentException
+
+contrast.txt
+CyberTail SelectedTabBrush / SurfaceBrush: 2.72:1
+CyberTail SelectedTabBrush / BorderBrush: 1.76:1
+CyberTail MutedBrush / RaisedBrush: 6.77:1
+CyberTail BorderBrush / RaisedBrush: 1.43:1
+CyberTail TextBrush / SurfaceBrush: 16.53:1
+CatppuccinMocha SelectedTabBrush / SurfaceBrush: 2.74:1
+CatppuccinMocha SelectedTabBrush / BorderBrush: 1.53:1
+CatppuccinMocha MutedBrush / RaisedBrush: 5.65:1
+CatppuccinMocha BorderBrush / RaisedBrush: 1.38:1
+CatppuccinMocha TextBrush / SurfaceBrush: 11.34:1
+Spotify SelectedTabBrush / SurfaceBrush: 5.02:1
+Spotify SelectedTabBrush / BorderBrush: 3.84:1
+Spotify MutedBrush / RaisedBrush: 8.47:1
+Spotify BorderBrush / RaisedBrush: 1.24:1
+Spotify TextBrush / SurfaceBrush: 18.73:1
