@@ -196,6 +196,8 @@ public sealed class JsonFileAppPersistenceTests
                 Height = 600,
                 X = 12,
                 Y = 34,
+                InspectorOpen = true,
+                InspectorWidth = 400,
             },
             Settings = new AppSettings { Theme = "light", Rules = [TestRules.Hide("health")] },
         };
@@ -207,6 +209,8 @@ public sealed class JsonFileAppPersistenceTests
         Assert.Equal("/tmp/app.log", restored.SelectedFilePath);
         Assert.Equal(900, restored.Window.Width);
         Assert.Equal(34, restored.Window.Y);
+        Assert.True(restored.Window.InspectorOpen);
+        Assert.Equal(400, restored.Window.InspectorWidth);
         Assert.Equal("light", restored.Settings.Theme);
         Assert.Equal(TestRules.Hide("health"), Assert.Single(restored.Settings.Rules));
         Assert.Equal("error", Assert.Single(Assert.Single(restored.OpenFiles).Searches).Query);

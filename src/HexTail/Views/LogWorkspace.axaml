@@ -9,229 +9,247 @@
   x:Class="HexTail.Views.LogWorkspace"
   x:DataType="vm:MainWindowViewModel"
 >
-  <Grid Background="{DynamicResource SurfaceBrush}" HorizontalAlignment="Stretch">
-    <ScrollViewer IsVisible="{Binding ShowEmpty}" HorizontalScrollBarVisibility="Disabled">
-      <StackPanel
-        HorizontalAlignment="Center"
-        VerticalAlignment="Center"
-        Margin="24"
-        Spacing="16"
-        MaxWidth="720"
-      >
-        <TextBlock
-          Text="Drop log files here, or"
-          TextAlignment="Center"
-          FontSize="16"
-          Foreground="{DynamicResource TextBrush}"
-        />
-        <WrapPanel HorizontalAlignment="Center">
-          <Button
-            x:Name="OpenEmptyFileButton"
-            Content="Open file…"
-            Command="{Binding OpenCommand}"
-            Classes="primary"
-            Margin="4"
+  <Grid
+    Background="{DynamicResource SurfaceBrush}"
+    HorizontalAlignment="Stretch"
+    ColumnDefinitions="*,Auto"
+  >
+    <Grid Grid.Column="0">
+      <ScrollViewer IsVisible="{Binding ShowEmpty}" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel
+          HorizontalAlignment="Center"
+          VerticalAlignment="Center"
+          Margin="24"
+          Spacing="16"
+          MaxWidth="720"
+        >
+          <TextBlock
+            Text="Drop log files here, or"
+            TextAlignment="Center"
+            FontSize="16"
+            Foreground="{DynamicResource TextBrush}"
           />
-          <Button
-            x:Name="SetUpElasticButton"
-            Content="Connect to Elastic"
-            Command="{Binding SetUpElasticCommand}"
-            Margin="4"
-          />
-          <Button
-            x:Name="SampleLogButton"
-            Content="Try a sample log"
-            Command="{Binding OpenSampleCommand}"
-            Margin="4"
-          />
-        </WrapPanel>
-        <TextBlock Text="Press Ctrl+K for commands" Classes="hint" TextAlignment="Center" />
-        <Grid ColumnDefinitions="*,*" ColumnSpacing="24" IsVisible="{Binding HasRecents}">
-          <StackPanel Spacing="2">
-            <TextBlock Text="RECENT FILES" Classes="sidebar-heading" />
-            <ItemsControl x:Name="RecentFilesList" ItemsSource="{Binding RecentFiles}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:RecentFileViewModel">
-                  <Button
-                    Classes="source-select"
-                    Command="{Binding $parent[UserControl].DataContext.OpenRecentCommand}"
-                    CommandParameter="{Binding Path}"
-                    IsEnabled="{Binding Exists}"
-                    ToolTip.Tip="{Binding ToolTip}"
-                    AutomationProperties.Name="{Binding Path, StringFormat='Open recent {0}'}"
-                  >
-                    <StackPanel>
-                      <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                      <TextBlock
-                        Text="{Binding Folder}"
-                        Classes="hint"
-                        TextTrimming="CharacterEllipsis"
-                        TextWrapping="NoWrap"
-                      />
-                    </StackPanel>
-                  </Button>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </StackPanel>
-          <StackPanel Grid.Column="1" Spacing="2">
-            <TextBlock Text="RECENT ELASTIC SOURCES" Classes="sidebar-heading" />
-            <ItemsControl x:Name="RecentElasticList" ItemsSource="{Binding RecentElasticSources}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:ElasticSourceOptionViewModel">
-                  <Button
-                    Classes="source-select"
-                    Command="{Binding ActivateCommand}"
-                    ToolTip.Tip="{Binding ToolTip}"
-                    AutomationProperties.Name="{Binding DisplayName, StringFormat='Open recent {0}'}"
-                  >
-                    <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
-                  </Button>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </StackPanel>
-        </Grid>
-      </StackPanel>
-    </ScrollViewer>
-    <ContentControl
-      IsVisible="{Binding HasFile}"
-      Content="{Binding SelectedFile}"
-      HorizontalContentAlignment="Stretch"
-    >
-      <ContentControl.ContentTemplate>
-        <DataTemplate x:DataType="vm:FileTabViewModel">
-          <TabControl
-            ItemsSource="{Binding Views}"
-            BorderThickness="2,2,1,0"
-            SelectedIndex="{Binding SelectedViewIndex, Mode=TwoWay}"
-            Classes="log-tabs"
-          >
-            <i:Interaction.Behaviors>
-              <behaviors:TabReorderBehavior FixedHeaderCount="1" />
-            </i:Interaction.Behaviors>
-            <TabControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:LogViewViewModel">
-                <Border
-                  Classes="search-tab"
-                  Background="{DynamicResource RaisedAltBrush}"
-                  BorderBrush="{Binding HighlightBrush}"
-                  BorderThickness="2,2,0,0"
-                  CornerRadius="4"
-                  Padding="{Binding Workspace.Settings.SecondaryPadding}"
-                  MinHeight="{Binding Workspace.Settings.SearchTabHeight}"
-                >
-                  <Grid
-                    ColumnDefinitions="*,Auto,Auto,*"
-                    MinWidth="52"
-                    ColumnSpacing="2"
-                    Margin="2,0,0,0"
-                  >
-                    <TextBlock
-                      Text="{Binding Header}"
-                      Foreground="{DynamicResource TextBrush}"
-                      FontSize="{Binding Workspace.Settings.SecondaryFontSize}"
-                      FontWeight="Normal"
-                      HorizontalAlignment="Left"
-                      VerticalAlignment="Center"
-                    />
-                    <TextBlock
-                      Grid.Column="1"
-                      Margin="2,0"
-                      Text="{Binding MatchSummary}"
-                      Foreground="{DynamicResource MutedBrush}"
-                      FontSize="{Binding Workspace.Settings.SecondaryFontSize}"
-                      FontWeight="Normal"
-                      HorizontalAlignment="Center"
-                      VerticalAlignment="Center"
-                      IsVisible="{Binding IsSearchView}"
-                    />
-                    <TextBlock
-                      Grid.Column="2"
-                      Text="{Binding SearchModeLabel}"
-                      Margin="4,0"
-                      Foreground="{DynamicResource MutedBrush}"
-                      FontSize="12"
-                      VerticalAlignment="Center"
-                      IsVisible="{Binding IsSearchView}"
-                    />
+          <WrapPanel HorizontalAlignment="Center">
+            <Button
+              x:Name="OpenEmptyFileButton"
+              Content="Open file…"
+              Command="{Binding OpenCommand}"
+              Classes="primary"
+              Margin="4"
+            />
+            <Button
+              x:Name="SetUpElasticButton"
+              Content="Connect to Elastic"
+              Command="{Binding SetUpElasticCommand}"
+              Margin="4"
+            />
+            <Button
+              x:Name="SampleLogButton"
+              Content="Try a sample log"
+              Command="{Binding OpenSampleCommand}"
+              Margin="4"
+            />
+          </WrapPanel>
+          <TextBlock Text="Press Ctrl+K for commands" Classes="hint" TextAlignment="Center" />
+          <Grid ColumnDefinitions="*,*" ColumnSpacing="24" IsVisible="{Binding HasRecents}">
+            <StackPanel Spacing="2">
+              <TextBlock Text="RECENT FILES" Classes="sidebar-heading" />
+              <ItemsControl x:Name="RecentFilesList" ItemsSource="{Binding RecentFiles}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:RecentFileViewModel">
                     <Button
-                      Grid.Column="3"
-                      Classes="icon tab-close search-close"
-                      Width="{Binding Workspace.Settings.SecondaryCloseSize}"
-                      Height="{Binding Workspace.Settings.SecondaryCloseSize}"
-                      Command="{Binding Workspace.RemoveSearchCommand}"
-                      CommandParameter="{Binding}"
-                      HorizontalAlignment="Right"
-                      VerticalAlignment="Center"
-                      HorizontalContentAlignment="Right"
-                      IsVisible="{Binding IsSearchView}"
-                      ToolTip.Tip="Clear search"
-                      AutomationProperties.Name="Clear search"
+                      Classes="source-select"
+                      Command="{Binding $parent[UserControl].DataContext.OpenRecentCommand}"
+                      CommandParameter="{Binding Path}"
+                      IsEnabled="{Binding Exists}"
+                      ToolTip.Tip="{Binding ToolTip}"
+                      AutomationProperties.Name="{Binding Path, StringFormat='Open recent {0}'}"
                     >
-                      <ic:Icon
-                        Value="mdi-close"
-                        FontSize="{Binding Workspace.Settings.SecondaryCloseButtonSize}"
-                        Foreground="{DynamicResource AccentBrush}"
-                      />
+                      <StackPanel>
+                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock
+                          Text="{Binding Folder}"
+                          Classes="hint"
+                          TextTrimming="CharacterEllipsis"
+                          TextWrapping="NoWrap"
+                        />
+                      </StackPanel>
                     </Button>
-                  </Grid>
-                </Border>
-              </DataTemplate>
-            </TabControl.ItemTemplate>
-            <TabControl.ContentTemplate>
-              <DataTemplate x:DataType="vm:LogViewViewModel">
-                <Grid RowDefinitions="Auto,Auto,*">
-                  <Grid x:Name="ViewToolbar" ColumnDefinitions="*,Auto" Margin="12,4,8,4">
-                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="2">
+              <TextBlock Text="RECENT ELASTIC SOURCES" Classes="sidebar-heading" />
+              <ItemsControl x:Name="RecentElasticList" ItemsSource="{Binding RecentElasticSources}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ElasticSourceOptionViewModel">
+                    <Button
+                      Classes="source-select"
+                      Command="{Binding ActivateCommand}"
+                      ToolTip.Tip="{Binding ToolTip}"
+                      AutomationProperties.Name="{Binding DisplayName, StringFormat='Open recent {0}'}"
+                    >
+                      <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Grid>
+        </StackPanel>
+      </ScrollViewer>
+      <ContentControl
+        IsVisible="{Binding HasFile}"
+        Content="{Binding SelectedFile}"
+        HorizontalContentAlignment="Stretch"
+      >
+        <ContentControl.ContentTemplate>
+          <DataTemplate x:DataType="vm:FileTabViewModel">
+            <TabControl
+              ItemsSource="{Binding Views}"
+              BorderThickness="2,2,1,0"
+              SelectedIndex="{Binding SelectedViewIndex, Mode=TwoWay}"
+              Classes="log-tabs"
+            >
+              <i:Interaction.Behaviors>
+                <behaviors:TabReorderBehavior FixedHeaderCount="1" />
+              </i:Interaction.Behaviors>
+              <TabControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:LogViewViewModel">
+                  <Border
+                    Classes="search-tab"
+                    Background="{DynamicResource RaisedAltBrush}"
+                    BorderBrush="{Binding HighlightBrush}"
+                    BorderThickness="2,2,0,0"
+                    CornerRadius="4"
+                    Padding="{Binding Workspace.Settings.SecondaryPadding}"
+                    MinHeight="{Binding Workspace.Settings.SearchTabHeight}"
+                  >
+                    <Grid
+                      ColumnDefinitions="*,Auto,Auto,*"
+                      MinWidth="52"
+                      ColumnSpacing="2"
+                      Margin="2,0,0,0"
+                    >
                       <TextBlock
-                        x:Name="ResultMessage"
-                        Text="{Binding ResultMessage}"
-                        IsVisible="{Binding HasResultMessage}"
-                        TextWrapping="Wrap"
+                        Text="{Binding Header}"
                         Foreground="{DynamicResource TextBrush}"
+                        FontSize="{Binding Workspace.Settings.SecondaryFontSize}"
+                        FontWeight="Normal"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
                       />
                       <TextBlock
-                        x:Name="InitialLimitMessage"
-                        Text="{Binding InitialLimitMessage}"
-                        IsVisible="{Binding HasInitialLimitMessage}"
-                        TextWrapping="Wrap"
-                        Foreground="{DynamicResource AccentBrush}"
+                        Grid.Column="1"
+                        Margin="2,0"
+                        Text="{Binding MatchSummary}"
+                        Foreground="{DynamicResource MutedBrush}"
+                        FontSize="{Binding Workspace.Settings.SecondaryFontSize}"
+                        FontWeight="Normal"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        IsVisible="{Binding IsSearchView}"
                       />
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                      <ToggleButton
-                        x:Name="InlineContextToggle"
-                        IsChecked="{Binding ShowContext, Mode=TwoWay}"
-                        ToolTip.Tip="Show surrounding lines for the selected row"
-                        AutomationProperties.Name="Show inline context"
+                      <TextBlock
+                        Grid.Column="2"
+                        Text="{Binding SearchModeLabel}"
+                        Margin="4,0"
+                        Foreground="{DynamicResource MutedBrush}"
+                        FontSize="12"
+                        VerticalAlignment="Center"
+                        IsVisible="{Binding IsSearchView}"
+                      />
+                      <Button
+                        Grid.Column="3"
+                        Classes="icon tab-close search-close"
+                        Width="{Binding Workspace.Settings.SecondaryCloseSize}"
+                        Height="{Binding Workspace.Settings.SecondaryCloseSize}"
+                        Command="{Binding Workspace.RemoveSearchCommand}"
+                        CommandParameter="{Binding}"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        HorizontalContentAlignment="Right"
+                        IsVisible="{Binding IsSearchView}"
+                        ToolTip.Tip="Clear search"
+                        AutomationProperties.Name="Clear search"
                       >
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                          <ic:Icon Value="mdi-arrow-expand-vertical" />
-                          <TextBlock Text="Context" />
-                        </StackPanel>
-                      </ToggleButton>
-                      <ToggleButton
-                        x:Name="AutoScrollToggle"
-                        IsChecked="{Binding IsFollowing, Mode=TwoWay}"
-                        ToolTip.Tip="Keep the newest line in view (F)"
-                        AutomationProperties.Name="Auto-scroll logs"
-                      >
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                          <ic:Icon Value="mdi-arrow-collapse-down" />
-                          <TextBlock Text="Follow" />
-                        </StackPanel>
-                      </ToggleButton>
-                    </StackPanel>
+                        <ic:Icon
+                          Value="mdi-close"
+                          FontSize="{Binding Workspace.Settings.SecondaryCloseButtonSize}"
+                          Foreground="{DynamicResource AccentBrush}"
+                        />
+                      </Button>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </TabControl.ItemTemplate>
+              <TabControl.ContentTemplate>
+                <DataTemplate x:DataType="vm:LogViewViewModel">
+                  <Grid RowDefinitions="Auto,Auto,*">
+                    <Grid x:Name="ViewToolbar" ColumnDefinitions="*,Auto" Margin="12,4,8,4">
+                      <StackPanel Spacing="2" VerticalAlignment="Center">
+                        <TextBlock
+                          x:Name="ResultMessage"
+                          Text="{Binding ResultMessage}"
+                          IsVisible="{Binding HasResultMessage}"
+                          TextWrapping="Wrap"
+                          Foreground="{DynamicResource TextBrush}"
+                        />
+                        <TextBlock
+                          x:Name="InitialLimitMessage"
+                          Text="{Binding InitialLimitMessage}"
+                          IsVisible="{Binding HasInitialLimitMessage}"
+                          TextWrapping="Wrap"
+                          Foreground="{DynamicResource AccentBrush}"
+                        />
+                      </StackPanel>
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                        <ToggleButton
+                          x:Name="InlineContextToggle"
+                          IsChecked="{Binding ShowContext, Mode=TwoWay}"
+                          ToolTip.Tip="Show surrounding lines for the selected row"
+                          AutomationProperties.Name="Show inline context"
+                        >
+                          <StackPanel Orientation="Horizontal" Spacing="4">
+                            <ic:Icon Value="mdi-arrow-expand-vertical" />
+                            <TextBlock Text="Context" />
+                          </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton
+                          x:Name="AutoScrollToggle"
+                          IsChecked="{Binding IsFollowing, Mode=TwoWay}"
+                          ToolTip.Tip="Keep the newest line in view (F)"
+                          AutomationProperties.Name="Auto-scroll logs"
+                        >
+                          <StackPanel Orientation="Horizontal" Spacing="4">
+                            <ic:Icon Value="mdi-arrow-collapse-down" />
+                            <TextBlock Text="Follow" />
+                          </StackPanel>
+                        </ToggleButton>
+                      </StackPanel>
+                    </Grid>
+                    <views:FilterBar Grid.Row="1" DataContext="{Binding Workspace.FilterBar}" />
+                    <views:LogView Grid.Row="2" />
                   </Grid>
-                  <views:FilterBar Grid.Row="1" DataContext="{Binding Workspace.FilterBar}" />
-                  <views:LogView Grid.Row="2" />
-                </Grid>
-              </DataTemplate>
-            </TabControl.ContentTemplate>
-          </TabControl>
-        </DataTemplate>
-      </ContentControl.ContentTemplate>
-    </ContentControl>
+                </DataTemplate>
+              </TabControl.ContentTemplate>
+            </TabControl>
+          </DataTemplate>
+        </ContentControl.ContentTemplate>
+      </ContentControl>
+    </Grid>
+    <Grid Grid.Column="1" ColumnDefinitions="4,Auto" IsVisible="{Binding Inspector.IsShown}">
+      <Thumb
+        x:Name="InspectorResizeThumb"
+        Cursor="SizeWestEast"
+        Background="{DynamicResource BorderBrush}"
+        DragDelta="OnInspectorResize"
+        AutomationProperties.Name="Resize inspector"
+      />
+      <Border Grid.Column="1" Width="{Binding Inspector.Width}">
+        <views:InspectorPanel DataContext="{Binding Inspector}" />
+      </Border>
+    </Grid>
   </Grid>
 </UserControl>

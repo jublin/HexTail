@@ -236,6 +236,8 @@ public partial class MainWindow : Window
                 ContextPaneSize = ViewModel.State.Window.ContextPaneSize,
                 SidebarCollapsed = !ViewModel.SidebarOpen,
                 SidebarWidth = ViewModel.SidebarWidth,
+                InspectorOpen = ViewModel.Inspector.IsOpen,
+                InspectorWidth = ViewModel.Inspector.Width,
             }
         );
         await ViewModel.DisposeAsync();
@@ -350,6 +352,9 @@ public partial class MainWindow : Window
                 break;
             case ShellAction.ToggleSidebar:
                 ViewModel.ToggleSidebarCommand.Execute().Subscribe();
+                break;
+            case ShellAction.ToggleInspector:
+                ViewModel.Inspector.Toggle();
                 break;
             case ShellAction.TogglePause:
                 ViewModel.TogglePauseCommand.Execute().Subscribe();

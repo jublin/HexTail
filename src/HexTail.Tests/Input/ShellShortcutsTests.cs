@@ -34,6 +34,19 @@ public sealed class ShellShortcutsTests
             ShellShortcuts.Resolve(key, modifiers, textInputFocused: true).Action
         );
 
+    [Fact]
+    public void CtrlITogglesTheInspectorEvenWhileTyping()
+    {
+        Assert.Equal(
+            ShellAction.ToggleInspector,
+            ShellShortcuts.Resolve(Key.I, KeyModifiers.Control, textInputFocused: true).Action
+        );
+        Assert.Equal(
+            ShellAction.None,
+            ShellShortcuts.Resolve(Key.I, KeyModifiers.None, textInputFocused: false).Action
+        );
+    }
+
     [Theory]
     [InlineData(Key.D1, 0)]
     [InlineData(Key.D9, 8)]

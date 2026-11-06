@@ -73,6 +73,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         _startPolling = startPolling;
         Settings = new SettingsViewModel(this, _scheduler);
         FilterBar = new FilterBarViewModel(this);
+        Inspector = new InspectorViewModel(this);
         PickFiles = new Interaction<Unit, IReadOnlyList<string>>(_scheduler);
         Palette = new CommandPaletteViewModel(BuildPaletteItems, SetFileError);
         OpenPaletteCommand = ReactiveCommand.Create(Palette.Open, _scheduler);
@@ -107,6 +108,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             },
             _scheduler
         );
+        ToggleInspectorCommand = ReactiveCommand.Create(() => Inspector.Toggle(), _scheduler);
         TogglePauseCommand = ReactiveCommand.Create(
             () =>
             {
@@ -175,6 +177,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public string ElasticSourceIcon => HasElasticWarning ? "mdi-cloud-alert" : "mdi-cloud-check";
     public SettingsViewModel Settings { get; }
     public FilterBarViewModel FilterBar { get; }
+    public InspectorViewModel Inspector { get; }
     public Interaction<Unit, IReadOnlyList<string>> PickFiles { get; }
     public CommandPaletteViewModel Palette { get; }
     public ReactiveCommand<Unit, Unit> OpenPaletteCommand { get; }
@@ -183,6 +186,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSidebarCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleInspectorCommand { get; }
     public ReactiveCommand<Unit, Unit> TogglePauseCommand { get; }
     public ReactiveCommand<Unit, Unit> SetUpElasticCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> SelectFileCommand { get; }
@@ -500,6 +504,11 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             SidebarOpen = !_state.Window.SidebarCollapsed;
             if (_state.Window.SidebarWidth > 0)
                 SidebarWidth = _state.Window.SidebarWidth;
+            Inspector.IsOpen = _state.Window.InspectorOpen;
+            Inspector.Width =
+                _state.Window.InspectorWidth > 0
+                    ? _state.Window.InspectorWidth
+                    : InspectorViewModel.DefaultWidth;
             if (Dispatcher.UIThread.CheckAccess())
                 ThemeManager.Apply(_state.Settings.Theme);
             else
@@ -749,6 +758,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             async () => await ToggleSidebarCommand.Execute()
         );
         yield return new(
+            "Toggle inspector",
+            "View",
+            "Ctrl+I",
+            async () => await ToggleInspectorCommand.Execute()
+        );
+        yield return new(
             IsPaused ? "Resume view updates" : "Pause view updates",
             "View",
             "Space",
@@ -903,6 +918,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             : Files.FirstOrDefault(item => ReferenceEquals(item.Model, _state.SelectedFile));
         Settings.Sync(_state.Settings);
         FilterBar.Sync();
+        Inspector.Sync();
         var configured = _state
             .Settings.ElasticConnections.SelectMany(connection =>
                 connection.Views.SelectMany(view =>
