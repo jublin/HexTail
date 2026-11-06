@@ -23,6 +23,7 @@ public partial class MainWindow : Window
 {
     private WindowNotificationManager _notificationManager;
     private Control? _settingsOpener;
+    private Button? _watchedCloseButton;
 
     public MainWindow()
         : this((string[]?)null) { }
@@ -85,6 +86,34 @@ public partial class MainWindow : Window
         Dispatcher.UIThread.Post(() => ApplySettingsFocus(attemptsLeft: 5));
     }
 
+    // The button is bound to ToggleSettingsCommand, which disables it while the command that opened
+    // the panel is still finishing; that can land after we focused it, and Avalonia then drops
+    // focus. Put focus back when the button is usable again and nothing else holds it.
+    private void WatchSettingsCloseButton(Button? button)
+    {
+        if (button is null || ReferenceEquals(button, _watchedCloseButton))
+            return;
+        if (_watchedCloseButton is not null)
+            _watchedCloseButton.PropertyChanged -= OnSettingsCloseButtonPropertyChanged;
+        _watchedCloseButton = button;
+        button.PropertyChanged += OnSettingsCloseButtonPropertyChanged;
+    }
+
+    private void OnSettingsCloseButtonPropertyChanged(
+        object? sender,
+        AvaloniaPropertyChangedEventArgs e
+    )
+    {
+        if (
+            e.Property == InputElement.IsEffectivelyEnabledProperty
+            && e.NewValue is true
+            && sender is Button button
+            && ViewModel.SettingsOpen
+            && FocusManager?.GetFocusedElement() is null
+        )
+            button.Focus();
+    }
+
     private void ApplySettingsFocus(int attemptsLeft)
     {
         if (ViewModel.SettingsOpen)
@@ -93,6 +122,7 @@ public partial class MainWindow : Window
                 .OfType<SettingsPanel>()
                 .FirstOrDefault()
                 ?.FindControl<Button>("SettingsCloseButton");
+            WatchSettingsCloseButton(closeButton);
             // The panel may not be laid out yet on the first pass, so Focus() can be refused; retry.
             if (closeButton?.Focus() != true && attemptsLeft > 0)
                 Dispatcher.UIThread.Post(
