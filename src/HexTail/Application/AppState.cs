@@ -320,6 +320,8 @@ public sealed class AppState : IAsyncDisposable
                 .ConfigureAwait(false);
             tab.FollowAll = persisted.FollowAll;
             tab.ShowContext = persisted.ShowContext;
+            tab.SetRules(NormalizeRules(persisted.Rules, RuleScope.Source));
+            tab.Levels = NormalizeLevels(persisted.Levels);
             tab.SelectedLine = persisted.SelectedLine;
             tab.ContextAbove = persisted.ContextAbove;
             tab.ContextBelow = persisted.ContextBelow;
@@ -360,6 +362,8 @@ public sealed class AppState : IAsyncDisposable
                     .ConfigureAwait(false);
                 tab.FollowAll = persisted.FollowAll;
                 tab.ShowContext = persisted.ShowContext;
+                tab.SetRules(NormalizeRules(persisted.Rules, RuleScope.Source));
+                tab.Levels = NormalizeLevels(persisted.Levels);
                 tab.ContextAbove = persisted.ContextAbove;
                 tab.ContextBelow = persisted.ContextBelow;
                 foreach (var search in persisted.Searches)
@@ -655,6 +659,47 @@ public sealed class AppState : IAsyncDisposable
         await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async ValueTask SetSourceRulesAsync(
+        FileTabState tab,
+        IEnumerable<ViewRule> rules,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(rules);
+        lock (_gate)
+        {
+            if (!_files.Contains(tab))
+                return;
+            tab.SetRules(NormalizeRules(rules, RuleScope.Source));
+        }
+        NotifyChanged();
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async ValueTask SetLevelsAsync(
+        FileTabState tab,
+        LogLevels levels,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        lock (_gate)
+        {
+            if (!_files.Contains(tab))
+                return;
+            tab.Levels = NormalizeLevels(levels);
+        }
+        NotifyChanged();
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static LogLevels NormalizeLevels(LogLevels levels)
+    {
+        var known = levels & LogLevels.All;
+        return known == LogLevels.None ? LogLevels.All : known;
+    }
+
     public async ValueTask SetShowContextAsync(
         FileTabState tab,
         bool value,
@@ -896,6 +941,8 @@ public sealed class AppState : IAsyncDisposable
                             .Select(item => tab.FollowSearches[item.index])
                             .ToList(),
                         ShowContext = tab.ShowContext,
+                        Rules = [.. tab.Rules],
+                        Levels = tab.Levels,
                         SelectedLine = tab.SelectedLine,
                         ContextAbove = tab.ContextAbove,
                         ContextBelow = tab.ContextBelow,
@@ -928,6 +975,8 @@ public sealed class AppState : IAsyncDisposable
                             .Select(item => tab.FollowSearches[item.index])
                             .ToList(),
                         ShowContext = tab.ShowContext,
+                        Rules = [.. tab.Rules],
+                        Levels = tab.Levels,
                         SelectedLine = tab.SelectedLine,
                         ContextAbove = tab.ContextAbove,
                         ContextBelow = tab.ContextBelow,

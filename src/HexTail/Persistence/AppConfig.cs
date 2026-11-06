@@ -30,6 +30,8 @@ public sealed class PersistedElasticTab
     public int? SelectedLine { get; init; }
     public int ContextAbove { get; init; } = 3;
     public int ContextBelow { get; init; } = 10;
+    public List<ViewRule> Rules { get; init; } = [];
+    public LogLevels Levels { get; init; } = LogLevels.All;
 }
 
 public sealed class PersistedFileTab
@@ -42,6 +44,8 @@ public sealed class PersistedFileTab
     public int? SelectedLine { get; init; }
     public int ContextAbove { get; init; } = 3;
     public int ContextBelow { get; init; } = 10;
+    public List<ViewRule> Rules { get; init; } = [];
+    public LogLevels Levels { get; init; } = LogLevels.All;
 }
 
 public sealed class PersistedSearch

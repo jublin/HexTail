@@ -54,6 +54,7 @@ public sealed class FileTabState : IAsyncDisposable
     public bool FollowAll { get; set; } = true;
     public List<bool> FollowSearches { get; } = [];
     public bool ShowContext { get; set; }
+    public LogLevels Levels { get; set; } = LogLevels.All;
     public int? SelectedLine { get; set; }
     public int? ExpandedLine { get; set; }
     public int ContextAbove { get; set; } = 3;

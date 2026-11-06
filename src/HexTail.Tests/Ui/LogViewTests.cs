@@ -351,4 +351,91 @@ public sealed class LogViewTests
             File.Delete(path);
         }
     }
+
+    [AvaloniaFact]
+    public async Task SourceRulesAndLevelMaskFilterRowsAndExplainAnEmptyView()
+    {
+        var path = Path.GetTempFileName();
+        var other = Path.GetTempFileName();
+        await File.WriteAllLinesAsync(
+            path,
+            ["INFO keep", "ERROR boom", "INFO healthz", "   at Foo.Bar()"],
+            TestContext.Current.CancellationToken
+        );
+        await File.WriteAllLinesAsync(other, ["INFO x"], TestContext.Current.CancellationToken);
+        try
+        {
+            var window = TestWindow.CreatePolling(out var viewModel);
+            window.Show();
+            await viewModel.OpenPathsCommand.Execute([path]);
+            var view = await LoadedView(viewModel, 4);
+            var tab = viewModel.SelectedFile!.Model;
+
+            await viewModel.State.SetSourceRulesAsync(
+                tab,
+                [
+                    new ViewRule
+                    {
+                        Pattern = "healthz",
+                        Action = RuleAction.Hide,
+                        Scope = RuleScope.Source,
+                    },
+                ],
+                TestContext.Current.CancellationToken
+            );
+            await UiWait.Until(() =>
+            {
+                view.Sync();
+                return view.Lines.Count == 3;
+            });
+            Assert.Equal(
+                ["INFO keep", "ERROR boom", "   at Foo.Bar()"],
+                view.Lines.Select(row => row.Line.Raw)
+            );
+            Assert.Equal(string.Empty, view.ResultMessage);
+
+            await viewModel.State.SetLevelsAsync(
+                tab,
+                LogLevels.Error,
+                TestContext.Current.CancellationToken
+            );
+            await UiWait.Until(() =>
+            {
+                view.Sync();
+                return view.Lines.Count == 2;
+            });
+            Assert.Equal(["ERROR boom", "   at Foo.Bar()"], view.Lines.Select(row => row.Line.Raw));
+            Assert.Equal(string.Empty, view.ResultMessage);
+
+            await viewModel.OpenPathsCommand.Execute([other]);
+            var otherView = await LoadedView(viewModel, 1);
+            await viewModel.State.SetLevelsAsync(
+                viewModel.SelectedFile!.Model,
+                LogLevels.Warn,
+                TestContext.Current.CancellationToken
+            );
+            await UiWait.Until(() =>
+            {
+                otherView.Sync();
+                return otherView.Lines.Count == 0;
+            });
+            Assert.Equal("All matching logs are hidden by filter rules.", otherView.ResultMessage);
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(other);
+        }
+    }
+
+    private static async Task<LogViewViewModel> LoadedView(MainWindowViewModel viewModel, int lines)
+    {
+        await UiWait.Until(() =>
+        {
+            viewModel.State.DrainTailerEvents();
+            return viewModel.SelectedFile?.SelectedView.Lines.Count == lines;
+        });
+        return viewModel.SelectedFile!.SelectedView;
+    }
 }

@@ -21,6 +21,7 @@ internal sealed class LogViewViewModel : ReactiveObject
     private AppSettings? _lastSettings;
     private int? _lastExpandedLine;
     private int _lastViewsVersion;
+    private int _lastRulesVersion;
     private ViewSnapshot? _lastSnapshot;
     internal const int UnseenScanLimit = 10_000;
     private Line? _seenAnchor;
@@ -169,6 +170,8 @@ internal sealed class LogViewViewModel : ReactiveObject
         var settingsChanged = !ReferenceEquals(_lastSettings, settings);
         var expandedChanged = _lastExpandedLine != _file.Model.ExpandedLine;
         var viewsChanged = _lastViewsVersion != _file.ViewsVersion;
+        var rulesChanged = _lastRulesVersion != _file.Model.RulesVersion;
+        _lastRulesVersion = _file.Model.RulesVersion;
         _lastSettings = settings;
         _lastExpandedLine = _file.Model.ExpandedLine;
         _lastViewsVersion = _file.ViewsVersion;
@@ -177,7 +180,7 @@ internal sealed class LogViewViewModel : ReactiveObject
             SyncExpansion(Lines);
             SyncExpansion(ContextLines);
         }
-        if (viewsChanged)
+        if (viewsChanged || rulesChanged)
         {
             InvalidateRows(Lines);
             InvalidateRows(ContextLines);
@@ -452,17 +455,24 @@ internal sealed class LogViewViewModel : ReactiveObject
             : Search
                 .Results.Where(index => index >= 0 && index < _file.Model.Buffer.Count)
                 .Select(index => _file.Model.Buffer[index]);
-        var rules = _file.Model.EffectiveRules(_owner.State.Settings);
-        return rules.HasVisibilityRules
-            ? lines.Where(rules.IsVisible).ToList()
-            : lines as IReadOnlyList<Line> ?? lines.ToList();
+        return ApplyFilters(lines);
     }
 
-    private IReadOnlyList<Line> ContextLinesFor()
+    private IReadOnlyList<Line> ContextLinesFor() => ApplyFilters(_file.Model.Buffer.Lines);
+
+    private IReadOnlyList<Line> ApplyFilters(IEnumerable<Line> lines)
     {
-        var lines = _file.Model.Buffer.Lines;
         var rules = _file.Model.EffectiveRules(_owner.State.Settings);
-        return rules.HasVisibilityRules ? lines.Where(rules.IsVisible).ToList() : lines;
+        var levels = _file.Model.Levels;
+        var filterLevels = levels != LogLevels.All;
+        if (!rules.HasVisibilityRules && !filterLevels)
+            return lines as IReadOnlyList<Line> ?? lines.ToList();
+        var result = lines;
+        if (rules.HasVisibilityRules)
+            result = result.Where(rules.IsVisible);
+        if (filterLevels)
+            result = result.Where(line => LevelDetector.Allows(levels, line));
+        return result.ToList();
     }
 
     private static string Truncate(string value) => value.Length > 24 ? $"{value[..21]}..." : value;
