@@ -49,7 +49,7 @@ public partial class LogLineView : UserControl
         if (e.Source is SelectableTextBlock)
             return;
         if (DataContext is LogLineViewModel row)
-            row.ToggleExpanded();
+            row.Inspect();
         e.Handled = true;
     }
 
@@ -59,12 +59,10 @@ public partial class LogLineView : UserControl
             row.Select();
     }
 
-    private void OnToggleDetails(object? sender, RoutedEventArgs e)
+    private void OnInspect(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not LogLineViewModel row)
-            return;
-        row.Select();
-        row.ToggleExpanded();
+        if (DataContext is LogLineViewModel row)
+            row.Inspect();
     }
 
     private async void OnCopyRawLine(object? sender, RoutedEventArgs e) =>
@@ -90,8 +88,7 @@ public partial class LogLineView : UserControl
             return;
         if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None)
         {
-            row.Select();
-            row.ToggleExpanded();
+            row.Inspect();
             e.Handled = true;
         }
         else if (e.Key == Key.Apps || (e.Key == Key.F10 && e.KeyModifiers == KeyModifiers.Shift))

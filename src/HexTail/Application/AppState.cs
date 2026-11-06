@@ -921,24 +921,6 @@ public sealed class AppState : IAsyncDisposable
         NotifyChanged();
     }
 
-    public void ToggleExpanded(FileTabState tab, Line line)
-    {
-        ArgumentNullException.ThrowIfNull(tab);
-        ArgumentNullException.ThrowIfNull(line);
-        lock (_gate)
-        {
-            if (!_files.Contains(tab))
-                return;
-
-            var index = FindLineIndex(tab, line);
-            if (index < 0)
-                return;
-
-            tab.ExpandedLine = tab.ExpandedLine == index ? null : index;
-        }
-        NotifyChanged();
-    }
-
     public async ValueTask UpdateSettingsAsync(
         AppSettings settings,
         CancellationToken cancellationToken = default

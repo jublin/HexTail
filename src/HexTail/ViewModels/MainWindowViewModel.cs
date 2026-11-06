@@ -583,9 +583,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     internal void SelectLine(FileTabViewModel file, Line line) =>
         _state.SelectLine(file.Model, line);
 
-    internal void ToggleExpanded(FileTabViewModel file, Line line) =>
-        _state.ToggleExpanded(file.Model, line);
-
     internal async Task SetFollowAllAsync(FileTabViewModel file, bool value)
     {
         try

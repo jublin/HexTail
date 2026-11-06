@@ -862,12 +862,10 @@ public sealed class AppStateTests
         state.DrainTailerEvents();
         Assert.NotEmpty(tab.Buffer.Lines);
         tab.SelectedLine = 0;
-        tab.ExpandedLine = 0;
         state.SetElasticTimeRange(tab, "now-2m", "now");
         Assert.Empty(tab.Buffer.Lines);
         Assert.Single(tab.Searches);
         Assert.Null(tab.SelectedLine);
-        Assert.Null(tab.ExpandedLine);
         Assert.True(
             tailers.Publish(
                 new SourceError(tab.Id, "old failure")

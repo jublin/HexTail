@@ -164,8 +164,6 @@ internal sealed class FileTabViewModel : ReactiveObject
 
     internal void SelectLine(Line line) => _owner.SelectLine(this, line);
 
-    internal void ToggleExpanded(Line line) => _owner.ToggleExpanded(this, line);
-
     internal void RaiseSelectionChanged()
     {
         this.RaisePropertyChanged(nameof(IsSelected));

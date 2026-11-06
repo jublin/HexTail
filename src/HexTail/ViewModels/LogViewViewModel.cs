@@ -19,7 +19,6 @@ internal sealed class LogViewViewModel : ReactiveObject
     private readonly MainWindowViewModel _owner;
     private readonly FileTabViewModel _file;
     private AppSettings? _lastSettings;
-    private int? _lastExpandedLine;
     private int _lastViewsVersion;
     private int _lastRulesVersion;
     private ViewSnapshot? _lastSnapshot;
@@ -34,7 +33,6 @@ internal sealed class LogViewViewModel : ReactiveObject
         _file = file;
         Search = search;
         SelectLineCommand = ReactiveCommand.Create<Line>(line => _file.SelectLine(line));
-        ToggleExpandedCommand = ReactiveCommand.Create<Line>(line => _file.ToggleExpanded(line));
         JumpToLatestCommand = ReactiveCommand.Create(JumpToLatest, owner.Scheduler);
     }
 
@@ -69,7 +67,6 @@ internal sealed class LogViewViewModel : ReactiveObject
 
     public AvaloniaList<LogLineViewModel> Lines { get; } = [];
     public ReactiveCommand<Line, Unit> SelectLineCommand { get; }
-    public ReactiveCommand<Line, Unit> ToggleExpandedCommand { get; }
     public ReactiveCommand<Unit, Unit> JumpToLatestCommand { get; }
 
     public int UnseenCount => _unseenCount;
@@ -202,17 +199,11 @@ internal sealed class LogViewViewModel : ReactiveObject
     {
         var settings = Settings;
         var settingsChanged = !ReferenceEquals(_lastSettings, settings);
-        var expandedChanged = _lastExpandedLine != _file.Model.ExpandedLine;
         var viewsChanged = _lastViewsVersion != _file.ViewsVersion;
         var rulesChanged = _lastRulesVersion != _file.Model.RulesVersion;
         _lastRulesVersion = _file.Model.RulesVersion;
         _lastSettings = settings;
-        _lastExpandedLine = _file.Model.ExpandedLine;
         _lastViewsVersion = _file.ViewsVersion;
-        if (expandedChanged)
-        {
-            SyncExpansion(Lines);
-        }
         if (viewsChanged || rulesChanged)
         {
             InvalidateRows(Lines);
@@ -260,12 +251,6 @@ internal sealed class LogViewViewModel : ReactiveObject
     {
         foreach (var row in rows)
             row.InvalidateRender();
-    }
-
-    private static void SyncExpansion(AvaloniaList<LogLineViewModel> rows)
-    {
-        foreach (var row in rows)
-            row.SyncExpansion();
     }
 
     private void SyncRows(

@@ -29,8 +29,6 @@ internal sealed class LogLineViewModel : ReactiveObject
     public IReadOnlyList<HighlightSpan> Spans { get; private set; } = [];
     public string ParsedFieldsText { get; private set; } = string.Empty;
     public bool HasParsedFields => Line.ParsedFields is { Count: > 0 };
-    public bool IsExpanded { get; private set; }
-    public bool FieldsVisible => IsExpanded && HasParsedFields;
     public double FontSize { get; private set; }
     public Thickness RowPadding { get; private set; }
     public IBrush Foreground { get; private set; } = Brushes.White;
@@ -57,11 +55,6 @@ internal sealed class LogLineViewModel : ReactiveObject
         Foreground = ThemeManager.Brush("TextBrush");
         Background = ThemeManager.Brush("SurfaceBrush");
         ParsedFieldsText = string.Empty;
-        IsExpanded =
-            _file.Model.ExpandedLine is int index
-            && index >= 0
-            && index < _file.Model.Buffer.Count
-            && ReferenceEquals(_file.Model.Buffer[index], Line);
 
         _renderDirty = true;
         if (_isVisible)
@@ -71,8 +64,6 @@ internal sealed class LogLineViewModel : ReactiveObject
         {
             this.RaisePropertyChanged(nameof(ParsedFieldsText));
             this.RaisePropertyChanged(nameof(HasParsedFields));
-            this.RaisePropertyChanged(nameof(IsExpanded));
-            this.RaisePropertyChanged(nameof(FieldsVisible));
             this.RaisePropertyChanged(nameof(FontSize));
             this.RaisePropertyChanged(nameof(RowPadding));
             this.RaisePropertyChanged(nameof(Foreground));
@@ -94,23 +85,13 @@ internal sealed class LogLineViewModel : ReactiveObject
             Render();
     }
 
-    internal void SyncExpansion()
-    {
-        var expanded =
-            _file.Model.ExpandedLine is int index
-            && index >= 0
-            && index < _file.Model.Buffer.Count
-            && ReferenceEquals(_file.Model.Buffer[index], Line);
-        if (IsExpanded == expanded)
-            return;
-        IsExpanded = expanded;
-        this.RaisePropertyChanged(nameof(IsExpanded));
-        this.RaisePropertyChanged(nameof(FieldsVisible));
-    }
-
     internal void Select() => _owner.SelectLineCommand.Execute(Line).Subscribe();
 
-    internal void ToggleExpanded() => _owner.ToggleExpandedCommand.Execute(Line).Subscribe();
+    internal void Inspect()
+    {
+        Select();
+        _owner.Workspace.Inspector.Open();
+    }
 
     private void Render()
     {

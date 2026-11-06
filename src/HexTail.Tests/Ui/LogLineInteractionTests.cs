@@ -1,4 +1,5 @@
 using System.Reactive.Linq;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -16,7 +17,7 @@ namespace HexTail.Tests.Ui;
 public sealed class LogLineInteractionTests
 {
     [AvaloniaFact]
-    public async Task KeyboardExpansionShowsTheEntireSelectedRawLine()
+    public async Task EnterOnARowOpensTheInspectorOnThatRow()
     {
         var path = Path.GetTempFileName();
         var window = TestWindow.Create(out var workspace);
@@ -37,16 +38,106 @@ public sealed class LogLineInteractionTests
             list.SelectedIndex = 1;
             var item = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(1));
             item.Focus();
+            Assert.False(workspace.Inspector.IsOpen);
 
             window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            await UiWait.Until(() => workspace.Inspector.IsOpen);
             Dispatcher.UIThread.RunJobs();
 
-            Assert.Equal(1, file.Model.ExpandedLine);
-            var row = item.GetVisualDescendants().OfType<LogLineView>().Single();
-            var fullText = row.FindControl<SelectableTextBlock>("RawLineDetails");
-            Assert.NotNull(fullText);
-            Assert.True(fullText.IsVisible);
-            Assert.Equal(raw, fullText.Text);
+            Assert.Equal(1, file.Model.SelectedLine);
+            Assert.Equal(raw, workspace.Inspector.RawText);
+        }
+        finally
+        {
+            window.Close();
+            await workspace.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task DoubleTapOpensTheInspectorOnThatRow()
+    {
+        var path = Path.GetTempFileName();
+        var window = TestWindow.Create(out var workspace);
+        try
+        {
+            await workspace.OpenPathsCommand.Execute([path]);
+            var file = workspace.SelectedFile!;
+            file.Model.Buffer.Append([new Line("first row"), new Line("second row")]);
+            file.SyncViews();
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            var list = window
+                .GetVisualDescendants()
+                .OfType<LogView>()
+                .Single()
+                .FindControl<ListBox>("LogList")!;
+            var item = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(1));
+            var border = item.GetVisualDescendants()
+                .OfType<LogLineView>()
+                .Single()
+                .GetVisualDescendants()
+                .OfType<Border>()
+                .First(b => b.Child is StackPanel);
+            var point = border
+                .TranslatePoint(
+                    new Point(border.Bounds.Width / 2, border.Bounds.Height / 2),
+                    window
+                )!
+                .Value;
+            Assert.False(workspace.Inspector.IsOpen);
+
+            window.MouseDown(point, MouseButton.Left);
+            window.MouseUp(point, MouseButton.Left);
+            window.MouseDown(point, MouseButton.Left);
+            window.MouseUp(point, MouseButton.Left);
+            await UiWait.Until(() => workspace.Inspector.IsOpen);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(1, file.Model.SelectedLine);
+            Assert.Equal("second row", workspace.Inspector.RawText);
+        }
+        finally
+        {
+            window.Close();
+            await workspace.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task InspectMenuItemOpensTheInspectorOnThatRow()
+    {
+        var path = Path.GetTempFileName();
+        var window = TestWindow.Create(out var workspace);
+        try
+        {
+            await workspace.OpenPathsCommand.Execute([path]);
+            var file = workspace.SelectedFile!;
+            file.Model.Buffer.Append([new Line("first row"), new Line("second row")]);
+            file.SyncViews();
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            var list = window
+                .GetVisualDescendants()
+                .OfType<LogView>()
+                .Single()
+                .FindControl<ListBox>("LogList")!;
+            var row = Assert
+                .IsType<ListBoxItem>(list.ContainerFromIndex(0))
+                .GetVisualDescendants()
+                .OfType<LogLineView>()
+                .Single();
+            var inspect = row.ContextMenu!.Items.OfType<MenuItem>()
+                .Single(item => item.Name == "InspectRow");
+
+            inspect.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            await UiWait.Until(() => workspace.Inspector.IsOpen);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(0, file.Model.SelectedLine);
+            Assert.Equal("first row", workspace.Inspector.RawText);
         }
         finally
         {

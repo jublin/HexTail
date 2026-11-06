@@ -55,7 +55,6 @@ public sealed class FileTabState : IAsyncDisposable
     public List<bool> FollowSearches { get; } = [];
     public LogLevels Levels { get; set; } = LogLevels.All;
     public int? SelectedLine { get; set; }
-    public int? ExpandedLine { get; set; }
     public AppTimeZoneMode ElasticInputZone { get; set; } = AppTimeZoneMode.Utc;
     public string ElasticFrom { get; set; } = "now-5m";
     public string ElasticTo { get; set; } = "now";
@@ -164,15 +163,6 @@ public sealed class FileTabState : IAsyncDisposable
             SelectedLine -= change.RolledOutCount;
             if (SelectedLine < 0)
                 SelectedLine = null;
-        }
-
-        if (change.Cleared || ExpandedLine is null)
-            ExpandedLine = null;
-        else if (change.RolledOutCount > 0)
-        {
-            ExpandedLine -= change.RolledOutCount;
-            if (ExpandedLine < 0)
-                ExpandedLine = null;
         }
     }
 }
