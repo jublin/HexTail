@@ -253,7 +253,6 @@ public sealed class ElasticSetupViewModelTests
             harness.Owner.State.Files.Select(file => file.Id).Order()
         );
         Assert.False(setup.IsOpen);
-        Assert.False(harness.Owner.Settings.CloseConfirmationVisible);
         Assert.Null(setup.Error);
     }
 
@@ -370,7 +369,6 @@ public sealed class ElasticSetupViewModelTests
 
         Assert.False(harness.Setup.IsOpen);
         Assert.Null(harness.Setup.Error);
-        Assert.False(harness.Owner.Settings.CloseConfirmationVisible);
         Assert.Empty(connection.Views);
         Assert.Contains(connection, harness.Owner.Settings.ElasticConnections);
         Assert.Equal("Ops", harness.SavedConnection.Name);
@@ -388,7 +386,10 @@ public sealed class ElasticSetupViewModelTests
 
         Assert.False(harness.Setup.IsOpen);
         Assert.Empty(harness.Owner.Settings.ElasticConnections);
-        Assert.False(harness.Owner.Settings.HasElasticDrafts);
+        Assert.All(
+            harness.Owner.Settings.ElasticConnections,
+            editor => Assert.False(editor.IsDirty)
+        );
         Assert.Empty(harness.Persistence.Config!.Settings.ElasticConnections);
     }
 
@@ -521,6 +522,120 @@ public sealed class ElasticSetupViewModelTests
         Assert.All(harness.Setup.Steps.Skip(1), step => Assert.False(step.IsReachable));
     }
 
+    [AvaloniaFact]
+    public async Task DeleteConnection_IsOnlyOfferedForASavedConnection()
+    {
+        var saved = ElasticFixtures.Connection("c1", "Ops", "api");
+        await using var harness = await CreateAsync(null, saved);
+
+        harness.Setup.StartNew();
+        Assert.False(harness.Setup.CanDeleteConnection);
+        await harness.ConnectAsync();
+        Assert.False(harness.Setup.CanDeleteConnection);
+        await harness.NextAsync();
+        Assert.True(harness.Setup.CanDeleteConnection);
+        harness.Setup.Close();
+        Assert.False(harness.Setup.CanDeleteConnection);
+
+        harness.Setup.EditConnection("c1");
+        Assert.True(harness.Setup.CanDeleteConnection);
+    }
+
+    [AvaloniaFact]
+    public async Task DeleteConnection_AsksFirstNamesTheServerAndItsSourcesAndCancelKeepsEverything()
+    {
+        var saved = ElasticFixtures.Connection("c1", "Ops", "api", "web");
+        await using var harness = await CreateAsync(null, saved);
+        var tab = await harness.Owner.State.OpenElasticSourceAsync("c1-api");
+        harness.Setup.EditConnection("c1");
+        Assert.False(harness.Setup.DeleteConfirmationVisible);
+        Assert.Equal(string.Empty, harness.Setup.DeleteConfirmationMessage);
+
+        await harness.Setup.DeleteConnectionCommand.Execute();
+
+        Assert.True(harness.Setup.DeleteConfirmationVisible);
+        Assert.Contains("Ops", harness.Setup.DeleteConfirmationMessage);
+        Assert.Contains("source tabs will close", harness.Setup.DeleteConfirmationMessage);
+        Assert.Contains("api", harness.Setup.DeleteConfirmationMessage);
+        Assert.Contains("web", harness.Setup.DeleteConfirmationMessage);
+        Assert.Contains(tab, harness.Owner.State.Files);
+        Assert.Single(harness.Owner.State.Settings.ElasticConnections);
+
+        await harness.Setup.CancelDeleteConnectionCommand.Execute();
+
+        Assert.False(harness.Setup.DeleteConfirmationVisible);
+        Assert.True(harness.Setup.IsOpen);
+        Assert.Contains(tab, harness.Owner.State.Files);
+        Assert.Single(harness.Owner.State.Settings.ElasticConnections);
+    }
+
+    [AvaloniaFact]
+    public async Task DeleteConnection_ConfirmingRemovesTheConnectionClosesItsSourceTabsAndTheFlow()
+    {
+        var saved = ElasticFixtures.Connection("c1", "Ops", "api");
+        var persistence = ElasticFixtures.Persistence(saved);
+        await using var harness = await CreateAsync(persistence);
+        var tab = await harness.Owner.State.OpenElasticSourceAsync("c1-api");
+        harness.Setup.EditConnection("c1");
+        await harness.Setup.DeleteConnectionCommand.Execute();
+
+        await harness.Setup.ConfirmDeleteConnectionCommand.Execute();
+
+        Assert.DoesNotContain(tab, harness.Owner.State.Files);
+        Assert.Empty(harness.Owner.State.Files);
+        Assert.Empty(harness.Owner.State.Settings.ElasticConnections);
+        Assert.Empty(persistence.Config!.Settings.ElasticConnections);
+        Assert.Empty(harness.Owner.Settings.ElasticConnections);
+        Assert.False(harness.Setup.IsOpen);
+        Assert.False(harness.Setup.DeleteConfirmationVisible);
+        Assert.Null(harness.Setup.Connection);
+    }
+
+    [AvaloniaFact]
+    public async Task DeleteConnection_StorageFailureKeepsTheConnectionTabsAndConfirmationOpen()
+    {
+        var saved = ElasticFixtures.Connection("c1", "Ops", "api");
+        var persistence = ElasticFixtures.Persistence(saved);
+        await using var harness = await CreateAsync(persistence);
+        var tab = await harness.Owner.State.OpenElasticSourceAsync("c1-api");
+        harness.Setup.EditConnection("c1");
+        var editor = harness.Setup.Connection;
+        await harness.Setup.DeleteConnectionCommand.Execute();
+        persistence.SaveError = new IOException("delete could not be stored");
+
+        await harness.Setup.ConfirmDeleteConnectionCommand.Execute();
+
+        Assert.Contains(tab, harness.Owner.State.Files);
+        Assert.Single(harness.Owner.State.Settings.ElasticConnections);
+        Assert.Single(persistence.Config!.Settings.ElasticConnections);
+        Assert.True(harness.Setup.IsOpen);
+        Assert.Same(editor, harness.Setup.Connection);
+        Assert.True(harness.Setup.DeleteConfirmationVisible);
+        Assert.Contains("delete could not be stored", harness.Setup.Error);
+        Assert.False(harness.Setup.IsBusy);
+
+        persistence.SaveError = null;
+        await harness.Setup.ConfirmDeleteConnectionCommand.Execute();
+
+        Assert.Empty(harness.Owner.State.Files);
+        Assert.Empty(harness.Owner.State.Settings.ElasticConnections);
+        Assert.False(harness.Setup.IsOpen);
+    }
+
+    [AvaloniaFact]
+    public async Task DeleteConnection_ConfirmationDoesNotSurviveClosingTheFlow()
+    {
+        var saved = ElasticFixtures.Connection("c1", "Ops", "api");
+        await using var harness = await CreateAsync(null, saved);
+        harness.Setup.EditConnection("c1");
+        await harness.Setup.DeleteConnectionCommand.Execute();
+
+        harness.Setup.Close();
+        harness.Setup.EditConnection("c1");
+
+        Assert.False(harness.Setup.DeleteConfirmationVisible);
+    }
+
     private sealed class GatedPersistence : IAppPersistence
     {
         private TaskCompletionSource? _gate;
@@ -645,20 +760,19 @@ public sealed class ElasticSetupViewModelTests
         await using var harness = await BuildAsync(persistence, vault);
         harness.Setup.EditConnection("c1");
         var edited = harness.Setup.Connection!;
-        harness.Owner.Settings.SelectedElasticConnection = edited;
         edited.Name = "Abandoned";
         edited.KibanaUrl = "https://abandoned.example/";
         edited.Secret = "typed-secret";
-        Assert.True(harness.Owner.Settings.HasElasticDrafts);
+        Assert.True(edited.IsDirty);
 
         harness.Setup.Close();
 
-        Assert.False(harness.Owner.Settings.HasElasticDrafts);
-        Assert.DoesNotContain(edited, harness.Owner.Settings.ElasticConnections);
-        Assert.Same(
-            harness.Owner.Settings.EditorFor("c1"),
-            harness.Owner.Settings.SelectedElasticConnection
+        Assert.All(
+            harness.Owner.Settings.ElasticConnections,
+            editor => Assert.False(editor.IsDirty)
         );
+        Assert.DoesNotContain(edited, harness.Owner.Settings.ElasticConnections);
+        Assert.NotNull(harness.Owner.Settings.EditorFor("c1"));
         harness.Setup.EditConnection("c1");
         Assert.Equal("Ops", harness.Setup.Connection!.Name);
         Assert.Equal("https://kibana/", harness.Setup.Connection.KibanaUrl);
@@ -681,7 +795,10 @@ public sealed class ElasticSetupViewModelTests
 
         harness.Setup.Close();
 
-        Assert.False(harness.Owner.Settings.HasElasticDrafts);
+        Assert.All(
+            harness.Owner.Settings.ElasticConnections,
+            editor => Assert.False(editor.IsDirty)
+        );
         harness.Setup.EditView("c1", "c1-view");
         Assert.Equal("api", harness.Setup.View!.FilterValue);
         Assert.False(harness.Setup.Connection!.IsDirty);
@@ -699,7 +816,10 @@ public sealed class ElasticSetupViewModelTests
 
         harness.Setup.Close();
 
-        Assert.False(harness.Owner.Settings.HasElasticDrafts);
+        Assert.All(
+            harness.Owner.Settings.ElasticConnections,
+            editor => Assert.False(editor.IsDirty)
+        );
         var editor = Assert.Single(harness.Owner.Settings.ElasticConnections);
         Assert.Equal("Ops", editor.Name);
         Assert.Equal("Ops", harness.SavedConnection.Name);

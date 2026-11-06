@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Reactive;
 using System.Reactive.Concurrency;
 using Avalonia;
 using Avalonia.Threading;
@@ -26,118 +25,15 @@ internal sealed class SettingsViewModel : ReactiveObject
     private decimal? _elasticInitialLinesValue;
     private ThemeOption _selectedTheme;
     private AppTimeZoneMode _timeZoneMode;
-    private ElasticConnectionEditorViewModel? _selectedElasticConnection;
     private readonly HashSet<string> _syncedElasticConnectionIds = new(StringComparer.Ordinal);
-    private bool _closeConfirmationVisible;
-    private ElasticConnectionEditorViewModel? _pendingDelete;
 
-    internal SettingsViewModel(MainWindowViewModel owner, IScheduler scheduler)
+    internal SettingsViewModel(MainWindowViewModel owner)
     {
         _owner = owner;
-        AddElasticConnectionCommand = ReactiveCommand.Create(
-            () =>
-            {
-                AddElasticConnection();
-            },
-            scheduler
-        );
-        RemoveElasticConnectionCommand =
-            ReactiveCommand.CreateFromTask<ElasticConnectionEditorViewModel>(
-                RemoveElasticConnectionAsync,
-                scheduler
-            );
-        SaveDraftsAndCloseCommand = ReactiveCommand.CreateFromTask(
-            SaveDraftsAndCloseAsync,
-            scheduler
-        );
-        DiscardDraftsAndCloseCommand = ReactiveCommand.Create(DiscardDraftsAndClose, scheduler);
-        KeepEditingCommand = ReactiveCommand.Create(
-            () =>
-            {
-                CloseConfirmationVisible = false;
-            },
-            scheduler
-        );
-        ConfirmDeleteCommand = ReactiveCommand.CreateFromTask(ConfirmDeleteAsync, scheduler);
-        CancelDeleteCommand = ReactiveCommand.Create(CancelDelete, scheduler);
-        ElasticConnections.CollectionChanged += (_, _) => NotifyElasticDraftsChanged();
         _selectedTheme = ThemeOptions[0];
     }
 
     public ObservableCollection<ElasticConnectionEditorViewModel> ElasticConnections { get; } = [];
-    public ReactiveCommand<Unit, Unit> SaveDraftsAndCloseCommand { get; }
-    public ReactiveCommand<Unit, Unit> DiscardDraftsAndCloseCommand { get; }
-    public ReactiveCommand<Unit, Unit> KeepEditingCommand { get; }
-    public ReactiveCommand<Unit, Unit> ConfirmDeleteCommand { get; }
-    public ReactiveCommand<Unit, Unit> CancelDeleteCommand { get; }
-    public bool HasElasticDrafts => ElasticConnections.Any(editor => editor.IsDirty);
-    public bool CanDiscardDrafts => ElasticConnections.All(editor => !editor.IsSaving);
-    public bool CanSaveDrafts =>
-        CanDiscardDrafts && ElasticConnections.All(editor => !editor.IsDirty || editor.CanSave);
-    public bool CloseConfirmationVisible
-    {
-        get => _closeConfirmationVisible;
-        private set => this.RaiseAndSetIfChanged(ref _closeConfirmationVisible, value);
-    }
-    public bool DeleteConfirmationVisible => _pendingDelete is not null;
-    public string DeleteConfirmationMessage
-    {
-        get
-        {
-            if (_pendingDelete is not { } editor)
-                return string.Empty;
-            var saved = _owner.State.Settings.ElasticConnections.FirstOrDefault(connection =>
-                connection.Id == editor.Id
-            );
-            var sources = saved?.Views.SelectMany(view =>
-                view.Sources.Select(source =>
-                    $"{view.Name}: {source.ServerValue}{(string.IsNullOrWhiteSpace(source.NamespaceValue) ? string.Empty : $" / {source.NamespaceValue}")}"
-                )
-            );
-            return $"Delete {saved?.Name ?? editor.Name}? Its source tabs will close. Sources: {string.Join(", ", sources ?? [])}";
-        }
-    }
-
-    internal void NotifyElasticDraftsChanged()
-    {
-        this.RaisePropertyChanged(nameof(HasElasticDrafts));
-        this.RaisePropertyChanged(nameof(CanSaveDrafts));
-        this.RaisePropertyChanged(nameof(CanDiscardDrafts));
-    }
-
-    internal bool TryClose()
-    {
-        if (!HasElasticDrafts && CanDiscardDrafts)
-            return true;
-        CancelDelete();
-        CloseConfirmationVisible = true;
-        return false;
-    }
-
-    private async Task SaveDraftsAndCloseAsync()
-    {
-        if (!CanSaveDrafts)
-            return;
-        foreach (var editor in ElasticConnections.Where(editor => editor.IsDirty).ToArray())
-            if (!await editor.SaveDraftAsync())
-                return;
-        if (HasElasticDrafts)
-            return;
-        CloseConfirmationVisible = false;
-        _owner.CloseSettingsAfterDraftChoice();
-    }
-
-    private void DiscardDraftsAndClose()
-    {
-        if (!CanDiscardDrafts)
-            return;
-        ElasticConnections.Clear();
-        _syncedElasticConnectionIds.Clear();
-        SelectedElasticConnection = null;
-        Sync(_owner.State.Settings);
-        CloseConfirmationVisible = false;
-        _owner.CloseSettingsAfterDraftChoice();
-    }
 
     public IReadOnlyList<UiDensity> DensityOptions { get; } =
     [UiDensity.Comfortable, UiDensity.Cozy, UiDensity.Compact];
@@ -149,18 +45,6 @@ internal sealed class SettingsViewModel : ReactiveObject
         ThemeCatalog
             .Names.Select(id => new ThemeOption(id, ThemeCatalog.DisplayNames[id]))
             .ToArray();
-    public ReactiveCommand<Unit, Unit> AddElasticConnectionCommand { get; }
-    public ReactiveCommand<
-        ElasticConnectionEditorViewModel,
-        Unit
-    > RemoveElasticConnectionCommand { get; }
-
-    public ElasticConnectionEditorViewModel? SelectedElasticConnection
-    {
-        get => _selectedElasticConnection;
-        set => this.RaiseAndSetIfChanged(ref _selectedElasticConnection, value);
-    }
-
     public string Section
     {
         get => _section;
@@ -172,14 +56,13 @@ internal sealed class SettingsViewModel : ReactiveObject
         get => _sectionIndex;
         set
         {
-            var index = Math.Clamp(value, 0, 2);
+            var index = Math.Clamp(value, 0, 1);
             if (_sectionIndex == index)
                 return;
             this.RaiseAndSetIfChanged(ref _sectionIndex, index);
             _section = index switch
             {
-                1 => "elastic",
-                2 => "limits",
+                1 => "limits",
                 _ => "appearance",
             };
         }
@@ -480,11 +363,6 @@ internal sealed class SettingsViewModel : ReactiveObject
         _syncedElasticConnectionIds.Clear();
         foreach (var id in persistedConnectionIds)
             _syncedElasticConnectionIds.Add(id);
-        if (
-            SelectedElasticConnection is null
-            || !ElasticConnections.Contains(SelectedElasticConnection)
-        )
-            SelectedElasticConnection = ElasticConnections.FirstOrDefault();
     }
 
     internal async Task CommitAsync(AppSettings settings)
@@ -595,7 +473,6 @@ internal sealed class SettingsViewModel : ReactiveObject
     {
         var editor = new ElasticConnectionEditorViewModel(this, Guid.NewGuid().ToString("N"));
         ElasticConnections.Add(editor);
-        SelectedElasticConnection = editor;
         return editor;
     }
 
@@ -605,10 +482,8 @@ internal sealed class SettingsViewModel : ReactiveObject
     /// <summary>Drops an editor that was never saved (the setup flow was closed before its first save).</summary>
     internal void DiscardUnsavedElasticConnection(ElasticConnectionEditorViewModel editor)
     {
-        if (editor.IsSaved || !ElasticConnections.Remove(editor))
-            return;
-        if (ReferenceEquals(SelectedElasticConnection, editor))
-            SelectedElasticConnection = ElasticConnections.FirstOrDefault();
+        if (!editor.IsSaved)
+            ElasticConnections.Remove(editor);
     }
 
     /// <summary>
@@ -626,41 +501,5 @@ internal sealed class SettingsViewModel : ReactiveObject
         var fresh = new ElasticConnectionEditorViewModel(this, editor.Id);
         fresh.Sync(saved);
         ElasticConnections[index] = fresh;
-        if (ReferenceEquals(SelectedElasticConnection, editor))
-            SelectedElasticConnection = fresh;
-    }
-
-    private Task RemoveElasticConnectionAsync(ElasticConnectionEditorViewModel editor)
-    {
-        CloseConfirmationVisible = false;
-        _pendingDelete = editor;
-        this.RaisePropertyChanged(nameof(DeleteConfirmationVisible));
-        this.RaisePropertyChanged(nameof(DeleteConfirmationMessage));
-        return Task.CompletedTask;
-    }
-
-    private void CancelDelete()
-    {
-        _pendingDelete = null;
-        this.RaisePropertyChanged(nameof(DeleteConfirmationVisible));
-        this.RaisePropertyChanged(nameof(DeleteConfirmationMessage));
-    }
-
-    private async Task ConfirmDeleteAsync()
-    {
-        if (_pendingDelete is not { } editor || editor.IsSaving)
-            return;
-        try
-        {
-            await _owner.State.RemoveElasticConnectionAsync(editor.Id);
-            ElasticConnections.Remove(editor);
-            SelectedElasticConnection = ElasticConnections.FirstOrDefault();
-            SaveError = null;
-            CancelDelete();
-        }
-        catch (Exception exception)
-        {
-            SaveError = exception.Message;
-        }
     }
 }

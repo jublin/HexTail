@@ -37,7 +37,7 @@ public sealed class ElasticSettingsViewModelTests
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
-        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
         editor.AddViewCommand.Execute().Subscribe();
         var view = Assert.Single(editor.Views);
@@ -100,7 +100,7 @@ public sealed class ElasticSettingsViewModelTests
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
-        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
         editor.AddViewCommand.Execute().Subscribe();
         var view = Assert.Single(editor.Views);
@@ -142,7 +142,7 @@ public sealed class ElasticSettingsViewModelTests
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
-        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
         editor.AddViewCommand.Execute().Subscribe();
         var view = Assert.Single(editor.Views);
@@ -198,7 +198,7 @@ public sealed class ElasticSettingsViewModelTests
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
-        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
         editor.KibanaUrl = "https://kibana/";
         editor.ElasticsearchUrl = "https://elastic/";
@@ -251,7 +251,7 @@ public sealed class ElasticSettingsViewModelTests
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
-        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
         var changed = new List<string>();
         editor.PropertyChanged += (_, args) => changed.Add(args.PropertyName!);
@@ -278,7 +278,7 @@ public sealed class ElasticSettingsViewModelTests
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
-        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
         editor.AddViewCommand.Execute().Subscribe();
         var view = Assert.Single(editor.Views);
@@ -309,7 +309,7 @@ public sealed class ElasticSettingsViewModelTests
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
-        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
         editor.ElasticsearchUrl = "not-a-url";
 
@@ -493,7 +493,7 @@ public sealed class ElasticSettingsViewModelTests
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
-        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
         editor.AddViewCommand.Execute().Subscribe();
         var view = Assert.Single(editor.Views);
@@ -580,7 +580,7 @@ public sealed class ElasticSettingsViewModelTests
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
-        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
         editor.AddViewCommand.Execute().Subscribe();
 
@@ -637,7 +637,7 @@ public sealed class ElasticSettingsViewModelTests
     }
 
     [Fact]
-    public async Task Settings_ExposesElasticSectionAndManualSourceEditors()
+    public async Task Settings_AddedConnectionGetsAViewWithAGeneratedSourceId()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
         var state = new AppState(
@@ -651,12 +651,10 @@ public sealed class ElasticSettingsViewModelTests
             startPolling: false
         );
 
-        owner.Settings.SectionIndex = 1;
-        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
         editor.AddViewCommand.Execute().Subscribe();
 
-        Assert.Equal("elastic", owner.Settings.Section);
         Assert.Matches("^[0-9a-f]{32}$", Assert.Single(Assert.Single(editor.Views).Sources).Id);
     }
 }

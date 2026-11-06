@@ -1,16 +1,48 @@
 using System.Collections.ObjectModel;
+using System.Reactive;
 using ReactiveUI;
 using ReactiveUI.Reactive;
 
 namespace HexTail.ViewModels;
 
-internal sealed class ElasticConnectionGroupViewModel(string id) : ReactiveObject
+internal sealed class ElasticConnectionGroupViewModel : ReactiveObject
 {
     private string _name = string.Empty;
     private string _status = "Checking";
     private string _statusMessage = string.Empty;
 
-    public string Id { get; } = id;
+    internal ElasticConnectionGroupViewModel(MainWindowViewModel owner, string id)
+    {
+        Id = id;
+        EditCommand = ReactiveCommand.CreateFromTask(
+            () =>
+            {
+                owner.ElasticSetup.Run(() => owner.ElasticSetup.EditConnection(Id));
+                owner.DismissNarrowSidebar();
+                return Task.CompletedTask;
+            },
+            null,
+            owner.Scheduler
+        );
+        AddSourceCommand = ReactiveCommand.CreateFromTask(
+            () =>
+            {
+                owner.ElasticSetup.Run(() => owner.ElasticSetup.AddSource(Id));
+                owner.DismissNarrowSidebar();
+                return Task.CompletedTask;
+            },
+            null,
+            owner.Scheduler
+        );
+    }
+
+    public string Id { get; }
+
+    /// <summary>Opens the setup flow on this connection's first step.</summary>
+    public ReactiveCommand<Unit, Unit> EditCommand { get; }
+
+    /// <summary>Opens the setup flow to add another source to this connection.</summary>
+    public ReactiveCommand<Unit, Unit> AddSourceCommand { get; }
     public ObservableCollection<ElasticSourceOptionViewModel> Sources { get; } = [];
 
     public string Name

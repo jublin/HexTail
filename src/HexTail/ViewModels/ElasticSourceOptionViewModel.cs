@@ -30,10 +30,27 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
         ShortName = displayName;
         ActivateCommand = ReactiveCommand.CreateFromTask(ActivateAsync, owner.Scheduler);
         CloseCommand = ReactiveCommand.CreateFromTask(CloseFromSidebarAsync, owner.Scheduler);
+        EditCommand = ReactiveCommand.CreateFromTask(
+            () =>
+            {
+                // A row that has not been synced to its view yet has nothing to edit.
+                if (ViewId.Length > 0)
+                {
+                    owner.ElasticSetup.Run(() => owner.ElasticSetup.EditView(ConnectionId, ViewId));
+                    owner.DismissNarrowSidebar();
+                }
+                return Task.CompletedTask;
+            },
+            null,
+            owner.Scheduler
+        );
     }
 
     public string SourceId { get; }
     public string ConnectionId { get; private set; } = string.Empty;
+
+    /// <summary>The saved view this source belongs to; the edit button opens the setup flow on it.</summary>
+    public string ViewId { get; private set; } = string.Empty;
     public string ShortName { get; private set; }
     public bool IsSelected
     {
@@ -43,6 +60,7 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
     public bool HasOpenError => !string.IsNullOrEmpty(OpenError);
     public ReactiveCommand<Unit, Unit> ActivateCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
+    public ReactiveCommand<Unit, Unit> EditCommand { get; }
     public string DisplayName { get; private set; }
     public string ToolTip { get; private set; }
     public string Status
@@ -180,9 +198,10 @@ internal sealed class ElasticSourceOptionViewModel : ReactiveObject
         }
     }
 
-    internal void SyncConnection(string connectionId, string shortName)
+    internal void SyncConnection(string connectionId, string shortName, string viewId = "")
     {
         ConnectionId = connectionId;
+        ViewId = viewId;
         if (ShortName == shortName)
             return;
         ShortName = shortName;

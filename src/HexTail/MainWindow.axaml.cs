@@ -166,15 +166,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnSettingsDialogClosing(object? sender, DialogClosingEventArgs args)
-    {
-        if (!ViewModel.SettingsOpen)
-            return;
-        ViewModel.SettingsOpen = false;
-        if (ViewModel.SettingsOpen && args.CanBeCancelled)
-            args.Cancel();
-    }
-
     private async Task HandlePickFilesAsync(
         IInteractionContext<System.Reactive.Unit, IReadOnlyList<string>> context
     )

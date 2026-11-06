@@ -37,6 +37,8 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
     private bool _advancedOpen;
     private readonly BehaviorSubject<bool> _canMoveUp = new(false);
     private readonly BehaviorSubject<bool> _canMoveDown = new(false);
+    private readonly BehaviorSubject<bool> _canDelete = new(false);
+    private bool _deleteConfirmationVisible;
 
     // The automatic connection test runs once the edits have stopped coming in. A DispatcherTimer
     // rather than Rx's Throttle on the owner scheduler: tests hand the owner an immediate
@@ -113,6 +115,30 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
                 return Task.CompletedTask;
             },
             null,
+            owner.Scheduler
+        );
+        DeleteConnectionCommand = ReactiveCommand.CreateFromTask(
+            () =>
+            {
+                if (CanDeleteConnection)
+                    DeleteConfirmationVisible = true;
+                return Task.CompletedTask;
+            },
+            _canDelete,
+            owner.Scheduler
+        );
+        CancelDeleteConnectionCommand = ReactiveCommand.CreateFromTask(
+            () =>
+            {
+                DeleteConfirmationVisible = false;
+                return Task.CompletedTask;
+            },
+            null,
+            owner.Scheduler
+        );
+        ConfirmDeleteConnectionCommand = ReactiveCommand.CreateFromTask(
+            ConfirmDeleteAsync,
+            _canDelete,
             owner.Scheduler
         );
         Reevaluate();
@@ -319,6 +345,41 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> MoveColumnUpCommand { get; }
     public ReactiveCommand<Unit, Unit> MoveColumnDownCommand { get; }
     public ReactiveCommand<string, Unit> RemoveColumnCommand { get; }
+    public ReactiveCommand<Unit, Unit> DeleteConnectionCommand { get; }
+    public ReactiveCommand<Unit, Unit> ConfirmDeleteConnectionCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelDeleteConnectionCommand { get; }
+
+    /// <summary>Only a connection that has been saved can be deleted.</summary>
+    public bool CanDeleteConnection => IsOpen && Connection is { IsSaved: true };
+
+    /// <summary>Whether the inline "really delete?" question is showing.</summary>
+    public bool DeleteConfirmationVisible
+    {
+        get => _deleteConfirmationVisible;
+        private set
+        {
+            if (_deleteConfirmationVisible == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _deleteConfirmationVisible, value);
+            this.RaisePropertyChanged(nameof(DeleteConfirmationMessage));
+        }
+    }
+
+    public string DeleteConfirmationMessage
+    {
+        get
+        {
+            if (!DeleteConfirmationVisible || Connection is not { } editor)
+                return string.Empty;
+            var saved = _owner.Settings.SavedConnection(editor.Id);
+            var sources = saved?.Views.SelectMany(view =>
+                view.Sources.Select(source =>
+                    $"{view.Name}: {source.ServerValue}{(string.IsNullOrWhiteSpace(source.NamespaceValue) ? string.Empty : $" / {source.NamespaceValue}")}"
+                )
+            );
+            return $"Delete {saved?.Name ?? editor.Name}? Its source tabs will close. Sources: {string.Join(", ", sources ?? [])}";
+        }
+    }
 
     public bool CanGoBack => IsOpen && Step > ElasticSetupStep.Connection;
 
@@ -449,6 +510,7 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
     {
         _session++;
         CancelAutoTest();
+        DeleteConfirmationVisible = false;
         if (Connection is { } connection)
         {
             var saved = _owner
@@ -485,6 +547,7 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         _editStamp = 0;
         _testStartedStamp = 0;
         _createdConnection = false;
+        DeleteConfirmationVisible = false;
         DataViewSearch = string.Empty;
         AdvancedOpen = false;
         OpenNow = true;
@@ -849,6 +912,8 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         _canBack.OnNext(CanGoBack && !IsBusy);
         _canGoTo.OnNext(IsOpen && !IsBusy);
         _canClose.OnNext(!IsBusy);
+        this.RaisePropertyChanged(nameof(CanDeleteConnection));
+        _canDelete.OnNext(CanDeleteConnection && !IsBusy);
     }
 
     private async Task NextAsync()
@@ -953,5 +1018,43 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         var session = _session;
         while (session == _session && Step < target.Step && CanGoNext && Error is null)
             await NextAsync();
+    }
+
+    /// <summary>
+    /// Removes the saved connection through the same path the old Settings delete used (its
+    /// source tabs close with it) and then ends the flow. A storage failure leaves everything,
+    /// including the question, as it was.
+    /// </summary>
+    private async Task ConfirmDeleteAsync()
+    {
+        if (
+            !IsOpen
+            || IsBusy
+            || !DeleteConfirmationVisible
+            || Connection is not { IsSaved: true } editor
+        )
+            return;
+        var session = _session;
+        IsBusy = true;
+        try
+        {
+            await _owner.State.RemoveElasticConnectionAsync(editor.Id);
+            if (session != _session)
+                return;
+            Error = null;
+            Close();
+            if (_owner.Settings.EditorFor(editor.Id) is { } leftover)
+                _owner.Settings.ElasticConnections.Remove(leftover);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            if (session == _session)
+                Error = ex.Message;
+        }
+        finally
+        {
+            if (session == _session)
+                IsBusy = false;
+        }
     }
 }

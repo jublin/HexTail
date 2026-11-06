@@ -9,7 +9,7 @@ namespace HexTail.Tests.ViewModels;
 public sealed class SettingsSectionTests
 {
     [Fact]
-    public async Task SectionsAreAppearanceElasticThenLimitsAndClampToThoseThree()
+    public async Task SectionsAreAppearanceThenLimitsAndClampToThoseTwo()
     {
         var state = new AppState(
             new LogSourceService(),
@@ -23,14 +23,11 @@ public sealed class SettingsSectionTests
         Assert.Equal("appearance", settings.Section);
 
         settings.SectionIndex = 1;
-        Assert.Equal("elastic", settings.Section);
-
-        settings.SectionIndex = 2;
         Assert.Equal("limits", settings.Section);
 
         // A stale index beyond the last section must not crash or select nothing.
-        settings.SectionIndex = 3;
-        Assert.Equal(2, settings.SectionIndex);
+        settings.SectionIndex = 5;
+        Assert.Equal(1, settings.SectionIndex);
         Assert.Equal("limits", settings.Section);
 
         settings.SectionIndex = -1;

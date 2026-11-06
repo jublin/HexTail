@@ -509,7 +509,6 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(IsSaved));
         this.RaisePropertyChanged(nameof(IsDirty));
         this.RaisePropertyChanged(nameof(SaveStatus));
-        _owner.NotifyElasticDraftsChanged();
     }
 
     private string DraftSnapshot() =>

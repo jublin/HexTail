@@ -37,7 +37,7 @@ public sealed class ElasticConnectionEditorTests
 
         public ElasticConnectionEditorViewModel NewEditor()
         {
-            owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+            owner.Settings.AddElasticConnection();
             var editor = owner.Settings.ElasticConnections.Last();
             editor.Name = "Ops";
             editor.KibanaUrl = "https://kibana.example/";

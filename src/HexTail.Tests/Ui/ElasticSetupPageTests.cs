@@ -885,6 +885,11 @@ public sealed class ElasticSetupPageTests
         Assert.Contains("~3.2k docs · 15 min", TextsIn(chip));
         Assert.Equal(string.Empty, input.Text);
         Assert.DoesNotContain("zero-count", chip.Classes);
+        // The value is trimmed to 220 px, so the full text is also on its tooltip.
+        var valueText = chip.GetVisualDescendants()
+            .OfType<TextBlock>()
+            .First(text => text.Text == "checkout");
+        Assert.Equal("checkout", ToolTip.GetTip(valueText));
 
         input.Text = "a,b,";
         fixture.Pump();
@@ -1172,5 +1177,108 @@ public sealed class ElasticSetupPageTests
         fixture.Find<Button>("SetupNextButton").Command!.Execute(null);
         await UiWait.Until(() => fixture.Setup.Step == ElasticSetupStep.Finish);
         Check("finish step");
+    }
+
+    [AvaloniaFact]
+    public async Task AltUpAndAltDownReorderTheChosenColumns()
+    {
+        await using var fixture = await CreateAsync();
+        await WalkToColumnsStepAsync(fixture, "api");
+        var view = fixture.Setup.View!;
+        foreach (var name in new[] { "message", "service", "@timestamp" })
+            view.Fields.Single(field => field.Name == name).IsOutput = true;
+        fixture.Pump();
+        var selected = fixture.Find<ListBox>("SelectedFieldsList");
+        Assert.Equal(["message", "service", "@timestamp"], view.SelectedOutputFields);
+
+        void Press(int index, Key key)
+        {
+            var container = selected.ContainerFromIndex(index)!;
+            Assert.True(container.Focus());
+            container.RaiseEvent(
+                new KeyEventArgs
+                {
+                    RoutedEvent = InputElement.KeyDownEvent,
+                    Key = key,
+                    KeyModifiers = KeyModifiers.Alt,
+                }
+            );
+            fixture.Pump();
+        }
+
+        Press(2, Key.Up);
+        Assert.Equal(["message", "@timestamp", "service"], view.SelectedOutputFields);
+        Press(0, Key.Down);
+        Assert.Equal(["@timestamp", "message", "service"], view.SelectedOutputFields);
+        // The ends of the list stay where they are.
+        Press(0, Key.Up);
+        Press(2, Key.Down);
+        Assert.Equal(["@timestamp", "message", "service"], view.SelectedOutputFields);
+        Assert.Equal(["@timestamp", "message", "service"], view.ToSettings().OutputFields);
+        Assert.Equal(["@timestamp", "message", "service"], selected.Items.Cast<string>());
+    }
+
+    [AvaloniaFact]
+    public async Task TheColumnsHintDescribesTheReorderingThatExists()
+    {
+        await using var fixture = await CreateAsync();
+        await WalkToColumnsStepAsync(fixture, "api");
+
+        var texts = TextsIn(fixture.Find<StackPanel>("SetupColumnsPanel"));
+        Assert.Contains(
+            texts,
+            text => text.Contains("Reorder with the Up/Down buttons or Alt+Up/Down")
+        );
+        Assert.DoesNotContain(texts, text => text.Contains("Drag", StringComparison.Ordinal));
+    }
+
+    [AvaloniaFact]
+    public async Task DeleteConnectionIsOnlyOnASavedConnectionAndConfirmsInline()
+    {
+        await using var fixture = await CreateAsync();
+        fixture.Setup.StartNew();
+        fixture.Pump();
+        Assert.False(fixture.Find<Button>("SetupDeleteConnectionButton").IsEffectivelyVisible);
+
+        await PassConnectionTestAsync(fixture);
+        fixture.Find<Button>("SetupNextButton").Command!.Execute(null);
+        await UiWait.Until(() => fixture.Setup.Step == ElasticSetupStep.DataView);
+        var id = fixture.Setup.Connection!.Id;
+        fixture.Setup.Close();
+        fixture.Setup.EditConnection(id);
+        fixture.Pump();
+
+        var delete = fixture.Find<Button>("SetupDeleteConnectionButton");
+        Assert.True(delete.IsEffectivelyVisible);
+        Assert.Equal("Delete connection", AutomationProperties.GetName(delete));
+        Assert.False(fixture.Find<Button>("SetupConfirmDeleteButton").IsEffectivelyVisible);
+
+        delete.Command!.Execute(null);
+        fixture.Pump();
+        var confirm = fixture.Find<Button>("SetupConfirmDeleteButton");
+        var cancel = fixture.Find<Button>("SetupCancelDeleteButton");
+        Assert.True(confirm.IsEffectivelyVisible);
+        Assert.True(cancel.IsEffectivelyVisible);
+        Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(confirm)));
+        Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(cancel)));
+        Assert.Contains(
+            TextsIn(fixture.Find<StackPanel>("SetupConnectionPanel")),
+            text =>
+                text.StartsWith("Delete ", StringComparison.Ordinal)
+                && text.Contains("source tabs will close")
+        );
+
+        cancel.Command!.Execute(null);
+        fixture.Pump();
+        Assert.False(confirm.IsEffectivelyVisible);
+        Assert.Single(fixture.Owner.State.Settings.ElasticConnections);
+
+        delete.Command.Execute(null);
+        fixture.Pump();
+        confirm.Command!.Execute(null);
+        await UiWait.Until(() => !fixture.Setup.IsOpen);
+        fixture.Pump();
+        Assert.Empty(fixture.Owner.State.Settings.ElasticConnections);
+        Assert.Empty(fixture.Persistence.Config!.Settings.ElasticConnections);
     }
 }

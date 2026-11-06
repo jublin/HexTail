@@ -384,20 +384,17 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
-    public void SettingsUseRoundedInputs()
+    public void SetupInputsUseRoundedCorners()
     {
         var window = TestWindow.Create(out var viewModel);
-        viewModel.SettingsOpen = true;
-        viewModel.Settings.SectionIndex = 1;
-        viewModel.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        viewModel.ElasticSetup.StartNew();
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
-        var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
-        var inputBorder = panel
+        var inputBorder = window
             .GetVisualDescendants()
             .OfType<TextBox>()
-            .First()
+            .Single(box => box.Name == "ConnectionNameBox")
             .GetVisualDescendants()
             .OfType<Border>()
             .First();
@@ -470,30 +467,46 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
-    public void SettingsContentUsesVerticalScrollingWithoutHorizontalPan()
+    public void SettingsHasNoElasticTabOrElasticControls()
     {
         var window = TestWindow.Create(out var viewModel);
         viewModel.SettingsOpen = true;
         window.Show();
+        Dispatcher.UIThread.RunJobs();
 
         var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
-        viewModel.Settings.SectionIndex = 1;
-        var elastic = panel.FindControl<ScrollViewer>("ElasticSettingsScrollViewer");
-        Assert.Equal(ScrollBarVisibility.Disabled, elastic!.HorizontalScrollBarVisibility);
-        Assert.Equal(ScrollBarVisibility.Auto, elastic.VerticalScrollBarVisibility);
-
-        window.Close();
-    }
-
-    [AvaloniaFact]
-    public void ElasticSettingsUseTheServerCardLayout()
-    {
-        var window = TestWindow.Create(out var viewModel);
-        viewModel.SettingsOpen = true;
-        viewModel.Settings.SectionIndex = 1;
-        window.Show();
-
-        Assert.NotNull(FindVisual<Button>(window, "AddElasticServerButton"));
+        var tabs = panel.GetVisualDescendants().OfType<TabControl>().Single();
+        Assert.Equal(2, tabs.ItemCount);
+        for (var section = 0; section < 2; section++)
+        {
+            viewModel.Settings.SectionIndex = section;
+            Dispatcher.UIThread.RunJobs();
+            var names = panel
+                .GetVisualDescendants()
+                .OfType<Control>()
+                .Select(control => control.Name)
+                .ToArray();
+            Assert.DoesNotContain("AddElasticServerButton", names);
+            Assert.DoesNotContain("ElasticSettingsScrollViewer", names);
+        }
+        var texts = panel
+            .GetVisualDescendants()
+            .OfType<TextBlock>()
+            .Select(text => text.Text)
+            .ToArray();
+        Assert.DoesNotContain("Elastic", texts);
+        Assert.DoesNotContain("Unsaved Elastic changes", texts);
+        var buttons = panel
+            .GetVisualDescendants()
+            .OfType<Button>()
+            .Select(button => button.Content as string)
+            .ToArray();
+        Assert.DoesNotContain("Save changes", buttons);
+        Assert.DoesNotContain("Discard changes", buttons);
+        Assert.DoesNotContain("Keep editing", buttons);
+        Assert.DoesNotContain("Delete server", buttons);
+        Assert.DoesNotContain("Cancel deletion", buttons);
+        Assert.Equal("limits", viewModel.Settings.Section);
         window.Close();
     }
 
@@ -551,8 +564,8 @@ public sealed class MainWindowInteractionTests
 
         var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
         var tabs = panel.GetVisualDescendants().OfType<TabControl>().Single();
-        Assert.Equal(3, tabs.ItemCount);
-        for (var section = 0; section < 3; section++)
+        Assert.Equal(2, tabs.ItemCount);
+        for (var section = 0; section < 2; section++)
         {
             viewModel.Settings.SectionIndex = section;
             Dispatcher.UIThread.RunJobs();

@@ -81,21 +81,15 @@ public sealed class ElasticDraftTests
         Assert.Equal("Unsaved", editor.SaveStatus);
 
         persistence.Pending = new TaskCompletionSource();
-        owner.SettingsOpen = true;
-        owner.SettingsOpen = false;
-        var saving = owner.Settings.SaveDraftsAndCloseCommand.Execute().FirstAsync().ToTask();
-        Assert.True(owner.SettingsOpen);
-        Assert.True(owner.Settings.CloseConfirmationVisible);
-        Assert.False(owner.Settings.CanDiscardDrafts);
+        var saving = editor.SaveCommand.Execute().FirstAsync().ToTask();
         Assert.True(editor.IsSaving);
         Assert.Equal("Saving…", editor.SaveStatus);
         persistence.Pending.SetResult();
         await saving;
         Dispatcher.UIThread.RunJobs();
+        Assert.False(editor.IsSaving);
         Assert.False(editor.IsDirty);
         Assert.Equal("Saved", editor.SaveStatus);
-        Assert.False(owner.SettingsOpen);
-        Assert.False(owner.Settings.CloseConfirmationVisible);
         Assert.Equal(
             "Updated Ops",
             Assert.Single(persistence.Config!.Settings.ElasticConnections).Name
@@ -133,7 +127,9 @@ public sealed class ElasticDraftTests
     [InlineData("backdrop")]
     [InlineData("button")]
     [InlineData("binding")]
-    public async Task EverySettingsClosePathOffersKeepEditingOrDiscard(string path)
+    public async Task EverySettingsClosePathClosesWithoutAskingEvenWithAnEditedConnection(
+        string path
+    )
     {
         var persistence = new TestPersistence();
         await persistence.SaveAsync(new AppConfig { Settings = Settings() });
@@ -152,6 +148,7 @@ public sealed class ElasticDraftTests
         var window = new MainWindow(owner, registerNativePicker: false);
         window.Show();
         Dispatcher.UIThread.RunJobs();
+        Assert.True(window.FindControl<DialogHost>("SettingsDialogHost")!.IsOpen);
         if (path == "escape")
             window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.None, null);
         else if (path == "backdrop")
@@ -165,87 +162,13 @@ public sealed class ElasticDraftTests
             owner.SettingsOpen = false;
         Dispatcher.UIThread.RunJobs();
 
-        Assert.True(owner.SettingsOpen);
-        Assert.True(window.FindControl<DialogHost>("SettingsDialogHost")!.IsOpen);
-        Assert.True(owner.Settings.CloseConfirmationVisible);
-        await owner.Settings.KeepEditingCommand.Execute().FirstAsync();
-        Assert.False(owner.Settings.CloseConfirmationVisible);
-        Assert.Equal("Unsaved change", editor.Name);
-        owner.SettingsOpen = false;
-        await owner.Settings.DiscardDraftsAndCloseCommand.Execute().FirstAsync();
         Assert.False(owner.SettingsOpen);
-        Assert.Equal("Ops", Assert.Single(owner.Settings.ElasticConnections).Name);
+        Assert.False(window.FindControl<DialogHost>("SettingsDialogHost")!.IsOpen);
+        // Nothing about Settings saves or discards the connection's edits.
+        Assert.Equal("Unsaved change", editor.Name);
         Assert.Equal("Ops", Assert.Single(state.Settings.ElasticConnections).Name);
         await owner.DisposeAsync();
         window.Close();
-    }
-
-    [AvaloniaFact]
-    public async Task SaveOnCloseWaitsForSuccessAndDeleteRequiresNamedConfirmation()
-    {
-        var persistence = new TestPersistence();
-        await persistence.SaveAsync(new AppConfig { Settings = Settings() });
-        var state = new AppState(
-            new LogSourceService(),
-            persistence,
-            Settings(),
-            elastic: new FakeElasticApiClient(),
-            credentials: new InMemoryCredentialVault()
-        );
-        await using var owner = new MainWindowViewModel(state, startPolling: false);
-        await owner.InitializeAsync();
-        var tab = await state.OpenElasticSourceAsync("source");
-        var editor = Assert.Single(owner.Settings.ElasticConnections);
-        editor.Name = "Updated Ops";
-        owner.SettingsOpen = true;
-        owner.SettingsOpen = false;
-        try
-        {
-            persistence.SaveError = new InvalidOperationException("storage unavailable");
-            await owner.Settings.SaveDraftsAndCloseCommand.Execute().FirstAsync();
-            Assert.True(owner.SettingsOpen);
-            Assert.True(owner.Settings.CloseConfirmationVisible);
-            Assert.Equal("Updated Ops", editor.Name);
-        }
-        finally
-        {
-            persistence.SaveError = null;
-        }
-        await owner.Settings.SaveDraftsAndCloseCommand.Execute().FirstAsync();
-        Assert.False(owner.SettingsOpen);
-        Assert.Equal("Updated Ops", Assert.Single(state.Settings.ElasticConnections).Name);
-
-        owner.SettingsOpen = true;
-        await owner.Settings.RemoveElasticConnectionCommand.Execute(editor).FirstAsync();
-        Assert.True(owner.Settings.DeleteConfirmationVisible);
-        var message = owner.Settings.DeleteConfirmationMessage;
-        Assert.Contains("Updated Ops", message);
-        Assert.Contains("api", message);
-        Assert.Contains(tab, state.Files);
-        Assert.Single(state.Settings.ElasticConnections);
-        await owner.Settings.CancelDeleteCommand.Execute().FirstAsync();
-        Assert.Contains(tab, state.Files);
-        Assert.Single(state.Settings.ElasticConnections);
-        await owner.Settings.RemoveElasticConnectionCommand.Execute(editor).FirstAsync();
-        try
-        {
-            persistence.SaveError = new InvalidOperationException("delete could not be stored");
-            await owner.Settings.ConfirmDeleteCommand.Execute().FirstAsync();
-            Assert.Contains(tab, state.Files);
-            Assert.Single(state.Settings.ElasticConnections);
-            Assert.Single(persistence.Config!.Settings.ElasticConnections);
-            Assert.Same(editor, Assert.Single(owner.Settings.ElasticConnections));
-            Assert.True(owner.Settings.DeleteConfirmationVisible);
-            Assert.Equal("delete could not be stored", owner.Settings.SaveError);
-        }
-        finally
-        {
-            persistence.SaveError = null;
-        }
-        await owner.Settings.ConfirmDeleteCommand.Execute().FirstAsync();
-        Assert.Empty(state.Files);
-        Assert.Empty(state.Settings.ElasticConnections);
-        Assert.Empty(owner.Settings.ElasticConnections);
     }
 
     private static AppSettings Settings() =>

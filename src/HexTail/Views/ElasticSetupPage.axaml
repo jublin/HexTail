@@ -229,6 +229,45 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
             </StackPanel>
+            <StackPanel
+              x:Name="SetupDeletePanel"
+              Spacing="8"
+              Margin="0,24,0,0"
+              IsVisible="{Binding CanDeleteConnection}"
+            >
+              <Button
+                x:Name="SetupDeleteConnectionButton"
+                Content="Delete connection"
+                Command="{Binding DeleteConnectionCommand}"
+                IsVisible="{Binding !DeleteConfirmationVisible}"
+                HorizontalAlignment="Left"
+                Classes="destructive"
+                AutomationProperties.Name="Delete connection"
+              />
+              <StackPanel Spacing="8" IsVisible="{Binding DeleteConfirmationVisible}">
+                <TextBlock
+                  x:Name="SetupDeleteMessage"
+                  Text="{Binding DeleteConfirmationMessage}"
+                  TextWrapping="Wrap"
+                  AutomationProperties.LiveSetting="Assertive"
+                />
+                <WrapPanel>
+                  <Button
+                    x:Name="SetupConfirmDeleteButton"
+                    Content="Delete"
+                    Command="{Binding ConfirmDeleteConnectionCommand}"
+                    Classes="destructive"
+                    AutomationProperties.Name="Confirm delete connection"
+                  />
+                  <Button
+                    x:Name="SetupCancelDeleteButton"
+                    Content="Cancel"
+                    Command="{Binding CancelDeleteConnectionCommand}"
+                    AutomationProperties.Name="Cancel deleting connection"
+                  />
+                </WrapPanel>
+              </StackPanel>
+            </StackPanel>
           </StackPanel>
 
           <!-- Step 2: Data view -->
@@ -382,6 +421,7 @@
                         VerticalAlignment="Center"
                         MaxWidth="220"
                         TextTrimming="CharacterEllipsis"
+                        ToolTip.Tip="{Binding ServerValue}"
                       />
                       <TextBlock
                         Text="{Binding CountText}"
@@ -475,7 +515,7 @@
             <TextBlock Text="Choose the columns" Classes="setup-title" />
             <TextBlock
               Classes="hint"
-              Text="Tick the fields to show in each row. Drag a chosen column, or select it and use Up and Down (Alt+Up and Alt+Down work too), to set the order. Delete removes it."
+              Text="Tick the fields to show in each row. Reorder with the Up/Down buttons or Alt+Up/Down. Delete removes the selected column."
             />
             <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
               <StackPanel Spacing="6">

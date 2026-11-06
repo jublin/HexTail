@@ -71,7 +71,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         _startupPaths = startupPaths?.ToArray() ?? [];
         _scheduler = scheduler ?? RxSchedulers.MainThreadScheduler;
         _startPolling = startPolling;
-        Settings = new SettingsViewModel(this, _scheduler);
+        Settings = new SettingsViewModel(this);
         ElasticSetup = new ElasticSetupViewModel(this);
         FilterBar = new FilterBarViewModel(this);
         Inspector = new InspectorViewModel(this);
@@ -405,19 +405,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public bool SettingsOpen
     {
         get => _settingsOpen;
-        set
-        {
-            if (!value && _settingsOpen && !Settings.TryClose())
-            {
-                this.RaisePropertyChanged(nameof(SettingsOpen));
-                return;
-            }
-            this.RaiseAndSetIfChanged(ref _settingsOpen, value);
-        }
+        set => this.RaiseAndSetIfChanged(ref _settingsOpen, value);
     }
-
-    internal void CloseSettingsAfterDraftChoice() =>
-        this.RaiseAndSetIfChanged(ref _settingsOpen, false, nameof(SettingsOpen));
 
     public int SelectedViewIndex
     {
@@ -946,6 +935,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                     view.Sources.Select(source =>
                         (
                             ConnectionId: connection.Id,
+                            ViewId: view.Id,
                             Descriptor: LogSourceDescriptor.Elastic(connection, view, source),
                             ShortName: $"{(string.IsNullOrWhiteSpace(view.Name) ? view.DataViewTitle : view.Name)} · {source.ServerValue}"
                         )
@@ -971,7 +961,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         {
             var item = configured.First(source => source.Descriptor.Id == option.SourceId);
             option.SyncIdentity(item.Descriptor);
-            option.SyncConnection(item.ConnectionId, item.ShortName);
+            option.SyncConnection(item.ConnectionId, item.ShortName, item.ViewId);
             option.SyncSelection(option.SourceId == selectedSourceId);
             var status =
                 _state.ElasticSourceStatuses.GetValueOrDefault(option.SourceId)?.Status.ToString()
@@ -1058,7 +1048,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             var group = ElasticConnectionGroups.FirstOrDefault(item => item.Id == connection.Id);
             if (group is null)
             {
-                group = new ElasticConnectionGroupViewModel(connection.Id);
+                group = new ElasticConnectionGroupViewModel(this, connection.Id);
                 ElasticConnectionGroups.Insert(index, group);
             }
             else if (ElasticConnectionGroups.IndexOf(group) is var current && current != index)

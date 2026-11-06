@@ -60,7 +60,7 @@ public sealed class SettingsLimitsTests
         try
         {
             owner.SettingsOpen = true;
-            owner.Settings.SectionIndex = 2;
+            owner.Settings.SectionIndex = 1;
             window.Show();
             Dispatcher.UIThread.RunJobs();
             var box = window
