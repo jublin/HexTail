@@ -87,8 +87,8 @@ public partial class MainWindow : Window
     }
 
     // The button is bound to ToggleSettingsCommand, which disables it while the command that opened
-    // the panel is still finishing; that can land after we focused it, and Avalonia then drops
-    // focus. Put focus back when the button is usable again and nothing else holds it.
+    // the panel is still finishing. That can land before our Focus() (refused) or after it (Avalonia
+    // drops focus), so put focus back whenever the button is usable again and focus is not in the panel.
     private void WatchSettingsCloseButton(Button? button)
     {
         if (button is null || ReferenceEquals(button, _watchedCloseButton))
@@ -98,6 +98,10 @@ public partial class MainWindow : Window
         _watchedCloseButton = button;
         button.PropertyChanged += OnSettingsCloseButtonPropertyChanged;
     }
+
+    private bool SettingsFocusInPanel() =>
+        FocusManager?.GetFocusedElement() is Control focused
+        && focused.GetVisualAncestors().OfType<SettingsPanel>().Any();
 
     private void OnSettingsCloseButtonPropertyChanged(
         object? sender,
@@ -109,7 +113,7 @@ public partial class MainWindow : Window
             && e.NewValue is true
             && sender is Button button
             && ViewModel.SettingsOpen
-            && FocusManager?.GetFocusedElement() is null
+            && !SettingsFocusInPanel()
         )
             button.Focus();
     }
