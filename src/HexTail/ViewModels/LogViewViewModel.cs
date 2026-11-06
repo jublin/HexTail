@@ -120,6 +120,58 @@ internal sealed class LogViewViewModel : ReactiveObject
         }
     }
 
+    // Raised after a row key moved the selection, so the view can select and scroll to the row.
+    internal event Action<LogLineViewModel>? SelectionMoved;
+
+    internal void MoveSelection(int delta)
+    {
+        if (Lines.Count == 0)
+            return;
+        var current = CurrentRowIndex();
+        var next =
+            current < 0
+                ? (delta > 0 ? 0 : Lines.Count - 1)
+                : Math.Clamp(current + delta, 0, Lines.Count - 1);
+        SelectRow(Lines[next]);
+    }
+
+    internal void MoveToMatch(int direction)
+    {
+        var rules = File.EffectiveRules(Settings);
+        var current = CurrentRowIndex();
+        // With no (visible) selected row, start from the edge the direction heads away from.
+        var first =
+            current >= 0 ? current + direction
+            : direction > 0 ? 0
+            : Lines.Count - 1;
+        for (var index = first; index >= 0 && index < Lines.Count; index += direction)
+        {
+            if (_file.HighlightSpans.Get(Lines[index].Line, File.Searches, rules).Count > 0)
+            {
+                SelectRow(Lines[index]);
+                return;
+            }
+        }
+    }
+
+    private void SelectRow(LogLineViewModel row)
+    {
+        _file.SelectLine(row.Line);
+        SelectionMoved?.Invoke(row);
+    }
+
+    private int CurrentRowIndex()
+    {
+        var selected = File.SelectedLine;
+        if (selected is null || selected < 0 || selected >= File.Buffer.Count)
+            return -1;
+        var line = File.Buffer[selected.Value];
+        for (var index = 0; index < Lines.Count; index++)
+            if (ReferenceEquals(Lines[index].Line, line))
+                return index;
+        return -1;
+    }
+
     private void JumpToLatest()
     {
         _owner.IsPaused = false;

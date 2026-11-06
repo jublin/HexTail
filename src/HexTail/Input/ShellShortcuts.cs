@@ -18,6 +18,10 @@ internal enum ShellAction
     TogglePause,
     ScrollToTop,
     ScrollToBottom,
+    NextRow,
+    PreviousRow,
+    NextMatch,
+    PreviousMatch,
 }
 
 internal readonly record struct ShellCommand(ShellAction Action, int Index = 0)
@@ -56,6 +60,9 @@ internal static class ShellShortcuts
             Key.F when !shift => new(ShellAction.ToggleFollow),
             Key.Space => new(ShellAction.TogglePause),
             Key.G => new(shift ? ShellAction.ScrollToBottom : ShellAction.ScrollToTop),
+            Key.J => new(ShellAction.NextRow),
+            Key.K => new(ShellAction.PreviousRow),
+            Key.N => new(shift ? ShellAction.PreviousMatch : ShellAction.NextMatch),
             _ => ShellCommand.None,
         };
     }

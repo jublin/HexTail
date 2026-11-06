@@ -63,9 +63,14 @@ flowchart LR
   malformed or non-object lines remain plain text.
 - Search results are buffer-relative. When old lines roll out, result indices
   are rebased with the buffer.
-- Global exclusions hide matching rows from visible log and context lists but
-  do not delete them from the buffer.
-- Global labels add case-insensitive highlight ranges to visible rows.
+- Filter rules (`ViewRule`) have an action (highlight, show only, hide) and a
+  scope: global rules live in `AppSettings.Rules`, source rules on the file tab.
+  Hide and show-only rules filter visible log and context lists but do not
+  delete rows from the buffer; highlight rules add match ranges to visible rows.
+- Each source also has a level mask (`LogLevels`); lines whose level cannot be
+  detected always pass it.
+- Saved filters (`AppConfig.SavedFilters`) store source rules plus a level mask
+  and are merged into a source on apply.
 - The main view and each search view have independent follow-tail state.
 - The inline context view is a window over the selected buffer line and owns
   its own scrolling.

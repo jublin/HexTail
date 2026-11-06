@@ -45,7 +45,7 @@ public sealed class OnboardingTests
             window.MouseUp(point, MouseButton.Left, RawInputModifiers.None);
             Dispatcher.UIThread.RunJobs();
             Assert.True(workspace.SettingsOpen);
-            Assert.Equal(2, workspace.Settings.SectionIndex);
+            Assert.Equal(1, workspace.Settings.SectionIndex);
         }
         finally
         {

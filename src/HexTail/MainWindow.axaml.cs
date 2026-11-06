@@ -71,9 +71,12 @@ public partial class MainWindow : Window
         AddHandler(LostFocusEvent, OnFocusChangedWhileSettingsOpen, RoutingStrategies.Bubble, true);
         SizeChanged += (_, args) => ViewModel.SetShellWidth(args.NewSize.Width);
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
-        ViewModel.FocusSearchRequested += (_, _) =>
+        ViewModel.FilterBar.FocusRequested += (_, _) =>
             Dispatcher.UIThread.Post(() =>
-                this.GetVisualDescendants().OfType<SearchBar>().FirstOrDefault()?.FocusQuery()
+                this.GetVisualDescendants()
+                    .OfType<FilterBar>()
+                    .FirstOrDefault(bar => bar.IsEffectivelyVisible)
+                    ?.FocusQuery()
             );
     }
 
@@ -340,7 +343,7 @@ public partial class MainWindow : Window
                 Dispatcher.UIThread.Post(() => ViewModel.OpenCommand.Execute().Subscribe());
                 break;
             case ShellAction.FocusSearch:
-                this.GetVisualDescendants().OfType<SearchBar>().FirstOrDefault()?.FocusQuery();
+                ViewModel.FilterBar.RequestFocus();
                 break;
             case ShellAction.SaveSession:
                 ViewModel.SaveCommand.Execute().Subscribe();
@@ -370,6 +373,18 @@ public partial class MainWindow : Window
                 break;
             case ShellAction.ScrollToBottom when file is not null:
                 file.SelectedView.IsFollowing = true;
+                break;
+            case ShellAction.NextRow when file is not null:
+                file.SelectedView.MoveSelection(1);
+                break;
+            case ShellAction.PreviousRow when file is not null:
+                file.SelectedView.MoveSelection(-1);
+                break;
+            case ShellAction.NextMatch when file is not null:
+                file.SelectedView.MoveToMatch(1);
+                break;
+            case ShellAction.PreviousMatch when file is not null:
+                file.SelectedView.MoveToMatch(-1);
                 break;
             case ShellAction.ScrollToTop:
                 this.GetVisualDescendants()

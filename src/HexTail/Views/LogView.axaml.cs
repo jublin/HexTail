@@ -36,6 +36,7 @@ public partial class LogView : UserControl
             _viewModel.Lines.CollectionChanged -= OnLinesChanged;
             _viewModel.ContextLines.CollectionChanged -= OnContextLinesChanged;
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _viewModel.SelectionMoved -= OnSelectionMoved;
         }
 
         if (_scrollViewer is not null)
@@ -50,6 +51,7 @@ public partial class LogView : UserControl
             _viewModel.Lines.CollectionChanged += OnLinesChanged;
             _viewModel.ContextLines.CollectionChanged += OnContextLinesChanged;
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            _viewModel.SelectionMoved += OnSelectionMoved;
             _viewModel.Sync();
         }
 
@@ -96,6 +98,21 @@ public partial class LogView : UserControl
             return;
 
         Dispatcher.UIThread.Post(RequestScrollLogToEnd, DispatcherPriority.Background);
+    }
+
+    private void OnSelectionMoved(LogLineViewModel row)
+    {
+        // Keyboard selection never touches the list itself, so select the row here and bring it
+        // into view; a click already scrolls the list on its own. Landing anywhere but the last
+        // row means the user left the tail: stop following first, so that neither a pending
+        // scroll-to-end nor the next appended line pulls the selection out of view again.
+        if (
+            _viewModel is { Lines.Count: > 0 } viewModel
+            && !ReferenceEquals(viewModel.Lines[^1], row)
+        )
+            viewModel.IsFollowing = false;
+        LogList.SelectedItem = row;
+        LogList.ScrollIntoView(row);
     }
 
     private void OnLogSelectionChanged(object? sender, SelectionChangedEventArgs e)

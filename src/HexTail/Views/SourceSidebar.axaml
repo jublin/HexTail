@@ -180,6 +180,47 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
+
+      <TextBlock Text="SAVED FILTERS" Classes="sidebar-heading" Margin="4,12,0,2" />
+      <TextBlock
+        x:Name="SavedFiltersEmptyHint"
+        Text="No saved filters"
+        Classes="hint"
+        Margin="6,2"
+        IsVisible="{Binding !HasSavedFilters}"
+      />
+      <ItemsControl x:Name="SavedFilterList" ItemsSource="{Binding SavedFilters}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:SavedFilterViewModel">
+            <Border Classes="source-row" ToolTip.Tip="{Binding ApplyToolTip}">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                <Button
+                  Classes="source-select"
+                  Command="{Binding ApplyCommand}"
+                  AutomationProperties.Name="{Binding Name, StringFormat='Apply filter {0}'}"
+                >
+                  <StackPanel>
+                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Summary}" Classes="hint" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                </Button>
+                <Button
+                  Grid.Column="1"
+                  Classes="icon tab-close"
+                  Width="22"
+                  Height="22"
+                  FontSize="14"
+                  Command="{Binding DeleteCommand}"
+                  ToolTip.Tip="{Binding Name, StringFormat='Delete saved filter {0}'}"
+                  AutomationProperties.Name="{Binding Name, StringFormat='Delete saved filter {0}'}"
+                >
+                  <ic:Icon Value="mdi-close" />
+                </Button>
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

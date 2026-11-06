@@ -53,7 +53,7 @@ public sealed class ElasticSetupTests
         );
         await using var owner = new MainWindowViewModel(state, startPolling: false);
         await owner.InitializeAsync();
-        owner.Settings.SectionIndex = 2;
+        owner.Settings.SectionIndex = 1;
         owner.SettingsOpen = true;
         var window = new MainWindow(owner, registerNativePicker: false);
         window.Show();

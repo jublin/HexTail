@@ -65,6 +65,12 @@ public sealed class JsonFileAppPersistence : IAppPersistence
             var stem = System.IO.Path.GetFileNameWithoutExtension(fileName);
             var stamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
             var content = File.ReadAllBytes(Path);
+            // A timestamped name only collides within one second, so look at every earlier backup too.
+            foreach (var existing in Directory.GetFiles(directory, $"{stem}*.bak"))
+            {
+                if (File.ReadAllBytes(existing).AsSpan().SequenceEqual(content))
+                    return;
+            }
             for (var attempt = 0; attempt < 100; attempt++)
             {
                 var name = attempt switch

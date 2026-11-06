@@ -18,11 +18,17 @@ lookback, and native OS credential storage for authenticated connections.
 - Live tailing with append, truncate, rotation, and missing-file recovery.
 - Multiple files listed in a source sidebar, opened from the native picker,
   drag-and-drop, or the command line.
-- Literal and regular-expression searches with optional case sensitivity and a
-  separate highlight color for each search.
+- A filter bar for every source: Enter highlights, Shift+Enter shows only
+  matching rows, Alt+Enter hides them. Each rule is a chip (dashed for global
+  rules, solid for one source) that you click to edit, middle-click to disable
+  or remove; literal or regex, optional case sensitivity, an automatic color.
+- A T/D/I/W/E log level control per source.
+- Named saved filters, applied from the sidebar or the command palette.
+- Search tabs (Pin as tab) with a separate highlight color for each search.
 - Independent follow-tail toggles for the All view and each search view.
 - Optional inline context view with its own scroll position.
-- Global case-insensitive labels and exclusions from the settings pane.
+- Global rules: make any rule apply to every source with the chip's **All
+  sources** switch.
 - Display density, log font size, and theme settings.
 - Session persistence for open files, searches, settings, window geometry, and
   context-pane size.
@@ -86,8 +92,10 @@ dotnet run --project src/HexTail.LogGenerator -- --format jsonl --output /tmp/he
    Each source has an **All** view with the complete buffered tail. Toggle the
    sidebar with the toolbar button or `Ctrl+B`; below 1000 px wide it becomes an
    overlay that closes after a selection.
-3. Enter a query in **Search this file** and press Enter or **Add Search**.
-   Search tabs show matching lines; the All view highlights the same matches.
+3. Type in the filter bar under the view tabs: Enter highlights matches,
+   Shift+Enter shows only matching rows, Alt+Enter hides them. Turn on **Pin as
+   tab** first to make Enter add a search tab instead; tabs show matching
+   lines while the All view highlights the same matches.
 4. **Follow** and **Context** are on each view's toolbar. Follow keeps a view at
    the newest line or match; scrolling away shows a **↓ N new lines** pill that
    jumps back and resumes following. **Context** shows the selected line with
@@ -97,8 +105,9 @@ dotnet run --project src/HexTail.LogGenerator -- --format jsonl --output /tmp/he
    (**Local** or **Utc**). For an Elastic source, the clock pill in the top
    toolbar (for example **Last 5 min · live**) opens the time range: quick
    presets, or typed **From** and **To** times.
-6. Press `Ctrl+K` for the command palette. **Settings** manages global labels
-   and exclusions, Elastic servers, and display preferences.
+6. Press `Ctrl+K` for the command palette. **Settings** manages Elastic
+   servers and display preferences; filter rules live in each source's filter
+   bar.
 
 ### Keyboard shortcuts
 
@@ -106,7 +115,7 @@ dotnet run --project src/HexTail.LogGenerator -- --format jsonl --output /tmp/he
 | --- | --- |
 | `Ctrl+K` / `Cmd+K` (or `Ctrl+Shift+P`) | Open the command palette: commands, views, sources |
 | `Ctrl+O` / `Cmd+O` | Open files |
-| `Ctrl+F` / `Cmd+F`, or `/` | Focus the search box |
+| `Ctrl+F` / `Cmd+F`, or `/` | Focus the filter input |
 | `Ctrl+B` / `Cmd+B` | Toggle the source sidebar |
 | `Ctrl+W` / `Cmd+W` | Close the selected search view, or the source when **All** is selected |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous view |
@@ -114,12 +123,14 @@ dotnet run --project src/HexTail.LogGenerator -- --format jsonl --output /tmp/he
 | `F` | Toggle follow for the selected view |
 | `Space` | Pause / resume view updates (logs keep buffering) |
 | `g` / `Shift+G` | Jump to the first line / the newest line (and follow) |
+| `j` / `k` | Select the next / previous row |
+| `n` / `N` | Select the next / previous row with a highlight |
 | `Alt+Up` / `Alt+Down` | Move the focused file up or down in the sidebar |
 | `Alt+Left` / `Alt+Right` | Move the focused view tab left or right |
 | `Ctrl+S` / `Cmd+S` | Save the session now (it also saves automatically) |
 | `Esc` | Close Settings or the command palette |
 
-The single-key shortcuts (`/`, `F`, `Space`, `g`, `Shift+G`) do not fire while a
+The single-key shortcuts (`/`, `F`, `Space`, `g`, `Shift+G`, `j`, `k`, `n`, `N`) do not fire while a
 text box has focus. While the palette or Settings is open, the other shortcuts
 are paused; `Esc` closes the palette.
 

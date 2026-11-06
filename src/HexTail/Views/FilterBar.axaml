@@ -1,0 +1,353 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTail.ViewModels"
+  xmlns:domain="using:HexTail.Domain"
+  xmlns:ic="https://github.com/projektanker/icons.avalonia"
+  x:Class="HexTail.Views.FilterBar"
+  x:DataType="vm:FilterBarViewModel"
+  AutomationProperties.Name="Filters"
+>
+  <StackPanel Margin="8,2,8,4" Spacing="4">
+    <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="4">
+      <TextBox
+        x:Name="QueryBox"
+        Name="QueryBox"
+        VerticalContentAlignment="Center"
+        Height="{Binding Settings.SecondaryControlHeight}"
+        MinHeight="{Binding Settings.SecondaryControlHeight}"
+        FontSize="{Binding Settings.SecondaryFontSize}"
+        Padding="{Binding Settings.SecondaryPadding}"
+        Text="{Binding Query, Mode=TwoWay}"
+        PlaceholderText="Filter this source — Enter highlight · Shift+Enter show only · Alt+Enter hide"
+        AutomationProperties.Name="Filter text"
+        UseFloatingPlaceholder="False"
+        TextAlignment="Left"
+      />
+      <ComboBox
+        x:Name="SearchModePicker"
+        Grid.Column="1"
+        Width="94"
+        Height="{Binding Settings.SecondaryControlHeight}"
+        MinHeight="{Binding Settings.SecondaryControlHeight}"
+        FontSize="{Binding Settings.SecondaryFontSize}"
+        Padding="{Binding Settings.SecondaryPadding}"
+        ItemsSource="{Binding MatchModes}"
+        SelectedItem="{Binding MatchMode, Mode=TwoWay}"
+        AutomationProperties.Name="Match mode"
+        ToolTip.Tip="Literal matches exact text; Regex interprets a regular expression."
+      />
+      <ToggleButton
+        x:Name="CaseToggle"
+        Name="CaseToggle"
+        Grid.Column="2"
+        Height="{Binding Settings.SecondaryControlHeight}"
+        MinHeight="{Binding Settings.SecondaryControlHeight}"
+        FontSize="{Binding Settings.SecondaryFontSize}"
+        Padding="{Binding Settings.SecondaryPadding}"
+        Content="Aa"
+        IsChecked="{Binding CaseSensitive, Mode=TwoWay}"
+        ToolTip.Tip="Match case"
+        AutomationProperties.Name="Match case"
+      />
+      <ToggleButton
+        x:Name="PinTabToggle"
+        Name="PinTabToggle"
+        Grid.Column="3"
+        Height="{Binding Settings.SecondaryControlHeight}"
+        MinHeight="{Binding Settings.SecondaryControlHeight}"
+        Padding="{Binding Settings.SecondaryPadding}"
+        IsChecked="{Binding PinAsTab, Mode=TwoWay}"
+        ToolTip.Tip="Enter creates a view tab instead of a highlight rule"
+        AutomationProperties.Name="Pin as tab"
+      >
+        <ic:Icon Value="mdi-bookmark-outline" />
+      </ToggleButton>
+      <Border
+        x:Name="LevelSegment"
+        Name="LevelSegment"
+        Grid.Column="4"
+        Classes="level-segment"
+        Classes.filtered="{Binding HasLevelFilter}"
+        Height="{Binding Settings.SecondaryControlHeight}"
+        AutomationProperties.Name="Log levels"
+      >
+        <ItemsControl ItemsSource="{Binding LevelToggles}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:LevelToggleViewModel">
+              <ToggleButton
+                Name="LevelToggle"
+                IsChecked="{Binding IsOn, Mode=OneWay}"
+                Command="{Binding ToggleCommand}"
+                Content="{Binding Label}"
+                ToolTip.Tip="{Binding Name}"
+                AutomationProperties.Name="{Binding AutomationName}"
+              />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Border>
+      <Button
+        x:Name="SaveFilterButton"
+        Name="SaveFilterButton"
+        Grid.Column="5"
+        Height="{Binding Settings.SecondaryControlHeight}"
+        MinHeight="{Binding Settings.SecondaryControlHeight}"
+        Padding="{Binding Settings.SecondaryPadding}"
+        IsVisible="{Binding CanSaveFilter}"
+        ToolTip.Tip="Save this source's rules and level filter as a named filter"
+        AutomationProperties.Name="Save filter"
+      >
+        <ic:Icon Value="mdi-content-save-outline" />
+        <FlyoutBase.AttachedFlyout>
+          <Flyout Placement="BottomEdgeAlignedRight">
+            <StackPanel Width="260" Spacing="6" AutomationProperties.Name="Save filter">
+              <TextBlock Classes="hint" Text="Saves this source's rules and level filter." TextWrapping="Wrap" />
+              <TextBox
+                Name="SaveFilterNameBox"
+                Text="{Binding NewFilterName, Mode=TwoWay}"
+                PlaceholderText="Filter name"
+                AutomationProperties.Name="Saved filter name"
+              >
+                <TextBox.KeyBindings>
+                  <KeyBinding Gesture="Enter" Command="{Binding SaveFilterCommand}" />
+                  <KeyBinding Gesture="Escape" Command="{Binding CancelSaveFilterCommand}" />
+                </TextBox.KeyBindings>
+              </TextBox>
+              <TextBlock
+                Name="SaveFilterError"
+                Classes="error"
+                Text="{Binding SaveError}"
+                IsVisible="{Binding HasSaveError}"
+                TextWrapping="Wrap"
+                AutomationProperties.Name="Filter could not be saved"
+              />
+              <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                <Button
+                  Name="SaveFilterCancelButton"
+                  Content="Cancel"
+                  Command="{Binding CancelSaveFilterCommand}"
+                  AutomationProperties.Name="Cancel saving filter"
+                />
+                <Button
+                  Name="SaveFilterConfirmButton"
+                  Classes="primary"
+                  Content="Save"
+                  IsEnabled="{Binding HasFilterName}"
+                  Command="{Binding SaveFilterCommand}"
+                  AutomationProperties.Name="Save filter with this name"
+                />
+              </StackPanel>
+            </StackPanel>
+          </Flyout>
+        </FlyoutBase.AttachedFlyout>
+      </Button>
+    </Grid>
+    <TextBlock
+      x:Name="FilterError"
+      Name="FilterError"
+      Classes="error"
+      Text="{Binding Error}"
+      IsVisible="{Binding HasError}"
+    />
+    <ItemsControl x:Name="ChipList" ItemsSource="{Binding Chips}" IsVisible="{Binding HasChips}">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <WrapPanel />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:RuleChipViewModel">
+          <Grid
+            x:Name="RuleChip"
+            Margin="0,0,6,4"
+            Classes="rule-chip"
+            Classes.disabled="{Binding IsDisabled}"
+            ToolTip.Tip="{Binding ToolTip}"
+            AutomationProperties.Name="{Binding AutomationName}"
+          >
+            <Rectangle
+              Classes="chip-outline"
+              Classes.global="{Binding IsGlobal}"
+              RadiusX="10"
+              RadiusY="10"
+            />
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="8,2,4,2">
+              <Ellipse
+                Width="8"
+                Height="8"
+                Fill="{Binding SwatchBrush}"
+                IsVisible="{Binding HasSwatch}"
+                VerticalAlignment="Center"
+              />
+              <ic:Icon Value="mdi-eye-off-outline" IsVisible="{Binding IsHide}" />
+              <ic:Icon Value="mdi-filter-outline" IsVisible="{Binding IsShowOnly}" />
+              <ic:Icon Value="mdi-bookmark-outline" IsVisible="{Binding IsPinnedTab}" />
+              <Button
+                Name="ChipBody"
+                Classes="chip-body"
+                Command="{Binding ActivateCommand}"
+                AutomationProperties.Name="{Binding BodyAutomationName}"
+              >
+                <FlyoutBase.AttachedFlyout>
+                  <Flyout Placement="BottomEdgeAlignedLeft">
+                    <StackPanel Width="280" Spacing="6" AutomationProperties.Name="Edit rule">
+                      <TextBox
+                        Name="DraftPatternBox"
+                        Text="{Binding Draft.Pattern, Mode=TwoWay}"
+                        PlaceholderText="Pattern"
+                        AutomationProperties.Name="Rule pattern"
+                      >
+                        <TextBox.KeyBindings>
+                          <KeyBinding Gesture="Enter" Command="{Binding ApplyCommand}" />
+                          <KeyBinding Gesture="Escape" Command="{Binding CancelCommand}" />
+                        </TextBox.KeyBindings>
+                      </TextBox>
+                      <CheckBox
+                        Name="DraftEnabledCheck"
+                        Content="Enabled"
+                        IsChecked="{Binding Draft.Enabled, Mode=TwoWay}"
+                        ToolTip.Tip="A disabled rule is kept but has no effect"
+                        AutomationProperties.Name="Rule enabled"
+                      />
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ComboBox
+                          Name="DraftModePicker"
+                          Width="94"
+                          ItemsSource="{Binding Draft.MatchModes}"
+                          SelectedItem="{Binding Draft.MatchMode, Mode=TwoWay}"
+                          AutomationProperties.Name="Rule match mode"
+                        />
+                        <ToggleButton
+                          Name="DraftCaseToggle"
+                          Content="Aa"
+                          IsChecked="{Binding Draft.CaseSensitive, Mode=TwoWay}"
+                          ToolTip.Tip="Match case"
+                          AutomationProperties.Name="Rule match case"
+                        />
+                        <ComboBox
+                          Name="DraftActionPicker"
+                          Width="120"
+                          ItemsSource="{Binding Draft.Actions}"
+                          SelectedItem="{Binding Draft.Action, Mode=TwoWay}"
+                          AutomationProperties.Name="Rule action"
+                        >
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="domain:RuleAction">
+                              <TextBlock Text="{Binding Converter={x:Static vm:RuleDraftViewModel.ActionText}}" />
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
+                      </StackPanel>
+                      <ToggleSwitch
+                        Name="DraftScopeSwitch"
+                        Content="All sources"
+                        IsChecked="{Binding Draft.AllSources, Mode=TwoWay}"
+                        AutomationProperties.Name="Rule applies to all sources"
+                      />
+                      <CheckBox
+                        Name="DraftPinCheck"
+                        Content="Show as a tab in every file"
+                        IsVisible="{Binding Draft.CanPin}"
+                        IsChecked="{Binding Draft.PinnedAsTab, Mode=TwoWay}"
+                        AutomationProperties.Name="Show rule as a tab in every file"
+                      />
+                      <StackPanel
+                        Orientation="Horizontal"
+                        Spacing="4"
+                        IsVisible="{Binding Draft.HasColor}"
+                      >
+                        <ItemsControl Name="DraftSwatches" ItemsSource="{Binding Draft.SwatchOptions}">
+                          <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                              <StackPanel Orientation="Horizontal" Spacing="4" />
+                            </ItemsPanelTemplate>
+                          </ItemsControl.ItemsPanel>
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SwatchOption">
+                              <Button
+                                Classes="swatch"
+                                Classes.selected="{Binding IsSelected}"
+                                Background="{Binding Color}"
+                                Command="{Binding $parent[ItemsControl].DataContext.Draft.PickSwatchCommand}"
+                                CommandParameter="{Binding Color}"
+                                AutomationProperties.Name="{Binding Color, StringFormat='Use color {0}'}"
+                              />
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <ColorPicker
+                          Name="DraftColorPicker"
+                          Color="{Binding Draft.PickerColor, Mode=TwoWay}"
+                          IsAlphaEnabled="False"
+                          Width="48"
+                          ToolTip.Tip="Custom color"
+                          AutomationProperties.Name="Custom rule color"
+                        />
+                      </StackPanel>
+                      <TextBlock
+                        Name="DraftError"
+                        Classes="error"
+                        Text="{Binding Draft.Error}"
+                        IsVisible="{Binding Draft.HasError}"
+                        TextWrapping="Wrap"
+                        AutomationProperties.Name="Rule problem"
+                      />
+                      <TextBlock
+                        Name="DraftSaveError"
+                        Classes="error"
+                        Text="{Binding Draft.SaveError}"
+                        IsVisible="{Binding Draft.HasSaveError}"
+                        TextWrapping="Wrap"
+                        AutomationProperties.Name="Rule could not be saved"
+                      />
+                      <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                        <Button
+                          Name="DraftRemoveButton"
+                          Classes="destructive"
+                          Content="Remove"
+                          Command="{Binding RemoveCommand}"
+                          AutomationProperties.Name="Remove rule"
+                        />
+                        <Button
+                          Name="DraftCancelButton"
+                          Content="Cancel"
+                          Command="{Binding CancelCommand}"
+                          AutomationProperties.Name="Cancel rule edit"
+                        />
+                        <Button
+                          Name="DraftApplyButton"
+                          Classes="primary"
+                          Content="Apply"
+                          IsEnabled="{Binding Draft.CanSave}"
+                          Command="{Binding ApplyCommand}"
+                          AutomationProperties.Name="Apply rule edit"
+                        />
+                      </StackPanel>
+                    </StackPanel>
+                  </Flyout>
+                </FlyoutBase.AttachedFlyout>
+                <TextBlock Classes="chip-text" Text="{Binding Text}" />
+              </Button>
+              <Button
+                Classes="icon tab-close"
+                Width="18"
+                Height="18"
+                Command="{Binding RemoveCommand}"
+                ToolTip.Tip="Remove"
+                AutomationProperties.Name="{Binding Pattern, StringFormat='Remove {0}'}"
+              >
+                <ic:Icon Value="mdi-close" FontSize="12" />
+              </Button>
+            </StackPanel>
+          </Grid>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </StackPanel>
+</UserControl>

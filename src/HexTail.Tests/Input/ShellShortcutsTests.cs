@@ -49,6 +49,10 @@ public sealed class ShellShortcutsTests
     [InlineData(Key.Space, KeyModifiers.None, nameof(ShellAction.TogglePause))]
     [InlineData(Key.G, KeyModifiers.None, nameof(ShellAction.ScrollToTop))]
     [InlineData(Key.G, KeyModifiers.Shift, nameof(ShellAction.ScrollToBottom))]
+    [InlineData(Key.J, KeyModifiers.None, nameof(ShellAction.NextRow))]
+    [InlineData(Key.K, KeyModifiers.None, nameof(ShellAction.PreviousRow))]
+    [InlineData(Key.N, KeyModifiers.None, nameof(ShellAction.NextMatch))]
+    [InlineData(Key.N, KeyModifiers.Shift, nameof(ShellAction.PreviousMatch))]
     public void SingleKeysWorkOutsideTextInput(Key key, KeyModifiers modifiers, string expected) =>
         Assert.Equal(
             Enum.Parse<ShellAction>(expected),
@@ -60,6 +64,9 @@ public sealed class ShellShortcutsTests
     [InlineData(Key.Space)]
     [InlineData(Key.G)]
     [InlineData(Key.OemQuestion)]
+    [InlineData(Key.J)]
+    [InlineData(Key.K)]
+    [InlineData(Key.N)]
     public void SingleKeysAreIgnoredWhileTyping(Key key) =>
         Assert.Equal(
             ShellCommand.None,

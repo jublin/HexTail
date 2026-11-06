@@ -272,7 +272,7 @@ public sealed class SourceRulesTests
             );
 
             Assert.All(tab.Rules, rule => Assert.False(rule.PinnedAsTab));
-            Assert.DoesNotContain(tab.Searches, search => search.IsGlobalLabel);
+            Assert.DoesNotContain(tab.Searches, search => search.IsGlobalRule);
             var effective = tab.EffectiveRules(state.Settings);
             Assert.Single(effective.Highlights(new Line("a mark here")));
             Assert.False(effective.IsVisible(new Line("some noise")));
@@ -322,7 +322,7 @@ public sealed class SourceRulesTests
                     false,
                     TestContext.Current.CancellationToken
                 );
-                Assert.True(tab.Searches[0].IsGlobalLabel);
+                Assert.True(tab.Searches[0].IsGlobalRule);
             }
 
             await using var restored = new AppState(
@@ -333,7 +333,7 @@ public sealed class SourceRulesTests
             await restored.RestoreAsync(TestContext.Current.CancellationToken);
             var tab2 = Assert.Single(restored.Files);
             Assert.Equal(2, tab2.Searches.Count);
-            Assert.True(tab2.Searches[0].IsGlobalLabel);
+            Assert.True(tab2.Searches[0].IsGlobalRule);
             Assert.True(tab2.FollowSearches[0]);
             Assert.Equal("mine", tab2.Searches[1].Query.Query);
             Assert.False(tab2.FollowSearches[1]);

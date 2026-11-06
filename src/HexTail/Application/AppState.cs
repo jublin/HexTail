@@ -20,6 +20,7 @@ public sealed class AppState : IAsyncDisposable
     public const int MaxRecent = 10;
     private readonly List<string> _recentFiles = [];
     private readonly List<string> _recentElasticSourceIds = [];
+    private readonly List<SavedFilter> _savedFilters = [];
     private AppSettings _settings;
     private int _nextFileId;
     private Task? _healthLoop;
@@ -60,6 +61,15 @@ public sealed class AppState : IAsyncDisposable
         {
             lock (_gate)
                 return _recentFiles.ToArray();
+        }
+    }
+
+    public IReadOnlyList<SavedFilter> SavedFilters
+    {
+        get
+        {
+            lock (_gate)
+                return [.. _savedFilters];
         }
     }
 
@@ -308,6 +318,9 @@ public sealed class AppState : IAsyncDisposable
         {
             _settings = NormalizeSettings(config.Settings ?? new AppSettings());
             Window = config.Window ?? new AppWindowState();
+            _savedFilters.Clear();
+            foreach (var filter in config.SavedFilters ?? [])
+                UpsertSavedFilter(filter?.Name, filter?.Rules, filter?.Levels ?? LogLevels.All);
         }
         foreach (var persisted in config.OpenFiles)
         {
@@ -660,6 +673,110 @@ public sealed class AppState : IAsyncDisposable
         await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async ValueTask AddRuleAsync(
+        FileTabState? tab,
+        ViewRule rule,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        await EditRulesAsync(
+                tab,
+                rule.Scope,
+                rules => RuleEditor.Add(rules, rule),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+    }
+
+    public async ValueTask RemoveRuleAsync(
+        FileTabState? tab,
+        ViewRule rule,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        await EditRulesAsync(
+                tab,
+                rule.Scope,
+                rules => RuleEditor.Remove(rules, rule),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+    }
+
+    public async ValueTask ReplaceRuleAsync(
+        FileTabState? tab,
+        ViewRule old,
+        ViewRule updated,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(old);
+        ArgumentNullException.ThrowIfNull(updated);
+        if (old.Scope == updated.Scope)
+        {
+            await EditRulesAsync(
+                    tab,
+                    old.Scope,
+                    rules => RuleEditor.Replace(rules, old, updated),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            return;
+        }
+        // A Source scope on either side needs a tab that is open in this state; without one
+        // half the move would silently no-op (losing or duplicating the rule), so do nothing.
+        if (old.Scope == RuleScope.Source || updated.Scope == RuleScope.Source)
+        {
+            lock (_gate)
+            {
+                if (tab is null || !_files.Contains(tab))
+                    return;
+            }
+        }
+        // Add first so a failure part-way leaves a duplicate rather than a lost rule.
+        await EditRulesAsync(
+                tab,
+                updated.Scope,
+                rules => RuleEditor.Add(rules, updated),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        await EditRulesAsync(
+                tab,
+                old.Scope,
+                rules => RuleEditor.Remove(rules, old),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+    }
+
+    // Callers are expected on the UI thread; the read-modify-write below is not atomic.
+    private async ValueTask EditRulesAsync(
+        FileTabState? tab,
+        RuleScope scope,
+        Func<IReadOnlyList<ViewRule>, List<ViewRule>> edit,
+        CancellationToken cancellationToken
+    )
+    {
+        if (scope == RuleScope.Global)
+        {
+            await UpdateSettingsAsync(
+                    Settings with
+                    {
+                        Rules = edit(Settings.Rules),
+                    },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            return;
+        }
+        if (scope == RuleScope.Source && tab is not null)
+            await SetSourceRulesAsync(tab, edit(tab.Rules), cancellationToken)
+                .ConfigureAwait(false);
+    }
+
     public async ValueTask SetSourceRulesAsync(
         FileTabState tab,
         IEnumerable<ViewRule> rules,
@@ -676,6 +793,83 @@ public sealed class AppState : IAsyncDisposable
         }
         NotifyChanged();
         await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Stores the source rules and level mask under a name, replacing a filter of the same name (ignoring case).</summary>
+    public async ValueTask SaveFilterAsync(
+        string name,
+        IEnumerable<ViewRule> rules,
+        LogLevels levels,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        lock (_gate)
+            UpsertSavedFilter(name, rules, levels);
+        NotifyChanged();
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async ValueTask DeleteSavedFilterAsync(
+        string name,
+        CancellationToken cancellationToken = default
+    )
+    {
+        int removed;
+        lock (_gate)
+            removed = _savedFilters.RemoveAll(filter =>
+                string.Equals(filter.Name, name?.Trim(), StringComparison.OrdinalIgnoreCase)
+            );
+        if (removed == 0)
+            return;
+        NotifyChanged();
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Merges a saved filter into a source: new rules are appended and the level mask is replaced unless it is All.</summary>
+    public async ValueTask ApplySavedFilterAsync(
+        FileTabState? tab,
+        string name,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (tab is null)
+            return;
+        SavedFilter? filter;
+        List<ViewRule> merged;
+        lock (_gate)
+        {
+            filter = _savedFilters.FirstOrDefault(item =>
+                string.Equals(item.Name, name?.Trim(), StringComparison.OrdinalIgnoreCase)
+            );
+            if (filter is null || !_files.Contains(tab))
+                return;
+            merged = [.. tab.Rules, .. filter.Rules.Where(rule => !tab.Rules.Contains(rule))];
+        }
+        await SetSourceRulesAsync(tab, merged, cancellationToken).ConfigureAwait(false);
+        if (filter.Levels != LogLevels.All)
+            await SetLevelsAsync(tab, filter.Levels, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Callers hold _gate.
+    private void UpsertSavedFilter(string? name, IEnumerable<ViewRule>? rules, LogLevels levels)
+    {
+        var trimmed = name?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+            return;
+        var filter = new SavedFilter
+        {
+            Name = trimmed,
+            Rules = NormalizeRules(rules, RuleScope.Source),
+            Levels = NormalizeLevels(levels),
+        };
+        var index = _savedFilters.FindIndex(item =>
+            string.Equals(item.Name, trimmed, StringComparison.OrdinalIgnoreCase)
+        );
+        if (index >= 0)
+            _savedFilters[index] = filter;
+        else
+            _savedFilters.Add(filter);
     }
 
     public async ValueTask SetLevelsAsync(
@@ -938,7 +1132,7 @@ public sealed class AppState : IAsyncDisposable
                         FollowAll = tab.FollowAll,
                         FollowSearches = tab
                             .Searches.Select((search, index) => (search, index))
-                            .Where(item => !item.search.IsGlobalLabel)
+                            .Where(item => !item.search.IsGlobalRule)
                             .Select(item => tab.FollowSearches[item.index])
                             .ToList(),
                         ShowContext = tab.ShowContext,
@@ -948,7 +1142,7 @@ public sealed class AppState : IAsyncDisposable
                         ContextAbove = tab.ContextAbove,
                         ContextBelow = tab.ContextBelow,
                         Searches = tab
-                            .Searches.Where(search => !search.IsGlobalLabel)
+                            .Searches.Where(search => !search.IsGlobalRule)
                             .Select(search => new PersistedSearch
                             {
                                 Query = search.Query.Query,
@@ -972,7 +1166,7 @@ public sealed class AppState : IAsyncDisposable
                         FollowAll = tab.FollowAll,
                         FollowSearches = tab
                             .Searches.Select((search, index) => (search, index))
-                            .Where(item => !item.search.IsGlobalLabel)
+                            .Where(item => !item.search.IsGlobalRule)
                             .Select(item => tab.FollowSearches[item.index])
                             .ToList(),
                         ShowContext = tab.ShowContext,
@@ -982,7 +1176,7 @@ public sealed class AppState : IAsyncDisposable
                         ContextAbove = tab.ContextAbove,
                         ContextBelow = tab.ContextBelow,
                         Searches = tab
-                            .Searches.Where(search => !search.IsGlobalLabel)
+                            .Searches.Where(search => !search.IsGlobalRule)
                             .Select(search => new PersistedSearch
                             {
                                 Query = search.Query.Query,
@@ -1005,6 +1199,7 @@ public sealed class AppState : IAsyncDisposable
                         : null,
                 Window = Window,
                 Settings = _settings,
+                SavedFilters = [.. _savedFilters],
             };
         }
         await _persistence.SaveAsync(config, cancellationToken).ConfigureAwait(false);

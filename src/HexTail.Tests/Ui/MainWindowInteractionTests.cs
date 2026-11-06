@@ -257,7 +257,7 @@ public sealed class MainWindowInteractionTests
             foreach (var density in vm.Settings.DensityOptions)
             {
                 vm.Settings.Density = density;
-                vm.Query = string.Empty;
+                vm.FilterBar.Query = string.Empty;
                 Dispatcher.UIThread.RunJobs();
                 window.UpdateLayout();
                 var query = FindVisual<TextBox>(window, "QueryBox");
@@ -266,7 +266,9 @@ public sealed class MainWindowInteractionTests
                 var placeholder = query
                     .GetVisualDescendants()
                     .OfType<TextBlock>()
-                    .Single(text => text.Text == "Search this file" && text.IsVisible);
+                    .Single(text =>
+                        text.Text?.StartsWith("Filter this source") == true && text.IsVisible
+                    );
                 Assert.True(placeholder.IsVisible);
                 var hintPosition = placeholder.TranslatePoint(default, query)!.Value;
                 Assert.True(hintPosition.Y >= 0);
@@ -276,9 +278,9 @@ public sealed class MainWindowInteractionTests
                     queryPosition.X >= 0
                         && queryPosition.X + query.Bounds.Width <= window.Bounds.Width
                 );
-                var add = FindVisual<Button>(window, "AddSearchButton");
-                var addPosition = add.TranslatePoint(default, window)!.Value;
-                Assert.True(addPosition.X + add.Bounds.Width <= window.Bounds.Width);
+                var pin = FindVisual<ToggleButton>(window, "PinTabToggle");
+                var pinPosition = pin.TranslatePoint(default, window)!.Value;
+                Assert.True(pinPosition.X + pin.Bounds.Width <= window.Bounds.Width);
                 query.Text = "visible search input";
                 Dispatcher.UIThread.RunJobs();
                 window.UpdateLayout();
@@ -291,7 +293,7 @@ public sealed class MainWindowInteractionTests
                     textPosition.Y >= 0
                         && textPosition.Y + presenter.Bounds.Height <= query.Bounds.Height
                 );
-                Assert.Equal("visible search input", vm.Query);
+                Assert.Equal("visible search input", vm.FilterBar.Query);
                 var toggle = FindVisual<ToggleButton>(window, "CaseToggle");
                 Assert.True(
                     toggle.TranslatePoint(default, window)!.Value.X
@@ -332,8 +334,9 @@ public sealed class MainWindowInteractionTests
             var window = TestWindow.Create(out var viewModel);
             await viewModel.OpenPathsCommand.Execute([path]);
             window.Show();
-            viewModel.Query = "error";
-            Click(FindVisual<Button>(window, "AddSearchButton"));
+            viewModel.FilterBar.PinAsTab = true;
+            viewModel.FilterBar.Query = "error";
+            await viewModel.FilterBar.SubmitAsync(RuleAction.Highlight);
             await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 1);
             Dispatcher.UIThread.RunJobs();
 
@@ -363,9 +366,6 @@ public sealed class MainWindowInteractionTests
         var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
         Assert.True(viewModel.SettingsOpen);
         Dispatcher.UIThread.RunJobs();
-        var colorPickers = panel.GetVisualDescendants().OfType<ColorPicker>().ToArray();
-        Assert.NotEmpty(colorPickers);
-        Assert.All(colorPickers, picker => Assert.NotNull(picker.Template));
         foreach (var name in new[] { "DensityBox", "FontSizeBox" })
         {
             var combo = FindVisual<ComboBox>(window, name);
@@ -389,6 +389,8 @@ public sealed class MainWindowInteractionTests
     {
         var window = TestWindow.Create(out var viewModel);
         viewModel.SettingsOpen = true;
+        viewModel.Settings.SectionIndex = 1;
+        viewModel.Settings.AddElasticConnectionCommand.Execute().Subscribe();
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
@@ -406,23 +408,33 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
-    public void TextBoxesCenterTextVertically()
+    public async Task TextBoxesCenterTextVertically()
     {
         var window = TestWindow.Create(out var viewModel);
-        viewModel.SettingsOpen = true;
-        window.Show();
+        await viewModel.InitializeAsync();
+        var path = Path.GetTempFileName();
+        try
+        {
+            await viewModel.OpenPathsCommand.Execute([path]);
+            window.Show();
+            await UiWait.Until(() =>
+            {
+                Dispatcher.UIThread.RunJobs();
+                return window.GetVisualDescendants().OfType<FilterBar>().Any();
+            });
 
-        var textBox = window
-            .GetVisualDescendants()
-            .OfType<SettingsPanel>()
-            .Single()
-            .GetVisualDescendants()
-            .OfType<TextBox>()
-            .First();
-        Assert.Equal(TextAlignment.Start, textBox.TextAlignment);
-        Assert.Equal(VerticalAlignment.Center, textBox.VerticalContentAlignment);
-
-        window.Close();
+            var textBox = FindVisual<TextBox>(window, "QueryBox");
+            Assert.Equal("QueryBox", textBox.Name);
+            Assert.DoesNotContain(textBox.GetVisualAncestors(), a => a is ComboBox);
+            Assert.Equal(TextAlignment.Left, textBox.TextAlignment);
+            Assert.Equal(VerticalAlignment.Center, textBox.VerticalContentAlignment);
+        }
+        finally
+        {
+            window.Close();
+            await viewModel.DisposeAsync();
+            File.Delete(path);
+        }
     }
 
     [AvaloniaFact]
@@ -466,10 +478,8 @@ public sealed class MainWindowInteractionTests
         window.Show();
 
         var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
-        var labels = panel.FindControl<ScrollViewer>("LabelsSettingsScrollViewer");
+        viewModel.Settings.SectionIndex = 1;
         var elastic = panel.FindControl<ScrollViewer>("ElasticSettingsScrollViewer");
-        Assert.Equal(ScrollBarVisibility.Disabled, labels!.HorizontalScrollBarVisibility);
-        Assert.Equal(ScrollBarVisibility.Auto, labels.VerticalScrollBarVisibility);
         Assert.Equal(ScrollBarVisibility.Disabled, elastic!.HorizontalScrollBarVisibility);
         Assert.Equal(ScrollBarVisibility.Auto, elastic.VerticalScrollBarVisibility);
 
@@ -481,7 +491,7 @@ public sealed class MainWindowInteractionTests
     {
         var window = TestWindow.Create(out var viewModel);
         viewModel.SettingsOpen = true;
-        viewModel.Settings.SectionIndex = 2;
+        viewModel.Settings.SectionIndex = 1;
         window.Show();
 
         Assert.NotNull(FindVisual<Button>(window, "AddElasticServerButton"));
@@ -522,7 +532,7 @@ public sealed class MainWindowInteractionTests
         var window = TestWindow.Create(persistence, out var viewModel);
         await viewModel.InitializeAsync();
         viewModel.SettingsOpen = true;
-        viewModel.Settings.SectionIndex = 1;
+        viewModel.Settings.SectionIndex = 0;
         window.Show();
 
         var theme = viewModel.Settings.ThemeOptions.Single(option => option.Id == "spotify");
@@ -533,76 +543,34 @@ public sealed class MainWindowInteractionTests
     }
 
     [AvaloniaFact]
-    public async Task LabelsAndExclusionsAddEditAndRemove()
+    public void SettingsHasNoLabelsOrExclusionsSection()
     {
-        var persistence = new TestPersistence();
-        var window = TestWindow.Create(persistence, out var viewModel);
-        await viewModel.InitializeAsync();
+        var window = TestWindow.Create(out var viewModel);
         viewModel.SettingsOpen = true;
         window.Show();
-
-        viewModel.Settings.NewLabelText = "ERROR";
-        viewModel.Settings.NewLabelColor = Colors.Magenta;
-        Click(FindVisual<Button>(window, "AddLabelButton"));
-        Assert.Equal(string.Empty, viewModel.Settings.NewLabelText);
-        await WaitFor(() => viewModel.Settings.Labels.Count == 1);
-        var label = Assert.Single(viewModel.Settings.Labels);
         Dispatcher.UIThread.RunJobs();
-        var labelControls = window
-            .GetVisualDescendants()
-            .Where(control => ReferenceEquals(control.DataContext, label))
-            .ToArray();
-        labelControls
-            .OfType<TextBox>()
-            .Single(textBox => textBox.PlaceholderText == "Text to highlight")
-            .Text = "WARN";
-        await WaitFor(() =>
-            viewModel.State.Settings.Rules.Any(rule =>
-                rule.Action == RuleAction.Highlight && rule.Pattern == "WARN"
-            )
-        );
-        Click(
-            labelControls
-                .OfType<Button>()
-                .Single(button =>
-                    ReferenceEquals(button.Command, viewModel.Settings.RemoveLabelCommand)
-                )
-        );
-        await WaitFor(() => viewModel.Settings.Labels.Count == 0);
 
-        viewModel.Settings.NewExclusionText = "healthcheck";
-        Click(FindVisual<Button>(window, "AddExclusionButton"));
-        await WaitFor(() => viewModel.Settings.Exclusions.Count == 1);
-        var exclusion = Assert.Single(viewModel.Settings.Exclusions);
-        Dispatcher.UIThread.RunJobs();
-        var exclusionControls = window
-            .GetVisualDescendants()
-            .Where(control => ReferenceEquals(control.DataContext, exclusion))
-            .ToArray();
-        exclusionControls
-            .OfType<TextBox>()
-            .Single(textBox => textBox.PlaceholderText == "Text to hide")
-            .Text = "probe";
-        await WaitFor(() =>
-            viewModel.State.Settings.Rules.Any(rule =>
-                rule.Action == RuleAction.Hide && rule.Pattern == "probe"
-            )
-        );
-        Click(
-            exclusionControls
-                .OfType<Button>()
-                .Single(button =>
-                    ReferenceEquals(button.Command, viewModel.Settings.RemoveExclusionCommand)
-                )
-        );
-        await WaitFor(() => viewModel.Settings.Exclusions.Count == 0);
-
-        Assert.True(persistence.SaveCount >= 6);
+        var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
+        var tabs = panel.GetVisualDescendants().OfType<TabControl>().Single();
+        Assert.Equal(2, tabs.ItemCount);
+        for (var section = 0; section < 2; section++)
+        {
+            viewModel.Settings.SectionIndex = section;
+            Dispatcher.UIThread.RunJobs();
+            var names = panel
+                .GetVisualDescendants()
+                .OfType<Control>()
+                .Select(control => control.Name)
+                .ToArray();
+            Assert.DoesNotContain("AddLabelButton", names);
+            Assert.DoesNotContain("AddExclusionButton", names);
+            Assert.DoesNotContain("LabelsSettingsScrollViewer", names);
+        }
         window.Close();
     }
 
     [AvaloniaFact]
-    public async Task SearchCanBeAddedByButtonAndEnter()
+    public async Task PinnedSearchIsAddedByEnterOnly()
     {
         var path = Path.GetTempFileName();
         try
@@ -611,13 +579,14 @@ public sealed class MainWindowInteractionTests
             await viewModel.OpenPathsCommand.Execute([path]);
             window.Show();
             Dispatcher.UIThread.RunJobs();
+            viewModel.FilterBar.PinAsTab = true;
             var query = FindVisual<TextBox>(window, "QueryBox");
 
             query.Text = "first";
-            Dispatcher.UIThread.RunJobs();
-            Click(FindVisual<Button>(window, "AddSearchButton"));
+            query.Focus();
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.None, null);
             await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 1);
-            await WaitFor(() => window.GetVisualDescendants().OfType<SearchBar>().Any());
+            await WaitFor(() => window.GetVisualDescendants().OfType<FilterBar>().Any());
 
             query = FindVisual<TextBox>(window, "QueryBox");
             query.Text = "ignored";
@@ -650,8 +619,9 @@ public sealed class MainWindowInteractionTests
             var window = TestWindow.Create(out var viewModel);
             await viewModel.OpenPathsCommand.Execute([path]);
             window.Show();
-            viewModel.Query = "error";
-            Click(FindVisual<Button>(window, "AddSearchButton"));
+            viewModel.FilterBar.PinAsTab = true;
+            viewModel.FilterBar.Query = "error";
+            await viewModel.FilterBar.SubmitAsync(RuleAction.Highlight);
             await WaitFor(() => viewModel.SelectedFile!.Model.Searches.Count == 1);
             Dispatcher.UIThread.RunJobs();
 
@@ -706,15 +676,16 @@ public sealed class MainWindowInteractionTests
                 new Line("[ERROR] failed"),
                 new Line("ERROR plain"),
             ]);
-            vm.Query = "[ERROR]";
-            Assert.Equal(MatchMode.Literal, vm.MatchMode);
-            Click(FindVisual<Button>(window, "AddSearchButton"));
+            vm.FilterBar.PinAsTab = true;
+            vm.FilterBar.Query = "[ERROR]";
+            Assert.Equal(MatchMode.Literal, vm.FilterBar.MatchMode);
+            await vm.FilterBar.SubmitAsync(RuleAction.Highlight);
             await WaitFor(() => vm.State.SelectedFile.Searches.Count == 1);
             var literal = Assert.Single(vm.State.SelectedFile.Searches);
             Assert.Equal(MatchMode.Literal, literal.Query.Mode);
             Assert.Equal([0], literal.Results);
             FindVisual<ComboBox>(window, "SearchModePicker").SelectedItem = MatchMode.Regex;
-            vm.Query = "^ERROR";
+            vm.FilterBar.Query = "^ERROR";
             var queryBox = FindVisual<TextBox>(window, "QueryBox");
             queryBox.Focus();
             window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
@@ -722,7 +693,7 @@ public sealed class MainWindowInteractionTests
             var regex = vm.State.SelectedFile.Searches[1];
             Assert.Equal(MatchMode.Regex, regex.Query.Mode);
             Assert.Equal([1], regex.Results);
-            Assert.Equal(MatchMode.Regex, vm.MatchMode);
+            Assert.Equal(MatchMode.Regex, vm.FilterBar.MatchMode);
             await vm.SaveCommand.Execute().FirstAsync();
             Assert.Equal(
                 [MatchMode.Literal, MatchMode.Regex],
@@ -747,15 +718,15 @@ public sealed class MainWindowInteractionTests
             var window = TestWindow.Create(out var viewModel);
             await viewModel.OpenPathsCommand.Execute([path]);
             window.Show();
-            viewModel.MatchMode = MatchMode.Regex;
-            viewModel.Query = "[";
+            viewModel.FilterBar.MatchMode = MatchMode.Regex;
+            viewModel.FilterBar.Query = "[";
             Dispatcher.UIThread.RunJobs();
 
-            Click(FindVisual<Button>(window, "AddSearchButton"));
-            await WaitFor(() => viewModel.HasSearchError);
+            await viewModel.FilterBar.SubmitAsync(RuleAction.Highlight);
+            await WaitFor(() => viewModel.FilterBar.HasError);
 
-            Assert.Equal("[", viewModel.Query);
-            Assert.True(FindVisual<TextBlock>(window, "SearchError").IsVisible);
+            Assert.Equal("[", viewModel.FilterBar.Query);
+            Assert.True(FindVisual<TextBlock>(window, "FilterError").IsVisible);
             window.Close();
         }
         finally
@@ -995,6 +966,7 @@ public sealed class MainWindowInteractionTests
         var query = FindVisual<TextBox>(window, "QueryBox");
 
         window.KeyPress(Key.F, modifier, PhysicalKey.None, null);
+        Dispatcher.UIThread.RunJobs();
 
         Assert.True(query.IsFocused);
         window.Close();
@@ -1090,7 +1062,7 @@ public sealed class MainWindowInteractionTests
         if (
             window
                 .GetVisualDescendants()
-                .OfType<SearchBar>()
+                .OfType<FilterBar>()
                 .FirstOrDefault()
                 ?.FindControl<T>(name) is
             { } searchControl

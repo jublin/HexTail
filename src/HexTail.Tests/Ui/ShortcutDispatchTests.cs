@@ -33,7 +33,7 @@ public sealed class ShortcutDispatchTests
 
             var query = window
                 .GetVisualDescendants()
-                .OfType<SearchBar>()
+                .OfType<FilterBar>()
                 .Single()
                 .FindControl<TextBox>("QueryBox")!;
             query.Focus();
@@ -57,8 +57,9 @@ public sealed class ShortcutDispatchTests
             var window = TestWindow.Create(out var viewModel);
             window.Show();
             await viewModel.OpenPathsCommand.Execute([path]);
-            viewModel.Query = "error";
-            await viewModel.AddSearchCommand.Execute();
+            viewModel.FilterBar.PinAsTab = true;
+            viewModel.FilterBar.Query = "error";
+            await viewModel.FilterBar.SubmitAsync(RuleAction.Highlight);
             var file = viewModel.SelectedFile!;
             file.SelectedViewIndex = 1;
             Dispatcher.UIThread.RunJobs();
@@ -84,8 +85,9 @@ public sealed class ShortcutDispatchTests
             var window = TestWindow.Create(out var viewModel);
             window.Show();
             await viewModel.OpenPathsCommand.Execute([path]);
-            viewModel.Query = "a";
-            await viewModel.AddSearchCommand.Execute();
+            viewModel.FilterBar.PinAsTab = true;
+            viewModel.FilterBar.Query = "a";
+            await viewModel.FilterBar.SubmitAsync(RuleAction.Highlight);
             Dispatcher.UIThread.RunJobs();
             var file = viewModel.SelectedFile!;
 

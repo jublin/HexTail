@@ -35,7 +35,7 @@ Closing Settings with Elastic drafts offers **Save changes**, **Discard changes*
 
 Passwords and API keys are stored in the operating-system credential vault, never in `session.json`. Authenticated configuration fails closed when the vault is unavailable. Linux needs an active Secret Service session and `libsecret`. See [native build and platform setup](native-build.md).
 
-**Upgrading the session file.** The first launch of this version migrates `session.json` (global labels and exclusions become filter rules) and keeps the original as `session.v1.json.bak` in the same folder. Going back to an older build afterwards loses labels and exclusions; copy the backup over `session.json` to recover them. If `session.json` cannot be read, or was written by a newer build, HexTail copies it to `session.unreadable.bak` before saving anything new. An existing backup is never overwritten; a later, different file is kept under a timestamped name such as `session.unreadable.20260101120000.bak`.
+**Upgrading the session file.** The first launch of this version migrates `session.json` (global labels and exclusions become global filter rules, shown as dashed chips) and keeps the original as `session.v1.json.bak` in the same folder. Going back to an older build afterwards loses labels and exclusions; copy the backup over `session.json` to recover them. If `session.json` cannot be read, or was written by a newer build, HexTail copies it to `session.unreadable.bak` before saving anything new. An existing backup is never overwritten; a later, different file is kept under a timestamped name such as `session.unreadable.20260101120000.bak`.
 
 ## Set an Elastic log interval
 
@@ -64,11 +64,33 @@ Each view distinguishes loading, query failure, no returned logs, no search matc
 
 The initial fetch is bounded (10,000 newest logs by default). If the initial limit is reached, the view says that the interval may contain more logs. Narrow the interval to inspect earlier history. The application also keeps a bounded log buffer, so a long-running session does not retain every row indefinitely.
 
-## Search, labels, and exclusions
+## Filters
 
-Enter a search in the search bar under the top bar, choose **Literal** or **Regex**, and press Enter to add a search tab. Literal treats punctuation as ordinary text; Regex uses a regular expression and reports invalid patterns. The case-sensitive control applies to that search.
+Every source has a **filter bar** under its view tabs. It holds the filter input, the level control and a row of **chips**, one per active rule.
 
-In **Settings → Labels & Exclusions**, labels highlight case-insensitive matches and can create search tabs. Exclusions hide matching rows from log and context views while keeping them buffered. Each rule has an explicit Literal/Regex choice; new rules default to Literal. For example, Literal `[ERROR]` matches those brackets exactly. Invalid Regex drafts show an error and do not replace the last saved valid rule. Existing rules retain their earlier matching behavior.
+**Add a rule.** Type text in the input and press:
+
+- `Enter` to **highlight** matches in the All view and in every search view.
+- `Shift+Enter` to **show only** matching rows. Rows that match no show-only rule are hidden.
+- `Alt+Enter` to **hide** matching rows. They stay buffered and are not deleted.
+
+The input is cleared and a chip appears. New rules apply to the selected source and get the next color automatically. **Literal** or **Regex** picks the match mode (Literal treats punctuation as ordinary text, so Literal `[ERROR]` matches those brackets exactly); an invalid Regex shows an error under the input and adds nothing. **Aa** makes the rule case-sensitive. Rules are case-insensitive by default.
+
+The bookmark toggle, **Pin as tab**, changes what a plain `Enter` does: instead of a highlight rule it creates a search view tab for the text, as earlier versions did. Pin as tab does not affect `Shift+Enter` or `Alt+Enter`.
+
+**Chips.** A chip shows the rule's color (hide rules have none), an icon for hide, show-only and tab rules, and the text, shortened when long. Hover it for the action, scope and match mode.
+
+- A **dashed** outline marks a global rule (applies to every source); a **solid** outline marks a rule for this source only.
+- A chip with a bookmark icon is a pinned search tab of this source. Click it to select its tab and use its **x** to remove the tab. It has no editor.
+- A disabled rule is dimmed with struck-through text and has no effect until enabled again.
+- **Click** a chip to edit it in a popover: pattern, an **Enabled** checkbox, Literal/Regex, **Aa**, action (Highlight, Show only, Hide), an **All sources** switch, a color (five swatches or a custom color; hide rules have no color) and, for a global rule that is not Hide, **Show as a tab in every file**. **Apply** (or `Enter`) saves, **Cancel** (or `Esc`) discards, and **Remove** deletes the rule. An invalid pattern disables **Apply** and shows why.
+- **Middle-click** a chip to disable it, and again to enable it. The popover's **Enabled** checkbox does the same from the keyboard: it takes effect when you **Apply**.
+- The **x** on a chip removes the rule.
+- **All sources** in the popover turns a source rule into a global rule, and back. Global rules are listed on the bar of every open source, so they can only be edited while a source is open.
+
+**Level control.** The **T D I W E** buttons (Trace, Debug, Info, Warn, Error) choose which log levels the selected source shows. Click a button to turn that level off or on; the last level that is still on cannot be turned off. When some levels are off the control is marked as filtering. The level comes from a parsed field such as `level` or `severity` (logfmt and JSONL), otherwise from an UPPERCASE word such as `ERROR` or `WARN` near the start of the line. Lines with no recognizable level always stay visible.
+
+**Saved filters.** When the source has rules or a level filter, a save button appears at the right of the bar. Enter a name and choose **Save** (or press `Enter`; `Esc` cancels). A saved filter stores this source's rules and its level selection; global rules are not included. Saving under an existing name, ignoring case, replaces that filter. Saved filters are listed under **Saved filters** in the sidebar and in the command palette as **Apply filter: name**. Applying one **merges** it into the selected source: its rules are added (rules already present are skipped), and the level selection is replaced unless the saved filter shows every level. It never removes rules the source already has. Use the **x** next to a saved filter in the sidebar to delete it. Saved filters are kept in `session.json`.
 
 ## Inspect rows and navigate tabs
 
@@ -80,7 +102,8 @@ Keyboard shortcuts for navigating views (they do not fire while a text box has f
 
 - `Ctrl+Tab` and `Ctrl+Shift+Tab` select the next and previous view; `Ctrl+1` to `Ctrl+9` select a view by position.
 - `Ctrl+W` closes the selected search view, or the source when **All** is selected.
-- `F` toggles **Follow**, `g` jumps to the first line, and `Shift+G` jumps to the newest line and follows. `/` or `Ctrl+F` focuses the search box.
+- `F` toggles **Follow**, `g` jumps to the first line, and `Shift+G` jumps to the newest line and follows. `/` or `Ctrl+F` focuses the filter input.
+- `j` and `k` select the next and previous row in the current view. `n` and `N` select the next and previous row that has at least one highlight in the current view (a match of a highlight rule or search). They stop at the ends of the list rather than wrapping, and `j`, `k`, `n` and `N` do nothing while a text box has focus.
 
 **Follow** and **Context** are toggles on each view's toolbar. Follow keeps the newest row (or match) in view; scrolling up, pressing `g`, or turning Follow off stops it. While a view is not following and new lines arrive, a **↓ N new lines** pill appears at the bottom of the list; click it to jump to the newest line and resume following. **Context** shows the neighboring buffered rows around the selected row.
 
