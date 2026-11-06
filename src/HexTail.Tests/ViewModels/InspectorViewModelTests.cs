@@ -145,4 +145,72 @@ public sealed class InspectorViewModelTests
             window.Close();
         }
     }
+
+    [AvaloniaFact]
+    public async Task FieldActionsAddLiteralCaseSensitiveSourceRules()
+    {
+        var line = new Line(
+            "level=error msg=boom",
+            new Dictionary<string, string> { ["level"] = "error", ["msg"] = "boom" }
+        );
+        var (owner, file, path, window) = await OpenAsync(line);
+        try
+        {
+            owner.State.SelectLine(file.Model, line);
+            owner.Inspector.Sync();
+            var level = owner.Inspector.Fields[0];
+
+            await owner.Inspector.ApplyFieldRuleAsync(level, RuleAction.ShowOnly);
+            await owner.Inspector.ApplyFieldRuleAsync(owner.Inspector.Fields[1], RuleAction.Hide);
+            await owner.Inspector.ApplyFieldRuleAsync(level, RuleAction.Highlight);
+
+            Assert.Collection(
+                file.Model.Rules,
+                rule =>
+                {
+                    Assert.Equal("error", rule.Pattern);
+                    Assert.Equal(RuleAction.ShowOnly, rule.Action);
+                    Assert.Equal(RuleScope.Source, rule.Scope);
+                    Assert.Equal(MatchMode.Literal, rule.Mode);
+                    Assert.True(rule.CaseSensitive);
+                },
+                rule =>
+                {
+                    Assert.Equal("boom", rule.Pattern);
+                    Assert.Equal(RuleAction.Hide, rule.Action);
+                },
+                rule => Assert.Equal(RuleAction.Highlight, rule.Action)
+            );
+            Assert.Null(owner.Inspector.Error);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task AFieldWithoutAValueCannotBecomeARule()
+    {
+        var line = new Line("k=", new Dictionary<string, string> { ["k"] = "" });
+        var (owner, file, path, window) = await OpenAsync(line);
+        try
+        {
+            owner.State.SelectLine(file.Model, line);
+            owner.Inspector.Sync();
+
+            await owner.Inspector.ApplyFieldRuleAsync(owner.Inspector.Fields[0], RuleAction.Hide);
+
+            Assert.Empty(file.Model.Rules);
+            Assert.Equal("This field has no value to match.", owner.Inspector.Error);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
 }

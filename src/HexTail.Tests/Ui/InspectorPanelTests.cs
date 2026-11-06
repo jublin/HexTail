@@ -58,4 +58,54 @@ public sealed class InspectorPanelTests
             File.Delete(path);
         }
     }
+
+    [AvaloniaFact]
+    public async Task AFieldHideCommandAddsARuleAndHidesTheRow()
+    {
+        var path = Path.GetTempFileName();
+        var window = TestWindow.CreatePolling(out var owner);
+        try
+        {
+            await owner.OpenPathsCommand.Execute([path]);
+            var file = owner.SelectedFile!;
+            var noisy = new Line(
+                "level=debug msg=tick",
+                new Dictionary<string, string> { ["level"] = "debug", ["msg"] = "tick" }
+            );
+            var kept = new Line(
+                "level=info msg=ok",
+                new Dictionary<string, string> { ["level"] = "info", ["msg"] = "ok" }
+            );
+            file.Model.Buffer.Append([noisy, kept]);
+            file.SyncViews();
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            owner.Inspector.Open();
+            window
+                .GetVisualDescendants()
+                .OfType<LogView>()
+                .Single()
+                .FindControl<ListBox>("LogList")!
+                .SelectedIndex = 0;
+            await UiWait.Until(() => owner.Inspector.Fields.Count == 2);
+            Dispatcher.UIThread.RunJobs();
+
+            var panel = window.GetVisualDescendants().OfType<InspectorPanel>().Single();
+            Assert.Equal(2, panel.FindControl<ItemsControl>("InspectorFields")!.ItemCount);
+
+            await owner.Inspector.Fields[1].HideCommand.Execute();
+            file.SyncViews();
+
+            var rule = Assert.Single(file.Model.Rules);
+            Assert.Equal(RuleAction.Hide, rule.Action);
+            Assert.Equal("tick", rule.Pattern);
+            await UiWait.Until(() => file.SelectedView.Lines.Count == 1);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
 }

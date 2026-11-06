@@ -85,6 +85,35 @@ internal sealed class InspectorViewModel : ReactiveObject
 
     public bool HasError => !string.IsNullOrWhiteSpace(Error);
 
+    internal async Task ApplyFieldRuleAsync(InspectorFieldViewModel field, RuleAction action)
+    {
+        var file = _owner.SelectedFile?.Model;
+        if (file is null)
+            return;
+        Error = null;
+        if (string.IsNullOrWhiteSpace(field.Value))
+        {
+            Error = "This field has no value to match.";
+            return;
+        }
+
+        try
+        {
+            var rule = _owner.FilterBar.NewSourceRule(
+                file,
+                field.Value,
+                MatchMode.Literal,
+                caseSensitive: true,
+                action
+            );
+            await _owner.State.AddRuleAsync(file, rule);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Error = ex.Message;
+        }
+    }
+
     internal void Open() => IsOpen = true;
 
     internal void Toggle() => IsOpen = !IsOpen;

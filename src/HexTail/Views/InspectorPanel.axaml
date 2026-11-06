@@ -62,7 +62,7 @@
             <ItemsControl x:Name="InspectorFields" ItemsSource="{Binding Fields}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:InspectorFieldViewModel">
-                  <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2">
+                  <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,2">
                     <TextBlock
                       Text="{Binding Key}"
                       Foreground="{DynamicResource MutedBrush}"
@@ -75,6 +75,23 @@
                       TextWrapping="Wrap"
                       FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
                     />
+                    <Button
+                      Grid.Column="2"
+                      Classes="icon"
+                      VerticalAlignment="Top"
+                      ToolTip.Tip="Field actions"
+                      AutomationProperties.Name="{Binding Key, StringFormat='Actions for {0}'}"
+                    >
+                      <ic:Icon Value="mdi-dots-horizontal" />
+                      <Button.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                          <MenuItem Header="Show only this value" Command="{Binding ShowOnlyCommand}" />
+                          <MenuItem Header="Hide value" Command="{Binding HideCommand}" />
+                          <MenuItem Header="Highlight" Command="{Binding HighlightCommand}" />
+                          <MenuItem Header="Copy value" Click="OnCopyFieldValue" />
+                        </MenuFlyout>
+                      </Button.Flyout>
+                    </Button>
                   </Grid>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
