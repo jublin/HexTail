@@ -19,9 +19,9 @@ internal sealed class LogViewViewModel : ReactiveObject
     private readonly MainWindowViewModel _owner;
     private readonly FileTabViewModel _file;
     private AppSettings? _lastSettings;
-    private int? _lastExpandedLine;
     private int _lastViewsVersion;
     private int _lastRulesVersion;
+    private int _lastBookmarksVersion;
     private ViewSnapshot? _lastSnapshot;
     internal const int UnseenScanLimit = 10_000;
     private Line? _seenAnchor;
@@ -34,7 +34,6 @@ internal sealed class LogViewViewModel : ReactiveObject
         _file = file;
         Search = search;
         SelectLineCommand = ReactiveCommand.Create<Line>(line => _file.SelectLine(line));
-        ToggleExpandedCommand = ReactiveCommand.Create<Line>(line => _file.ToggleExpanded(line));
         JumpToLatestCommand = ReactiveCommand.Create(JumpToLatest, owner.Scheduler);
     }
 
@@ -68,9 +67,7 @@ internal sealed class LogViewViewModel : ReactiveObject
     public override string ToString() => Header;
 
     public AvaloniaList<LogLineViewModel> Lines { get; } = [];
-    public AvaloniaList<LogLineViewModel> ContextLines { get; } = [];
     public ReactiveCommand<Line, Unit> SelectLineCommand { get; }
-    public ReactiveCommand<Line, Unit> ToggleExpandedCommand { get; }
     public ReactiveCommand<Unit, Unit> JumpToLatestCommand { get; }
 
     public int UnseenCount => _unseenCount;
@@ -79,28 +76,11 @@ internal sealed class LogViewViewModel : ReactiveObject
         _unseenCount >= UnseenScanLimit ? $"↓ {UnseenScanLimit:N0}+ new lines"
         : _unseenCount == 1 ? "↓ 1 new line"
         : $"↓ {_unseenCount:N0} new lines";
-    public bool ShowContext
-    {
-        get => _file.Model.ShowContext;
-        set
-        {
-            if (_file.Model.ShowContext == value)
-                return;
-            _file.ShowContext = value;
-            Sync();
-        }
-    }
-
     public bool IsSearchView => Search is not null;
     public IBrush? HighlightBrush =>
         Search is null
             ? new SolidColorBrush(Colors.WhiteSmoke)
             : new SolidColorBrush(Color.Parse(Search.Color));
-    public bool ContextVisible => ShowContext && _file.Model.SelectedLine is not null;
-    public GridLength ContextRowHeight => ContextVisible ? new(1, GridUnitType.Star) : new(0);
-    public GridLength ContextSplitterHeight => ContextVisible ? new(4) : new(0);
-    public bool ContextEmpty => ContextLines.Count == 0;
-    public bool ContextEmptyVisible => ContextVisible && ContextEmpty;
     public bool IsFollowing
     {
         get => Search is null ? _file.Model.FollowAll : IsSearchFollow();
@@ -147,6 +127,24 @@ internal sealed class LogViewViewModel : ReactiveObject
         for (var index = first; index >= 0 && index < Lines.Count; index += direction)
         {
             if (_file.HighlightSpans.Get(Lines[index].Line, File.Searches, rules).Count > 0)
+            {
+                SelectRow(Lines[index]);
+                return;
+            }
+        }
+    }
+
+    internal void MoveToBookmark(int direction)
+    {
+        var current = CurrentRowIndex();
+        // With no (visible) selected row, start from the edge the direction heads away from.
+        var first =
+            current >= 0 ? current + direction
+            : direction > 0 ? 0
+            : Lines.Count - 1;
+        for (var index = first; index >= 0 && index < Lines.Count; index += direction)
+        {
+            if (File.IsBookmarked(Lines[index].Line))
             {
                 SelectRow(Lines[index]);
                 return;
@@ -220,52 +218,36 @@ internal sealed class LogViewViewModel : ReactiveObject
     {
         var settings = Settings;
         var settingsChanged = !ReferenceEquals(_lastSettings, settings);
-        var expandedChanged = _lastExpandedLine != _file.Model.ExpandedLine;
         var viewsChanged = _lastViewsVersion != _file.ViewsVersion;
         var rulesChanged = _lastRulesVersion != _file.Model.RulesVersion;
         _lastRulesVersion = _file.Model.RulesVersion;
         _lastSettings = settings;
-        _lastExpandedLine = _file.Model.ExpandedLine;
         _lastViewsVersion = _file.ViewsVersion;
-        if (expandedChanged)
-        {
-            SyncExpansion(Lines);
-            SyncExpansion(ContextLines);
-        }
         if (viewsChanged || rulesChanged)
         {
             InvalidateRows(Lines);
-            InvalidateRows(ContextLines);
         }
         var lines = LinesFor();
         var frozen = _owner.IsPaused && Lines.Count > 0;
         if (!frozen)
         {
             // A settings change seen while frozen still has to reach the retained rows once they sync.
-            SyncRows(
-                Lines,
-                lines,
-                isContext: false,
-                resetItems,
-                settingsChanged || _rowRefreshPending
-            );
+            SyncRows(Lines, lines, resetItems, settingsChanged || _rowRefreshPending);
             _rowRefreshPending = false;
         }
         else
             _rowRefreshPending |= settingsChanged;
         UpdateUnseen(lines, frozen);
 
-        var context = _file.Model.ShowContext ? ContextLinesFor() : [];
-        SyncRows(ContextLines, context, isContext: true, resetItems, settingsChanged);
+        if (_lastBookmarksVersion != _file.Model.BookmarksVersion)
+        {
+            _lastBookmarksVersion = _file.Model.BookmarksVersion;
+            foreach (var row in Lines)
+                row.SyncBookmark();
+        }
 
         var snapshot = new ViewSnapshot(
             MatchSummary,
-            ShowContext,
-            ContextVisible,
-            ContextRowHeight,
-            ContextSplitterHeight,
-            ContextEmpty,
-            ContextEmptyVisible,
             IsFollowing,
             ResultCount,
             ResultMessage,
@@ -275,21 +257,6 @@ internal sealed class LogViewViewModel : ReactiveObject
         _lastSnapshot = snapshot;
         if (previous is null || previous.Value.MatchSummary != snapshot.MatchSummary)
             this.RaisePropertyChanged(nameof(MatchSummary));
-        if (previous is null || previous.Value.ShowContext != snapshot.ShowContext)
-            this.RaisePropertyChanged(nameof(ShowContext));
-        if (previous is null || previous.Value.ContextVisible != snapshot.ContextVisible)
-            this.RaisePropertyChanged(nameof(ContextVisible));
-        if (previous is null || previous.Value.ContextRowHeight != snapshot.ContextRowHeight)
-            this.RaisePropertyChanged(nameof(ContextRowHeight));
-        if (
-            previous is null
-            || previous.Value.ContextSplitterHeight != snapshot.ContextSplitterHeight
-        )
-            this.RaisePropertyChanged(nameof(ContextSplitterHeight));
-        if (previous is null || previous.Value.ContextEmpty != snapshot.ContextEmpty)
-            this.RaisePropertyChanged(nameof(ContextEmpty));
-        if (previous is null || previous.Value.ContextEmptyVisible != snapshot.ContextEmptyVisible)
-            this.RaisePropertyChanged(nameof(ContextEmptyVisible));
         if (previous is null || previous.Value.IsFollowing != snapshot.IsFollowing)
             this.RaisePropertyChanged(nameof(IsFollowing));
         if (previous is null || previous.Value.ResultCount != snapshot.ResultCount)
@@ -312,16 +279,9 @@ internal sealed class LogViewViewModel : ReactiveObject
             row.InvalidateRender();
     }
 
-    private static void SyncExpansion(AvaloniaList<LogLineViewModel> rows)
-    {
-        foreach (var row in rows)
-            row.SyncExpansion();
-    }
-
     private void SyncRows(
         AvaloniaList<LogLineViewModel> current,
         IReadOnlyList<Line> desired,
-        bool isContext,
         bool resetItems,
         bool refreshRows
     )
@@ -352,7 +312,7 @@ internal sealed class LogViewViewModel : ReactiveObject
                 current.AddRange(
                     desired
                         .Skip(lastIndex + 1)
-                        .Select(line => new LogLineViewModel(this, _file, line, isContext))
+                        .Select(line => new LogLineViewModel(this, _file, line))
                 );
                 return;
             }
@@ -384,7 +344,7 @@ internal sealed class LogViewViewModel : ReactiveObject
                 current.AddRange(
                     desired
                         .Skip(retainedCount)
-                        .Select(line => new LogLineViewModel(this, _file, line, isContext))
+                        .Select(line => new LogLineViewModel(this, _file, line))
                 );
                 return;
             }
@@ -405,7 +365,7 @@ internal sealed class LogViewViewModel : ReactiveObject
                         ? retained
                         : null;
                 if (row is null)
-                    row = new LogLineViewModel(this, _file, line, isContext);
+                    row = new LogLineViewModel(this, _file, line);
                 else if (refreshRows)
                     row.Refresh();
                 return row;
@@ -510,8 +470,6 @@ internal sealed class LogViewViewModel : ReactiveObject
         return ApplyFilters(lines);
     }
 
-    private IReadOnlyList<Line> ContextLinesFor() => ApplyFilters(_file.Model.Buffer.Lines);
-
     private IReadOnlyList<Line> ApplyFilters(IEnumerable<Line> lines)
     {
         var rules = _file.Model.EffectiveRules(_owner.State.Settings);
@@ -531,12 +489,6 @@ internal sealed class LogViewViewModel : ReactiveObject
 
     private readonly record struct ViewSnapshot(
         string MatchSummary,
-        bool ShowContext,
-        bool ContextVisible,
-        GridLength ContextRowHeight,
-        GridLength ContextSplitterHeight,
-        bool ContextEmpty,
-        bool ContextEmptyVisible,
         bool IsFollowing,
         string ResultCount,
         string ResultMessage,

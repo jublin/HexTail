@@ -23,7 +23,7 @@ public sealed class ResultStateTests
         var page = new ElasticSearchPage(
             "pit",
             Enumerable
-                .Range(0, 3)
+                .Range(0, 101)
                 .Select(index => new ElasticHit(
                     $"id-{index}",
                     timestamp.AddSeconds(index),
@@ -54,9 +54,9 @@ public sealed class ResultStateTests
             ],
         };
         var state = new AppState(
-            new LogSourceService(new TailerOptions { MaxInitialLines = 2 }),
+            new LogSourceService(),
             new TestPersistence(),
-            new AppSettings { ElasticConnections = [connection] },
+            new AppSettings { ElasticInitialLines = 100, ElasticConnections = [connection] },
             elastic: client,
             credentials: new InMemoryCredentialVault()
         );
@@ -80,9 +80,9 @@ public sealed class ResultStateTests
                 .OfType<TextBlock>()
                 .Single(block => block.Name == "InitialLimitMessage");
             Assert.True(limit.IsVisible);
-            Assert.Contains("Initial limit reached (2 newest logs)", limit.Text);
+            Assert.Contains("Initial limit reached (100 newest logs)", limit.Text);
             Assert.Contains("may contain more logs", limit.Text);
-            Assert.Equal(2, tab.Buffer.Count);
+            Assert.Equal(100, tab.Buffer.Count);
 
             client.SearchHandler = _ => Task.FromResult(new ElasticSearchPage("pit", []));
             state.SetElasticTimeRange(tab, "2026-08-20T08:00:00Z", "2026-08-20T09:00:00Z");

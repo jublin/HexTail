@@ -36,10 +36,7 @@ public sealed class PersistedElasticTab
     public List<PersistedSearch> Searches { get; init; } = [];
     public bool FollowAll { get; init; } = true;
     public List<bool> FollowSearches { get; init; } = [];
-    public bool ShowContext { get; init; }
     public int? SelectedLine { get; init; }
-    public int ContextAbove { get; init; } = 3;
-    public int ContextBelow { get; init; } = 10;
     public List<ViewRule> Rules { get; init; } = [];
     public LogLevels Levels { get; init; } = LogLevels.All;
 }
@@ -50,10 +47,7 @@ public sealed class PersistedFileTab
     public List<PersistedSearch> Searches { get; init; } = [];
     public bool FollowAll { get; init; } = true;
     public List<bool> FollowSearches { get; init; } = [];
-    public bool ShowContext { get; init; }
     public int? SelectedLine { get; init; }
-    public int ContextAbove { get; init; } = 3;
-    public int ContextBelow { get; init; } = 10;
     public List<ViewRule> Rules { get; init; } = [];
     public LogLevels Levels { get; init; } = LogLevels.All;
 }
@@ -70,7 +64,8 @@ public sealed class AppWindowState
 {
     public bool SidebarCollapsed { get; init; }
     public double SidebarWidth { get; init; }
-    public int ContextPaneSize { get; init; } = 300;
+    public bool InspectorOpen { get; init; }
+    public double InspectorWidth { get; init; } = 360;
     public double Width { get; init; } = 1280;
     public double Height { get; init; } = 800;
     public int? X { get; init; }
@@ -82,6 +77,7 @@ public sealed record AppSettings
     public int MaxLines { get; init; } = FileBuffer.DefaultMaxLines;
     public int ContextAbove { get; init; } = 3;
     public int ContextBelow { get; init; } = 10;
+    public int ElasticInitialLines { get; init; } = 10_000;
     public List<ViewRule> Rules { get; init; } = [];
     public string Theme { get; init; } = "cyber-tail";
     public UiDensity Density { get; init; } = UiDensity.Comfortable;

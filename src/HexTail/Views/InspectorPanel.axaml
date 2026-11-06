@@ -1,0 +1,167 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTail.ViewModels"
+  xmlns:ic="https://github.com/projektanker/icons.avalonia"
+  x:Class="HexTail.Views.InspectorPanel"
+  x:DataType="vm:InspectorViewModel"
+  AutomationProperties.Name="Row inspector"
+>
+  <UserControl.Styles>
+    <Style Selector="Border.source-row.selected TextBlock">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+  </UserControl.Styles>
+  <Border
+    Background="{DynamicResource RaisedBrush}"
+    BorderBrush="{DynamicResource BorderBrush}"
+    BorderThickness="1,0,0,0"
+  >
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+      <Grid ColumnDefinitions="*,Auto" Margin="12,8,8,4">
+        <TextBlock
+          x:Name="InspectorTitle"
+          Text="{Binding Title}"
+          FontWeight="SemiBold"
+          VerticalAlignment="Center"
+        />
+        <Button
+          x:Name="InspectorCloseButton"
+          Grid.Column="1"
+          Classes="icon"
+          Command="{Binding CloseCommand}"
+          ToolTip.Tip="Close inspector (Ctrl+I)"
+          AutomationProperties.Name="Close inspector"
+        >
+          <ic:Icon Value="mdi-close" />
+        </Button>
+      </Grid>
+      <TextBlock
+        x:Name="InspectorError"
+        Grid.Row="1"
+        Text="{Binding Error}"
+        IsVisible="{Binding HasError}"
+        Classes="error"
+        TextWrapping="Wrap"
+        Margin="12,0,12,4"
+      />
+      <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="12,0,12,12" Spacing="10">
+          <TextBlock
+            Text="Select a row to inspect it."
+            Classes="hint"
+            IsVisible="{Binding !HasLine}"
+          />
+          <StackPanel Spacing="4" IsVisible="{Binding HasLine}">
+            <TextBlock Text="RAW" Classes="sidebar-heading" />
+            <SelectableTextBlock
+              x:Name="InspectorRaw"
+              Text="{Binding RawText}"
+              TextWrapping="Wrap"
+              FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+              AutomationProperties.Name="Raw log text"
+            />
+          </StackPanel>
+          <StackPanel Spacing="4" IsVisible="{Binding HasFields}">
+            <TextBlock Text="FIELDS" Classes="sidebar-heading" />
+            <ItemsControl x:Name="InspectorFields" ItemsSource="{Binding Fields}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:InspectorFieldViewModel">
+                  <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,2">
+                    <TextBlock
+                      Text="{Binding Key}"
+                      Foreground="{DynamicResource MutedBrush}"
+                      FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+                      VerticalAlignment="Top"
+                    />
+                    <SelectableTextBlock
+                      Grid.Column="1"
+                      Text="{Binding Value}"
+                      TextWrapping="Wrap"
+                      FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+                    />
+                    <Button
+                      Grid.Column="2"
+                      Classes="icon"
+                      VerticalAlignment="Top"
+                      ToolTip.Tip="Field actions"
+                      AutomationProperties.Name="{Binding Key, StringFormat='Actions for {0}'}"
+                    >
+                      <ic:Icon Value="mdi-dots-horizontal" />
+                      <Button.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                          <MenuItem Header="Show only this value" Command="{Binding ShowOnlyCommand}" />
+                          <MenuItem Header="Hide value" Command="{Binding HideCommand}" />
+                          <MenuItem Header="Highlight" Command="{Binding HighlightCommand}" />
+                          <MenuItem Header="Copy value" Click="OnCopyFieldValue" />
+                        </MenuFlyout>
+                      </Button.Flyout>
+                    </Button>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+          <StackPanel Spacing="4" IsVisible="{Binding ContextOpen}">
+            <TextBlock Text="CONTEXT" Classes="sidebar-heading" />
+            <ItemsControl x:Name="InspectorContext" ItemsSource="{Binding ContextRows}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:InspectorContextRowViewModel">
+                  <Border Classes="source-row" Classes.selected="{Binding IsSelected}">
+                    <Button
+                      Classes="source-select"
+                      Click="OnContextRowClick"
+                      AutomationProperties.Name="{Binding Text, StringFormat='Select line {0}'}"
+                    >
+                      <TextBlock
+                        Text="{Binding Text}"
+                        TextTrimming="CharacterEllipsis"
+                        FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+                      />
+                    </Button>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+      <WrapPanel Grid.Row="3" Margin="8,4,8,8">
+        <Button
+          x:Name="InspectorCopyRaw"
+          Content="Copy raw"
+          Margin="2"
+          IsEnabled="{Binding HasLine}"
+          Click="OnCopyRaw"
+          AutomationProperties.Name="Copy raw line"
+        />
+        <Button
+          x:Name="InspectorCopyJson"
+          Content="Copy JSON"
+          Margin="2"
+          IsEnabled="{Binding CanCopyJson}"
+          Click="OnCopyJson"
+          AutomationProperties.Name="Copy fields as JSON"
+        />
+        <ToggleButton
+          x:Name="InspectorBookmark"
+          Content="Bookmark"
+          Margin="2"
+          IsChecked="{Binding IsBookmarked, Mode=OneWay}"
+          Command="{Binding ToggleBookmarkCommand}"
+          IsEnabled="{Binding HasLine}"
+          ToolTip.Tip="Bookmark this row (M)"
+          AutomationProperties.Name="Bookmark this row"
+        />
+        <ToggleButton
+          x:Name="InspectorContextToggle"
+          Content="Show context"
+          Margin="2"
+          IsChecked="{Binding ContextOpen, Mode=TwoWay}"
+          IsEnabled="{Binding HasLine}"
+          AutomationProperties.Name="Show surrounding lines"
+        />
+      </WrapPanel>
+    </Grid>
+  </Border>
+</UserControl>

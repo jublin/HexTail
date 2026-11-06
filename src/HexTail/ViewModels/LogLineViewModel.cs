@@ -17,27 +17,19 @@ internal sealed class LogLineViewModel : ReactiveObject
     private bool _isVisible;
     private bool _renderDirty = true;
 
-    internal LogLineViewModel(
-        LogViewViewModel owner,
-        FileTabViewModel file,
-        Line line,
-        bool isContext
-    )
+    internal LogLineViewModel(LogViewViewModel owner, FileTabViewModel file, Line line)
     {
         _owner = owner;
         _file = file;
         Line = line;
-        IsContext = isContext;
         Refresh(notify: false);
     }
 
     public Line Line { get; }
-    public bool IsContext { get; }
+    public bool IsBookmarked { get; private set; }
     public IReadOnlyList<HighlightSpan> Spans { get; private set; } = [];
     public string ParsedFieldsText { get; private set; } = string.Empty;
     public bool HasParsedFields => Line.ParsedFields is { Count: > 0 };
-    public bool IsExpanded { get; private set; }
-    public bool FieldsVisible => IsExpanded && HasParsedFields;
     public double FontSize { get; private set; }
     public Thickness RowPadding { get; private set; }
     public IBrush Foreground { get; private set; } = Brushes.White;
@@ -61,16 +53,10 @@ internal sealed class LogLineViewModel : ReactiveObject
             UiDensity.Cozy => new Thickness(12, 2),
             _ => new Thickness(12, 3),
         };
-        Foreground = IsContext ? ThemeManager.Brush("MutedBrush") : ThemeManager.Brush("TextBrush");
-        Background = IsContext
-            ? ThemeManager.Brush("RaisedBrush")
-            : ThemeManager.Brush("SurfaceBrush");
+        Foreground = ThemeManager.Brush("TextBrush");
+        Background = ThemeManager.Brush("SurfaceBrush");
         ParsedFieldsText = string.Empty;
-        IsExpanded =
-            _file.Model.ExpandedLine is int index
-            && index >= 0
-            && index < _file.Model.Buffer.Count
-            && ReferenceEquals(_file.Model.Buffer[index], Line);
+        IsBookmarked = _file.Model.IsBookmarked(Line);
 
         _renderDirty = true;
         if (_isVisible)
@@ -80,14 +66,25 @@ internal sealed class LogLineViewModel : ReactiveObject
         {
             this.RaisePropertyChanged(nameof(ParsedFieldsText));
             this.RaisePropertyChanged(nameof(HasParsedFields));
-            this.RaisePropertyChanged(nameof(IsExpanded));
-            this.RaisePropertyChanged(nameof(FieldsVisible));
             this.RaisePropertyChanged(nameof(FontSize));
             this.RaisePropertyChanged(nameof(RowPadding));
             this.RaisePropertyChanged(nameof(Foreground));
             this.RaisePropertyChanged(nameof(Background));
+            this.RaisePropertyChanged(nameof(IsBookmarked));
         }
     }
+
+    /// <summary>Re-reads the bookmark flag after the tab's bookmarks changed.</summary>
+    internal void SyncBookmark()
+    {
+        var bookmarked = _file.Model.IsBookmarked(Line);
+        if (bookmarked == IsBookmarked)
+            return;
+        IsBookmarked = bookmarked;
+        this.RaisePropertyChanged(nameof(IsBookmarked));
+    }
+
+    internal void ToggleBookmark() => _owner.Workspace.State.ToggleBookmark(_file.Model, Line);
 
     internal void SetVisible(bool visible)
     {
@@ -103,23 +100,13 @@ internal sealed class LogLineViewModel : ReactiveObject
             Render();
     }
 
-    internal void SyncExpansion()
-    {
-        var expanded =
-            _file.Model.ExpandedLine is int index
-            && index >= 0
-            && index < _file.Model.Buffer.Count
-            && ReferenceEquals(_file.Model.Buffer[index], Line);
-        if (IsExpanded == expanded)
-            return;
-        IsExpanded = expanded;
-        this.RaisePropertyChanged(nameof(IsExpanded));
-        this.RaisePropertyChanged(nameof(FieldsVisible));
-    }
-
     internal void Select() => _owner.SelectLineCommand.Execute(Line).Subscribe();
 
-    internal void ToggleExpanded() => _owner.ToggleExpandedCommand.Execute(Line).Subscribe();
+    internal void Inspect()
+    {
+        Select();
+        _owner.Workspace.Inspector.Open();
+    }
 
     private void Render()
     {

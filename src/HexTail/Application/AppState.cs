@@ -172,7 +172,8 @@ public sealed class AppState : IAsyncDisposable
                 match.source,
                 secret,
                 _elastic,
-                Now
+                Now,
+                maxInitialLines: _settings.ElasticInitialLines
             );
             replacement.SetTimeRange(
                 tab.ElasticResolvedFrom?.ToString("O") ?? tab.ElasticFrom,
@@ -332,12 +333,9 @@ public sealed class AppState : IAsyncDisposable
                 )
                 .ConfigureAwait(false);
             tab.FollowAll = persisted.FollowAll;
-            tab.ShowContext = persisted.ShowContext;
             tab.SetRules(NormalizeRules(persisted.Rules, RuleScope.Source));
             tab.Levels = NormalizeLevels(persisted.Levels);
             tab.SelectedLine = persisted.SelectedLine;
-            tab.ContextAbove = persisted.ContextAbove;
-            tab.ContextBelow = persisted.ContextBelow;
 
             // Global-rule searches were added when the tab opened; the persisted lists only hold user
             // searches, so each follow flag is applied to the search it was saved with.
@@ -376,11 +374,8 @@ public sealed class AppState : IAsyncDisposable
                     )
                     .ConfigureAwait(false);
                 tab.FollowAll = persisted.FollowAll;
-                tab.ShowContext = persisted.ShowContext;
                 tab.SetRules(NormalizeRules(persisted.Rules, RuleScope.Source));
                 tab.Levels = NormalizeLevels(persisted.Levels);
-                tab.ContextAbove = persisted.ContextAbove;
-                tab.ContextBelow = persisted.ContextBelow;
                 for (var i = 0; i < persisted.Searches.Count; i++)
                 {
                     var search = persisted.Searches[i];
@@ -461,8 +456,6 @@ public sealed class AppState : IAsyncDisposable
                 var tailer = _tailers.StartFile(id, fullPath, parser);
                 tab = new FileTabState(id, fullPath, buffer, parser, tailer)
                 {
-                    ContextAbove = _settings.ContextAbove,
-                    ContextBelow = _settings.ContextBelow,
                     Error = File.Exists(fullPath) ? null : "File missing",
                     Ephemeral = ephemeral,
                 };
@@ -529,17 +522,21 @@ public sealed class AppState : IAsyncDisposable
             ? _credentials.Get(connection.Id)
                 ?? throw new InvalidOperationException("The Elastic credential is unavailable.")
             : string.Empty;
-        var tailer = _tailers.CreateElastic(connection, view, match.source, secret, _elastic, Now);
+        var tailer = _tailers.CreateElastic(
+            connection,
+            view,
+            match.source,
+            secret,
+            _elastic,
+            Now,
+            maxInitialLines: _settings.ElasticInitialLines
+        );
         var tab = new FileTabState(
             LogSourceDescriptor.Elastic(connection, view, match.source),
             new FileBuffer(_settings.MaxLines),
             new PlainTextParser(),
             tailer
-        )
-        {
-            ContextAbove = _settings.ContextAbove,
-            ContextBelow = _settings.ContextBelow,
-        };
+        );
         if (tailer is ElasticTailer elasticTailer)
         {
             if (from != "now-5m" || to != "now")
@@ -895,23 +892,6 @@ public sealed class AppState : IAsyncDisposable
         return known == LogLevels.None ? LogLevels.All : known;
     }
 
-    public async ValueTask SetShowContextAsync(
-        FileTabState tab,
-        bool value,
-        CancellationToken cancellationToken = default
-    )
-    {
-        ArgumentNullException.ThrowIfNull(tab);
-        lock (_gate)
-        {
-            if (!_files.Contains(tab))
-                return;
-            tab.ShowContext = value;
-        }
-        NotifyChanged();
-        await SaveAsync(cancellationToken).ConfigureAwait(false);
-    }
-
     public async ValueTask SetSearchFollowAsync(
         FileTabState tab,
         Search search,
@@ -950,24 +930,6 @@ public sealed class AppState : IAsyncDisposable
         NotifyChanged();
     }
 
-    public void ToggleExpanded(FileTabState tab, Line line)
-    {
-        ArgumentNullException.ThrowIfNull(tab);
-        ArgumentNullException.ThrowIfNull(line);
-        lock (_gate)
-        {
-            if (!_files.Contains(tab))
-                return;
-
-            var index = FindLineIndex(tab, line);
-            if (index < 0)
-                return;
-
-            tab.ExpandedLine = tab.ExpandedLine == index ? null : index;
-        }
-        NotifyChanged();
-    }
-
     public async ValueTask UpdateSettingsAsync(
         AppSettings settings,
         CancellationToken cancellationToken = default
@@ -990,6 +952,23 @@ public sealed class AppState : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(window);
         lock (_gate)
             Window = window;
+    }
+
+    public void ToggleBookmark(FileTabState tab, Line line)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(line);
+        lock (_gate)
+        {
+            if (!_files.Contains(tab))
+                return;
+
+            var index = FindLineIndex(tab, line);
+            if (index < 0)
+                return;
+            tab.ToggleBookmarkAt(index);
+        }
+        NotifyChanged();
     }
 
     private static int FindLineIndex(FileTabState tab, Line line)
@@ -1135,12 +1114,9 @@ public sealed class AppState : IAsyncDisposable
                             .Where(item => !item.search.IsGlobalRule)
                             .Select(item => tab.FollowSearches[item.index])
                             .ToList(),
-                        ShowContext = tab.ShowContext,
                         Rules = [.. tab.Rules],
                         Levels = tab.Levels,
                         SelectedLine = tab.SelectedLine,
-                        ContextAbove = tab.ContextAbove,
-                        ContextBelow = tab.ContextBelow,
                         Searches = tab
                             .Searches.Where(search => !search.IsGlobalRule)
                             .Select(search => new PersistedSearch
@@ -1169,12 +1145,9 @@ public sealed class AppState : IAsyncDisposable
                             .Where(item => !item.search.IsGlobalRule)
                             .Select(item => tab.FollowSearches[item.index])
                             .ToList(),
-                        ShowContext = tab.ShowContext,
                         Rules = [.. tab.Rules],
                         Levels = tab.Levels,
                         SelectedLine = tab.SelectedLine,
-                        ContextAbove = tab.ContextAbove,
-                        ContextBelow = tab.ContextBelow,
                         Searches = tab
                             .Searches.Where(search => !search.IsGlobalRule)
                             .Select(search => new PersistedSearch
@@ -1266,9 +1239,10 @@ public sealed class AppState : IAsyncDisposable
     {
         return new AppSettings
         {
-            MaxLines = settings.MaxLines,
-            ContextAbove = settings.ContextAbove,
-            ContextBelow = settings.ContextBelow,
+            MaxLines = Math.Clamp(settings.MaxLines, 1_000, 1_000_000),
+            ContextAbove = Math.Clamp(settings.ContextAbove, 0, 50),
+            ContextBelow = Math.Clamp(settings.ContextBelow, 0, 50),
+            ElasticInitialLines = Math.Clamp(settings.ElasticInitialLines, 100, 100_000),
             Rules = NormalizeRules(settings.Rules, RuleScope.Global),
             Theme = ThemeCatalog.Normalize(settings.Theme),
             Density = Enum.IsDefined(settings.Density) ? settings.Density : UiDensity.Comfortable,

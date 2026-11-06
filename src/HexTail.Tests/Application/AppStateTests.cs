@@ -571,9 +571,7 @@ public sealed class AppStateTests
             var tab = await state.OpenFileAsync(path);
             await DrainUntilAsync(state, () => tab.Buffer.Count == 1);
             tab.FollowAll = false;
-            tab.ShowContext = true;
-            tab.ContextAbove = 4;
-            tab.ContextBelow = 8;
+            tab.Levels = LogLevels.Warn | LogLevels.Error;
             state.AddSearch(tab, "error", MatchMode.Literal, caseSensitive: false, "#ff0000");
             await state.SaveAsync();
         }
@@ -588,9 +586,7 @@ public sealed class AppStateTests
 
         var restoredTab = Assert.Single(restored.Files);
         Assert.False(restoredTab.FollowAll);
-        Assert.True(restoredTab.ShowContext);
-        Assert.Equal(4, restoredTab.ContextAbove);
-        Assert.Equal(8, restoredTab.ContextBelow);
+        Assert.Equal(LogLevels.Warn | LogLevels.Error, restoredTab.Levels);
         var search = Assert.Single(restoredTab.Searches);
         Assert.Equal("error", search.Query.Query);
         Assert.False(search.Query.CaseSensitive);
@@ -604,10 +600,37 @@ public sealed class AppStateTests
         var tab = Assert.Single(config.OpenFiles);
         Assert.Equal("/tmp/app.log", tab.Path);
         Assert.Empty(tab.Searches);
-        Assert.Equal(3, tab.ContextAbove);
-        Assert.Equal(10, tab.ContextBelow);
+        Assert.Equal(LogLevels.All, tab.Levels);
+        Assert.Null(tab.SelectedLine);
         Assert.Empty(config.OpenElasticTabs);
         Assert.Empty(config.Settings.ElasticConnections);
+    }
+
+    [Fact]
+    public async Task UpdateSettings_ClampsLimitsToTheirSupportedRanges()
+    {
+        var persistence = new MemoryPersistence();
+        await using var state = new AppState(
+            NewTailers(),
+            persistence,
+            credentials: new InMemoryCredentialVault()
+        );
+
+        await state.UpdateSettingsAsync(
+            new AppSettings { MaxLines = 0, ElasticInitialLines = 50 },
+            TestContext.Current.CancellationToken
+        );
+        var low = Assert.IsType<AppConfig>(persistence.Config).Settings;
+        Assert.Equal(1_000, low.MaxLines);
+        Assert.Equal(100, low.ElasticInitialLines);
+
+        await state.UpdateSettingsAsync(
+            new AppSettings { MaxLines = 5_000_000, ElasticInitialLines = 3_000_000 },
+            TestContext.Current.CancellationToken
+        );
+        var high = Assert.IsType<AppConfig>(persistence.Config).Settings;
+        Assert.Equal(1_000_000, high.MaxLines);
+        Assert.Equal(100_000, high.ElasticInitialLines);
     }
 
     [Fact]
@@ -866,12 +889,10 @@ public sealed class AppStateTests
         state.DrainTailerEvents();
         Assert.NotEmpty(tab.Buffer.Lines);
         tab.SelectedLine = 0;
-        tab.ExpandedLine = 0;
         state.SetElasticTimeRange(tab, "now-2m", "now");
         Assert.Empty(tab.Buffer.Lines);
         Assert.Single(tab.Searches);
         Assert.Null(tab.SelectedLine);
-        Assert.Null(tab.ExpandedLine);
         Assert.True(
             tailers.Publish(
                 new SourceError(tab.Id, "old failure")

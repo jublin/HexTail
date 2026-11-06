@@ -18,11 +18,16 @@
     <Style Selector="Ellipse.server-status.failed">
       <Setter Property="Fill" Value="{DynamicResource ErrorBrush}" />
     </Style>
+    <Style Selector="TabControl[TabStripPlacement=Left] TabItem">
+      <Setter Property="MinWidth" Value="140" />
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+    </Style>
   </UserControl.Styles>
   <Border
     Classes="settings-modal"
-    Width="1600"
-    Height="920"
+    Width="960"
+    Height="640"
     MaxWidth="{Binding Bounds.Width, RelativeSource={RelativeSource AncestorType=Window}}"
     MaxHeight="{Binding Bounds.Height, RelativeSource={RelativeSource AncestorType=Window}}"
     Margin="24"
@@ -45,7 +50,7 @@
       <TabControl
         Grid.Row="1"
         SelectedIndex="{Binding Settings.SectionIndex, Mode=TwoWay}"
-        TabStripPlacement="Top"
+        TabStripPlacement="Left"
       >
         <TabItem>
           <TabItem.Header>
@@ -54,7 +59,7 @@
               <TextBlock Text="Appearance" />
             </StackPanel>
           </TabItem.Header>
-          <Border Classes="settings-section" Margin="0,16,0,0">
+          <Border Classes="settings-section" Margin="16,0,0,0">
             <Grid Classes="responsive-columns" ColumnDefinitions="*,*" ColumnSpacing="15">
               <StackPanel Spacing="6">
                 <TextBlock Text="Density" />
@@ -103,7 +108,7 @@
             HorizontalScrollBarVisibility="Disabled"
             VerticalScrollBarVisibility="Auto"
           >
-            <StackPanel Spacing="10" Margin="0,16,0,0">
+            <StackPanel Spacing="10" Margin="16,0,0,0">
               <Grid ColumnDefinitions="*,Auto">
                 <TextBlock
                   Text="Elastic servers"
@@ -537,6 +542,56 @@
               </ListBox>
             </StackPanel>
           </ScrollViewer>
+        </TabItem>
+        <TabItem>
+          <TabItem.Header>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ic:Icon Value="mdi-tune-variant" />
+              <TextBlock Text="Limits" />
+            </StackPanel>
+          </TabItem.Header>
+          <Border Classes="settings-section" Margin="16,0,0,0">
+            <StackPanel Spacing="6" MaxWidth="420" HorizontalAlignment="Left">
+              <TextBlock Text="Maximum lines per source" />
+              <NumericUpDown
+                x:Name="MaxLinesBox"
+                Minimum="1000"
+                Maximum="1000000"
+                Increment="1000"
+                FormatString="N0"
+                Value="{Binding Settings.MaxLinesValue, Mode=TwoWay}"
+                AutomationProperties.Name="Maximum lines per source"
+              />
+              <TextBlock Text="Applies to sources opened after the change." Classes="hint" />
+              <TextBlock Text="Context lines before the selected row" Margin="0,8,0,0" />
+              <NumericUpDown
+                x:Name="ContextAboveBox"
+                Minimum="0"
+                Maximum="50"
+                Value="{Binding Settings.ContextAboveValue, Mode=TwoWay}"
+                AutomationProperties.Name="Context lines before"
+              />
+              <TextBlock Text="Context lines after the selected row" />
+              <NumericUpDown
+                x:Name="ContextBelowBox"
+                Minimum="0"
+                Maximum="50"
+                Value="{Binding Settings.ContextBelowValue, Mode=TwoWay}"
+                AutomationProperties.Name="Context lines after"
+              />
+              <TextBlock Text="Initial Elastic fetch (newest lines)" Margin="0,8,0,0" />
+              <NumericUpDown
+                x:Name="ElasticInitialLinesBox"
+                Minimum="100"
+                Maximum="100000"
+                Increment="1000"
+                FormatString="N0"
+                Value="{Binding Settings.ElasticInitialLinesValue, Mode=TwoWay}"
+                AutomationProperties.Name="Initial Elastic fetch"
+              />
+              <TextBlock Text="Applies to Elastic views opened after the change." Classes="hint" />
+            </StackPanel>
+          </Border>
         </TabItem>
       </TabControl>
       <TextBlock

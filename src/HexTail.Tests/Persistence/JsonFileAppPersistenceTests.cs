@@ -196,6 +196,8 @@ public sealed class JsonFileAppPersistenceTests
                 Height = 600,
                 X = 12,
                 Y = 34,
+                InspectorOpen = true,
+                InspectorWidth = 400,
             },
             Settings = new AppSettings { Theme = "light", Rules = [TestRules.Hide("health")] },
         };
@@ -207,10 +209,38 @@ public sealed class JsonFileAppPersistenceTests
         Assert.Equal("/tmp/app.log", restored.SelectedFilePath);
         Assert.Equal(900, restored.Window.Width);
         Assert.Equal(34, restored.Window.Y);
+        Assert.True(restored.Window.InspectorOpen);
+        Assert.Equal(400, restored.Window.InspectorWidth);
         Assert.Equal("light", restored.Settings.Theme);
         Assert.Equal(TestRules.Hide("health"), Assert.Single(restored.Settings.Rules));
         Assert.Equal("error", Assert.Single(Assert.Single(restored.OpenFiles).Searches).Query);
         Assert.True(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task Load_SessionWithRemovedContextPaneMembers_IgnoresThemAndKeepsTheFileOpen()
+    {
+        using var directory = new TempDirectory();
+        var path = Path.Combine(directory.Path, "session.json");
+        await File.WriteAllTextAsync(
+            path,
+            """
+            { "version": 2,
+              "window": { "width": 1000, "height": 700, "contextPaneSize": 300 },
+              "openFiles": [
+                { "path": "/tmp/a.log", "showContext": true, "contextAbove": 5, "contextBelow": 5 }
+              ] }
+            """,
+            TestContext.Current.CancellationToken
+        );
+
+        var result = await new JsonFileAppPersistence(path).LoadAsync(
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.NotNull(result);
+        Assert.Equal("/tmp/a.log", Assert.Single(result.OpenFiles).Path);
+        Assert.Equal(1000, result.Window.Width);
     }
 
     [Fact]

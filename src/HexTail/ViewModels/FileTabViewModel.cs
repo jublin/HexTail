@@ -65,21 +65,6 @@ internal sealed class FileTabViewModel : ReactiveObject
         }
     }
 
-    public bool ShowContext
-    {
-        get => Model.ShowContext;
-        set
-        {
-            if (Model.ShowContext == value)
-                return;
-            Model.ShowContext = value;
-            if (_lastSnapshot is { } snapshot)
-                _lastSnapshot = snapshot with { ShowContext = value };
-            _ = _owner.SetShowContextAsync(this, value);
-            this.RaisePropertyChanged(nameof(ShowContext));
-        }
-    }
-
     public int SelectedViewIndex
     {
         get => _selectedViewIndex;
@@ -140,7 +125,6 @@ internal sealed class FileTabViewModel : ReactiveObject
 
         var snapshot = new FileSnapshot(
             FollowAll,
-            ShowContext,
             DisplayName,
             SourceDetails,
             Error,
@@ -151,8 +135,6 @@ internal sealed class FileTabViewModel : ReactiveObject
         _lastSnapshot = snapshot;
         if (previous is null || previous.Value.FollowAll != snapshot.FollowAll)
             this.RaisePropertyChanged(nameof(FollowAll));
-        if (previous is null || previous.Value.ShowContext != snapshot.ShowContext)
-            this.RaisePropertyChanged(nameof(ShowContext));
         if (previous is null || previous.Value.DisplayName != snapshot.DisplayName)
             this.RaisePropertyChanged(nameof(DisplayName));
         if (previous is null || previous.Value.SourceDetails != snapshot.SourceDetails)
@@ -182,8 +164,6 @@ internal sealed class FileTabViewModel : ReactiveObject
 
     internal void SelectLine(Line line) => _owner.SelectLine(this, line);
 
-    internal void ToggleExpanded(Line line) => _owner.ToggleExpanded(this, line);
-
     internal void RaiseSelectionChanged()
     {
         this.RaisePropertyChanged(nameof(IsSelected));
@@ -200,7 +180,6 @@ internal sealed class FileTabViewModel : ReactiveObject
 
     private readonly record struct FileSnapshot(
         bool FollowAll,
-        bool ShowContext,
         string DisplayName,
         string SourceDetails,
         string? Error,

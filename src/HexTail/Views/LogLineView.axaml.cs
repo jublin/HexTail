@@ -37,7 +37,7 @@ public partial class LogLineView : UserControl
 
     private void OnTapped(object? sender, RoutedEventArgs e)
     {
-        if (e.Handled || e.Source is SelectableTextBlock || DataContext is not LogLineViewModel row)
+        if (e.Handled || DataContext is not LogLineViewModel row)
             return;
         row.Select();
         _container?.Focus();
@@ -46,10 +46,8 @@ public partial class LogLineView : UserControl
 
     private void OnDoubleTapped(object? sender, RoutedEventArgs e)
     {
-        if (e.Source is SelectableTextBlock)
-            return;
         if (DataContext is LogLineViewModel row)
-            row.ToggleExpanded();
+            row.Inspect();
         e.Handled = true;
     }
 
@@ -59,12 +57,18 @@ public partial class LogLineView : UserControl
             row.Select();
     }
 
-    private void OnToggleDetails(object? sender, RoutedEventArgs e)
+    private void OnInspect(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is LogLineViewModel row)
+            row.Inspect();
+    }
+
+    private void OnToggleBookmark(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not LogLineViewModel row)
             return;
         row.Select();
-        row.ToggleExpanded();
+        row.ToggleBookmark();
     }
 
     private async void OnCopyRawLine(object? sender, RoutedEventArgs e) =>
@@ -90,8 +94,7 @@ public partial class LogLineView : UserControl
             return;
         if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None)
         {
-            row.Select();
-            row.ToggleExpanded();
+            row.Inspect();
             e.Handled = true;
         }
         else if (e.Key == Key.Apps || (e.Key == Key.F10 && e.KeyModifiers == KeyModifiers.Shift))
@@ -102,7 +105,6 @@ public partial class LogLineView : UserControl
         else if (
             e.Key == Key.C
             && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) != 0
-            && e.Source is not SelectableTextBlock
         )
         {
             var fields = e.KeyModifiers.HasFlag(KeyModifiers.Shift);

@@ -241,6 +241,35 @@ internal sealed class FilterBarViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(HasChips));
     }
 
+    internal ViewRule NewSourceRule(
+        FileTabState file,
+        string pattern,
+        MatchMode mode,
+        bool caseSensitive,
+        RuleAction action
+    )
+    {
+        var color = MainWindowViewModel.NextSearchColor(
+            file.Searches.Select(search => search.Color)
+                .Concat(
+                    file.Rules.Where(rule => rule.Action != RuleAction.Hide)
+                        .Select(rule => rule.Color)
+                ),
+            _owner
+                .State.Settings.Rules.Where(rule => rule.Action != RuleAction.Hide)
+                .Select(rule => rule.Color)
+        );
+        return new ViewRule
+        {
+            Pattern = pattern,
+            Mode = mode,
+            CaseSensitive = caseSensitive,
+            Color = color,
+            Action = action,
+            Scope = RuleScope.Source,
+        };
+    }
+
     internal async Task SubmitAsync(RuleAction action)
     {
         var file = _owner.SelectedFile?.Model;
@@ -257,34 +286,14 @@ internal sealed class FilterBarViewModel : ReactiveObject
         Query = string.Empty;
         try
         {
-            var color = MainWindowViewModel.NextSearchColor(
-                file.Searches.Select(search => search.Color)
-                    .Concat(
-                        file.Rules.Where(rule => rule.Action != RuleAction.Hide)
-                            .Select(rule => rule.Color)
-                    ),
-                _owner
-                    .State.Settings.Rules.Where(rule => rule.Action != RuleAction.Hide)
-                    .Select(rule => rule.Color)
-            );
+            var rule = NewSourceRule(file, pattern, MatchMode, CaseSensitive, action);
             if (PinAsTab && action == RuleAction.Highlight)
             {
-                _owner.State.AddSearch(file, pattern, MatchMode, CaseSensitive, color);
+                _owner.State.AddSearch(file, pattern, MatchMode, CaseSensitive, rule.Color);
                 await _owner.State.SaveAsync();
             }
             else
-                await _owner.State.AddRuleAsync(
-                    file,
-                    new ViewRule
-                    {
-                        Pattern = pattern,
-                        Mode = MatchMode,
-                        CaseSensitive = CaseSensitive,
-                        Color = color,
-                        Action = action,
-                        Scope = RuleScope.Source,
-                    }
-                );
+                await _owner.State.AddRuleAsync(file, rule);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

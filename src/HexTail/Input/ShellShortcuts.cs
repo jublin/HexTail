@@ -10,6 +10,7 @@ internal enum ShellAction
     FocusSearch,
     SaveSession,
     ToggleSidebar,
+    ToggleInspector,
     CloseView,
     NextView,
     PreviousView,
@@ -22,6 +23,9 @@ internal enum ShellAction
     PreviousRow,
     NextMatch,
     PreviousMatch,
+    ToggleBookmark,
+    NextBookmark,
+    PreviousBookmark,
 }
 
 internal readonly record struct ShellCommand(ShellAction Action, int Index = 0)
@@ -47,6 +51,7 @@ internal static class ShellShortcuts
                 Key.F => new(ShellAction.FocusSearch),
                 Key.S => new(ShellAction.SaveSession),
                 Key.B => new(ShellAction.ToggleSidebar),
+                Key.I => new(ShellAction.ToggleInspector),
                 Key.W => new(ShellAction.CloseView),
                 Key.Tab => new(shift ? ShellAction.PreviousView : ShellAction.NextView),
                 >= Key.D1 and <= Key.D9 => new(ShellAction.SelectView, key - Key.D1),
@@ -63,6 +68,9 @@ internal static class ShellShortcuts
             Key.J => new(ShellAction.NextRow),
             Key.K => new(ShellAction.PreviousRow),
             Key.N => new(shift ? ShellAction.PreviousMatch : ShellAction.NextMatch),
+            Key.M => new(ShellAction.ToggleBookmark),
+            Key.OemCloseBrackets => new(ShellAction.NextBookmark),
+            Key.OemOpenBrackets => new(ShellAction.PreviousBookmark),
             _ => ShellCommand.None,
         };
     }

@@ -53,12 +53,42 @@ public sealed class FileTabState : IAsyncDisposable
     public List<Search> Searches { get; } = [];
     public bool FollowAll { get; set; } = true;
     public List<bool> FollowSearches { get; } = [];
-    public bool ShowContext { get; set; }
     public LogLevels Levels { get; set; } = LogLevels.All;
     public int? SelectedLine { get; set; }
-    public int? ExpandedLine { get; set; }
-    public int ContextAbove { get; set; } = 3;
-    public int ContextBelow { get; set; } = 10;
+
+    /// <summary>Buffer indices of bookmarked rows. In-session only; never saved to the session file.</summary>
+    /// <remarks>
+    /// Guarded by an internal lock inside this class. External readers (tests) must not enumerate it while
+    /// the buffer can change off-thread (an Elastic connection replacement clears it); use <see cref="IsBookmarked"/>.
+    /// </remarks>
+    public SortedSet<int> Bookmarks { get; } = [];
+
+    private readonly object _bookmarksGate = new();
+
+    /// <summary>Bumped whenever <see cref="Bookmarks"/> changes, so rows re-render their glyph.</summary>
+    public int BookmarksVersion { get; private set; }
+
+    public bool IsBookmarked(Line line)
+    {
+        lock (_bookmarksGate)
+        {
+            foreach (var index in Bookmarks)
+                if (index >= 0 && index < Buffer.Count && ReferenceEquals(Buffer[index], line))
+                    return true;
+            return false;
+        }
+    }
+
+    internal void ToggleBookmarkAt(int index)
+    {
+        lock (_bookmarksGate)
+        {
+            if (!Bookmarks.Remove(index))
+                Bookmarks.Add(index);
+            BookmarksVersion++;
+        }
+    }
+
     public AppTimeZoneMode ElasticInputZone { get; set; } = AppTimeZoneMode.Utc;
     public string ElasticFrom { get; set; } = "now-5m";
     public string ElasticTo { get; set; } = "now";
@@ -72,11 +102,6 @@ public sealed class FileTabState : IAsyncDisposable
     public bool Ephemeral { get; internal init; }
     public ILogTailer Tailer { get; internal set; }
     public string DisplayName => Source.DisplayName;
-
-    public IReadOnlyList<Line> ContextLines =>
-        SelectedLine is int selected && selected >= 0 && selected < Buffer.Count
-            ? Buffer.GetContextWindow(selected, ContextAbove, ContextBelow)
-            : [];
 
     public void AddSearch(Search search)
     {
@@ -165,6 +190,31 @@ public sealed class FileTabState : IAsyncDisposable
 
     private void OnBufferChanged(BufferChange change)
     {
+        lock (_bookmarksGate)
+        {
+            if (Bookmarks.Count > 0)
+            {
+                if (change.Cleared)
+                {
+                    Bookmarks.Clear();
+                    BookmarksVersion++;
+                }
+                else if (change.RolledOutCount > 0)
+                {
+                    var shifted = Bookmarks
+                        .Select(index => index - change.RolledOutCount)
+                        .Where(index => index >= 0)
+                        .ToList();
+                    var dropped = shifted.Count < Bookmarks.Count;
+                    Bookmarks.Clear();
+                    Bookmarks.UnionWith(shifted);
+                    // An index-only shift keeps the same lines bookmarked (rows compare by Line reference).
+                    if (dropped)
+                        BookmarksVersion++;
+                }
+            }
+        }
+
         if (change.Cleared || SelectedLine is null)
             SelectedLine = null;
         else if (change.RolledOutCount > 0)
@@ -172,15 +222,6 @@ public sealed class FileTabState : IAsyncDisposable
             SelectedLine -= change.RolledOutCount;
             if (SelectedLine < 0)
                 SelectedLine = null;
-        }
-
-        if (change.Cleared || ExpandedLine is null)
-            ExpandedLine = null;
-        else if (change.RolledOutCount > 0)
-        {
-            ExpandedLine -= change.RolledOutCount;
-            if (ExpandedLine < 0)
-                ExpandedLine = null;
         }
     }
 }

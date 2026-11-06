@@ -233,9 +233,10 @@ public partial class MainWindow : Window
                 Height = Height,
                 X = Position.X,
                 Y = Position.Y,
-                ContextPaneSize = ViewModel.State.Window.ContextPaneSize,
                 SidebarCollapsed = !ViewModel.SidebarOpen,
                 SidebarWidth = ViewModel.SidebarWidth,
+                InspectorOpen = ViewModel.Inspector.IsOpen,
+                InspectorWidth = ViewModel.Inspector.Width,
             }
         );
         await ViewModel.DisposeAsync();
@@ -292,9 +293,7 @@ public partial class MainWindow : Window
         var onLogRow =
             e.Key == Key.Space
             && e.Source is Visual source
-            && source.FindAncestorOfType<ListBox>(includeSelf: true)?.Name
-                is "LogList"
-                    or "ContextList";
+            && source.FindAncestorOfType<ListBox>(includeSelf: true)?.Name is "LogList";
         if (e.Key != Key.Tab && !onLogRow)
             return;
         var command = ShellShortcuts.Resolve(e.Key, e.KeyModifiers, textInputFocused: false);
@@ -351,6 +350,9 @@ public partial class MainWindow : Window
             case ShellAction.ToggleSidebar:
                 ViewModel.ToggleSidebarCommand.Execute().Subscribe();
                 break;
+            case ShellAction.ToggleInspector:
+                ViewModel.Inspector.Toggle();
+                break;
             case ShellAction.TogglePause:
                 ViewModel.TogglePauseCommand.Execute().Subscribe();
                 break;
@@ -385,6 +387,15 @@ public partial class MainWindow : Window
                 break;
             case ShellAction.PreviousMatch when file is not null:
                 file.SelectedView.MoveToMatch(-1);
+                break;
+            case ShellAction.ToggleBookmark when file is not null:
+                ViewModel.Inspector.ToggleBookmarkOnSelection();
+                break;
+            case ShellAction.NextBookmark when file is not null:
+                file.SelectedView.MoveToBookmark(1);
+                break;
+            case ShellAction.PreviousBookmark when file is not null:
+                file.SelectedView.MoveToBookmark(-1);
                 break;
             case ShellAction.ScrollToTop:
                 this.GetVisualDescendants()

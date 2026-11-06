@@ -185,6 +185,56 @@ public sealed class SettingsReflowTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task ModalIsCompactAndLimitsStayInsideNarrowWindows()
+    {
+        var window = TestWindow.Create(out var owner);
+        try
+        {
+            owner.SettingsOpen = true;
+            owner.Settings.SectionIndex = 2;
+            window.Width = 1280;
+            window.Height = 800;
+            window.Show();
+            Settle(window);
+            var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
+            var modal = panel
+                .GetVisualDescendants()
+                .OfType<Border>()
+                .Single(border => border.Classes.Contains("settings-modal"));
+            Assert.Equal(960, modal.Bounds.Width, 1);
+            Assert.Equal(640, modal.Bounds.Height, 1);
+            var tabs = panel.GetVisualDescendants().OfType<TabControl>().Single();
+            Assert.Equal(Dock.Left, tabs.TabStripPlacement);
+
+            window.Width = 720;
+            window.Height = 560;
+            Settle(window);
+            Assert.True(modal.Bounds.Width <= window.Bounds.Width + 1);
+            Assert.True(modal.Bounds.Height <= window.Bounds.Height + 1);
+            var boxes = panel
+                .GetVisualDescendants()
+                .OfType<NumericUpDown>()
+                .Where(box => box.IsEffectivelyVisible)
+                .ToArray();
+            Assert.Equal(4, boxes.Length);
+            foreach (var box in boxes)
+            {
+                var left = box.TranslatePoint(default, panel)!.Value.X;
+                Assert.InRange(left, -1, panel.Bounds.Width);
+                Assert.True(
+                    left + box.Bounds.Width <= panel.Bounds.Width + 1,
+                    $"{box.Name} extends beyond settings"
+                );
+            }
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+        }
+    }
+
     private static void Settle(Window window)
     {
         Dispatcher.UIThread.RunJobs();
