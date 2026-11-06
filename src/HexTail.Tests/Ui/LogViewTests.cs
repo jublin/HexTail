@@ -55,7 +55,7 @@ public sealed class LogViewTests
             );
             Assert.Equal(
                 ["error"],
-                file.Model.Searches.Where(search => search.IsGlobalLabel)
+                file.Model.Searches.Where(search => search.IsGlobalRule)
                     .Select(search => search.Query.Query)
             );
             // The rule pass should only evaluate rules not already supplied by search tabs.
@@ -65,7 +65,7 @@ public sealed class LogViewTests
                 RuleSet.For(state.Settings.Rules).Highlights(sample)
             );
             Assert.Single(
-                file.Model.Searches.Single(search => search.IsGlobalLabel).GetHighlights(sample)
+                file.Model.Searches.Single(search => search.IsGlobalRule).GetHighlights(sample)
             );
             file.Model.ShowContext = true;
             file.Views[0].Sync();

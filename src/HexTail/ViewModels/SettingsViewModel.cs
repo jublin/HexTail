@@ -432,20 +432,8 @@ internal sealed class SettingsViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(CanAddExclusion));
     }
 
-    internal static string? ValidateRule(string text, MatchMode mode)
-    {
-        if (mode is not MatchMode.Regex)
-            return null;
-        try
-        {
-            _ = new CompiledQuery(text, mode, caseSensitive: false);
-            return null;
-        }
-        catch (ArgumentException ex)
-        {
-            return ex.Message;
-        }
-    }
+    internal static string? ValidateRule(string text, MatchMode mode) =>
+        RuleValidation.Validate(text, mode);
 
     internal void Sync(AppSettings settings)
     {

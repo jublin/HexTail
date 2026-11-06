@@ -27,4 +27,13 @@ internal static class TestRules
             Action = RuleAction.Hide,
             Scope = RuleScope.Global,
         };
+
+    public static ViewRule Source(string pattern, RuleAction action = RuleAction.Highlight) =>
+        new()
+        {
+            Pattern = pattern,
+            Mode = CompiledQuery.DetectMode(pattern),
+            Action = action,
+            Scope = RuleScope.Source,
+        };
 }

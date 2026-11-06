@@ -130,17 +130,17 @@ public sealed class Search
 {
     private readonly List<int> _results = [];
 
-    public Search(CompiledQuery query, string color, FileBuffer buffer, bool isGlobalLabel = false)
+    public Search(CompiledQuery query, string color, FileBuffer buffer, bool isGlobalRule = false)
     {
         Query = query;
         Color = color;
-        IsGlobalLabel = isGlobalLabel;
+        IsGlobalRule = isGlobalRule;
         ScanAppended(buffer, 0);
     }
 
     public CompiledQuery Query { get; }
     public string Color { get; }
-    public bool IsGlobalLabel { get; }
+    public bool IsGlobalRule { get; }
 
     /// <summary>Indices of matching lines in the parent buffer, ascending.</summary>
     public IReadOnlyList<int> Results => _results;

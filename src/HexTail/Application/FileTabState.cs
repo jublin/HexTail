@@ -87,7 +87,7 @@ public sealed class FileTabState : IAsyncDisposable
 
     public bool RemoveSearch(Search search)
     {
-        if (search.IsGlobalLabel)
+        if (search.IsGlobalRule)
             return false;
         var index = Searches.IndexOf(search);
         if (index < 0)
@@ -131,7 +131,7 @@ public sealed class FileTabState : IAsyncDisposable
     {
         for (var index = Searches.Count - 1; index >= 0; index--)
         {
-            if (!Searches[index].IsGlobalLabel)
+            if (!Searches[index].IsGlobalRule)
                 continue;
             Buffer.RemoveSearch(Searches[index]);
             Searches.RemoveAt(index);
