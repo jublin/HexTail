@@ -65,6 +65,10 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, OnDrop);
         Opened += OnOpened;
         Closed += OnClosed;
+        // Whatever else moves or clears focus while Settings is open (the dialog host grabbing it
+        // as it opens, the close button being disabled mid-command), pull it back into the panel.
+        AddHandler(GotFocusEvent, OnFocusChangedWhileSettingsOpen, RoutingStrategies.Bubble, true);
+        AddHandler(LostFocusEvent, OnFocusChangedWhileSettingsOpen, RoutingStrategies.Bubble, true);
         SizeChanged += (_, args) => ViewModel.SetShellWidth(args.NewSize.Width);
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         ViewModel.FocusSearchRequested += (_, _) =>
@@ -99,6 +103,27 @@ public partial class MainWindow : Window
         button.PropertyChanged += OnSettingsCloseButtonPropertyChanged;
     }
 
+    private void OnFocusChangedWhileSettingsOpen(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel.SettingsOpen && !SettingsFocusInPanel())
+            Dispatcher.UIThread.Post(
+                () =>
+                {
+                    if (ViewModel.SettingsOpen && !SettingsFocusInPanel())
+                        TryFocusSettingsClose();
+                },
+                DispatcherPriority.Background
+            );
+    }
+
+    private Button? FindSettingsCloseButton() =>
+        this.GetVisualDescendants()
+            .OfType<SettingsPanel>()
+            .FirstOrDefault()
+            ?.FindControl<Button>("SettingsCloseButton");
+
+    private bool TryFocusSettingsClose() => FindSettingsCloseButton()?.Focus() == true;
+
     private bool SettingsFocusInPanel() =>
         FocusManager?.GetFocusedElement() is Control focused
         && focused.GetVisualAncestors().OfType<SettingsPanel>().Any();
@@ -122,10 +147,7 @@ public partial class MainWindow : Window
     {
         if (ViewModel.SettingsOpen)
         {
-            var closeButton = this.GetVisualDescendants()
-                .OfType<SettingsPanel>()
-                .FirstOrDefault()
-                ?.FindControl<Button>("SettingsCloseButton");
+            var closeButton = FindSettingsCloseButton();
             WatchSettingsCloseButton(closeButton);
             // The panel may not be laid out yet on the first pass, so Focus() can be refused; retry.
             if (closeButton?.Focus() != true && attemptsLeft > 0)

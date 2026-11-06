@@ -93,6 +93,10 @@ public sealed class AccessibilityTests
             Assert.False(FocusInPanel(window, panel));
             close.IsEnabled = true;
             await UiWait.Until(() => FocusInPanel(window, panel));
+
+            // Focus pulled out by anything else (the dialog host grabbing it as it opens) comes back.
+            Assert.True(window.FindControl<Control>("SettingsButton")!.Focus());
+            await UiWait.Until(() => FocusInPanel(window, panel));
         }
         finally
         {
