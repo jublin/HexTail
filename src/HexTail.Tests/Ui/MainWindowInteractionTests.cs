@@ -556,7 +556,11 @@ public sealed class MainWindowInteractionTests
             .OfType<TextBox>()
             .Single(textBox => textBox.PlaceholderText == "Text to highlight")
             .Text = "WARN";
-        await WaitFor(() => viewModel.State.Settings.GlobalLabels[0].Text == "WARN");
+        await WaitFor(() =>
+            viewModel.State.Settings.Rules.Any(rule =>
+                rule.Action == RuleAction.Highlight && rule.Pattern == "WARN"
+            )
+        );
         Click(
             labelControls
                 .OfType<Button>()
@@ -579,7 +583,11 @@ public sealed class MainWindowInteractionTests
             .OfType<TextBox>()
             .Single(textBox => textBox.PlaceholderText == "Text to hide")
             .Text = "probe";
-        await WaitFor(() => viewModel.State.Settings.GlobalExcludeLabels[0] == "probe");
+        await WaitFor(() =>
+            viewModel.State.Settings.Rules.Any(rule =>
+                rule.Action == RuleAction.Hide && rule.Pattern == "probe"
+            )
+        );
         Click(
             exclusionControls
                 .OfType<Button>()

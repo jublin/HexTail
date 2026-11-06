@@ -464,23 +464,24 @@ internal sealed class SettingsViewModel : ReactiveObject
             _syncing = false;
         }
 
-        while (Labels.Count > settings.GlobalLabels.Count)
+        var labelRules = settings.Rules.Where(IsLabelRule).ToList();
+        while (Labels.Count > labelRules.Count)
             Labels.RemoveAt(Labels.Count - 1);
-        for (var index = 0; index < settings.GlobalLabels.Count; index++)
+        for (var index = 0; index < labelRules.Count; index++)
         {
             if (index == Labels.Count)
                 Labels.Add(new LabelSettingViewModel(this, index));
-            Labels[index].Sync(settings.GlobalLabels[index]);
+            Labels[index].Sync(labelRules[index]);
         }
 
-        while (Exclusions.Count > settings.GlobalExcludeLabels.Count)
+        var exclusionRules = settings.Rules.Where(IsExclusionRule).ToList();
+        while (Exclusions.Count > exclusionRules.Count)
             Exclusions.RemoveAt(Exclusions.Count - 1);
-        for (var index = 0; index < settings.GlobalExcludeLabels.Count; index++)
+        for (var index = 0; index < exclusionRules.Count; index++)
         {
             if (index == Exclusions.Count)
                 Exclusions.Add(new ExclusionSettingViewModel(this, index));
-            var text = settings.GlobalExcludeLabels[index];
-            Exclusions[index].Sync(text, settings.GetExcludeMode(text));
+            Exclusions[index].Sync(exclusionRules[index].Pattern, exclusionRules[index].Mode);
         }
 
         var persistedConnectionIds = settings
@@ -510,6 +511,23 @@ internal sealed class SettingsViewModel : ReactiveObject
             SelectedElasticConnection = ElasticConnections.FirstOrDefault();
     }
 
+    private static bool IsLabelRule(ViewRule rule) => rule.Action == RuleAction.Highlight;
+
+    private static bool IsExclusionRule(ViewRule rule) => rule.Action == RuleAction.Hide;
+
+    private static int AbsoluteIndex(
+        IReadOnlyList<ViewRule> rules,
+        Func<ViewRule, bool> kind,
+        int index
+    )
+    {
+        var seen = -1;
+        for (var position = 0; position < rules.Count; position++)
+            if (kind(rules[position]) && ++seen == index)
+                return position;
+        return -1;
+    }
+
     internal Task CommitLabelAsync(
         int index,
         string text,
@@ -518,36 +536,28 @@ internal sealed class SettingsViewModel : ReactiveObject
         MatchMode mode
     )
     {
-        var labels = _owner.State.Settings.GlobalLabels.ToList();
-        if (index < 0 || index >= labels.Count)
+        var rules = _owner.State.Settings.Rules.ToList();
+        var at = AbsoluteIndex(rules, IsLabelRule, index);
+        if (at < 0)
             return Task.CompletedTask;
-        labels[index] = new GlobalLabel
+        rules[at] = rules[at] with
         {
-            Text = text,
+            Pattern = text,
             Mode = mode,
             Color = ColorToHex(color),
-            ShowInOpenFile = showInOpenFile,
+            PinnedAsTab = showInOpenFile,
         };
-        return CommitAsync(_owner.State.Settings with { GlobalLabels = labels });
+        return CommitAsync(_owner.State.Settings with { Rules = rules });
     }
 
     internal Task CommitExclusionAsync(int index, string text, MatchMode mode)
     {
-        var exclusions = _owner.State.Settings.GlobalExcludeLabels.ToList();
-        if (index < 0 || index >= exclusions.Count)
+        var rules = _owner.State.Settings.Rules.ToList();
+        var at = AbsoluteIndex(rules, IsExclusionRule, index);
+        if (at < 0)
             return Task.CompletedTask;
-        var modes = ExclusionModes();
-        exclusions[index] = text;
-        modes[text] = mode;
-        return CommitAsync(
-            _owner.State.Settings with
-            {
-                GlobalExcludeLabels = exclusions,
-                GlobalExcludeModes = modes
-                    .Where(pair => exclusions.Contains(pair.Key))
-                    .ToDictionary(),
-            }
-        );
+        rules[at] = rules[at] with { Pattern = text, Mode = mode };
+        return CommitAsync(_owner.State.Settings with { Rules = rules });
     }
 
     private void AddLabel()
@@ -557,15 +567,17 @@ internal sealed class SettingsViewModel : ReactiveObject
         _ = CommitAsync(
             _owner.State.Settings with
             {
-                GlobalLabels =
+                Rules =
                 [
-                    .. _owner.State.Settings.GlobalLabels,
-                    new GlobalLabel
+                    .. _owner.State.Settings.Rules,
+                    new ViewRule
                     {
-                        Text = NewLabelText,
+                        Pattern = NewLabelText,
                         Mode = NewLabelMode,
                         Color = ColorToHex(NewLabelColor),
-                        ShowInOpenFile = true,
+                        Action = RuleAction.Highlight,
+                        Scope = RuleScope.Global,
+                        PinnedAsTab = true,
                     },
                 ],
             }
@@ -573,58 +585,43 @@ internal sealed class SettingsViewModel : ReactiveObject
         NewLabelText = string.Empty;
     }
 
-    private void RemoveLabel(LabelSettingViewModel item)
-    {
-        var labels = _owner
-            .State.Settings.GlobalLabels.Where((_, index) => index != item.Index)
-            .ToList();
-        _ = CommitAsync(_owner.State.Settings with { GlobalLabels = labels });
-    }
+    private void RemoveLabel(LabelSettingViewModel item) => RemoveRule(IsLabelRule, item.Index);
 
     private void AddExclusion()
     {
         if (!CanAddExclusion)
             return;
-        var modes = ExclusionModes();
-        modes[NewExclusionText] = NewExclusionMode;
         _ = CommitAsync(
             _owner.State.Settings with
             {
-                GlobalExcludeLabels =
+                Rules =
                 [
-                    .. _owner.State.Settings.GlobalExcludeLabels,
-                    NewExclusionText,
+                    .. _owner.State.Settings.Rules,
+                    new ViewRule
+                    {
+                        Pattern = NewExclusionText,
+                        Mode = NewExclusionMode,
+                        Action = RuleAction.Hide,
+                        Scope = RuleScope.Global,
+                    },
                 ],
-                GlobalExcludeModes = modes,
             }
         );
         NewExclusionText = string.Empty;
     }
 
-    private void RemoveExclusion(ExclusionSettingViewModel item)
-    {
-        var exclusions = _owner
-            .State.Settings.GlobalExcludeLabels.Where((_, index) => index != item.Index)
-            .ToList();
-        _ = CommitAsync(
-            _owner.State.Settings with
-            {
-                GlobalExcludeLabels = exclusions,
-                GlobalExcludeModes = ExclusionModes()
-                    .Where(pair => exclusions.Contains(pair.Key))
-                    .ToDictionary(),
-            }
-        );
-    }
+    private void RemoveExclusion(ExclusionSettingViewModel item) =>
+        RemoveRule(IsExclusionRule, item.Index);
 
-    private Dictionary<string, MatchMode> ExclusionModes() =>
-        _owner
-            .State.Settings.GlobalExcludeLabels.Distinct(StringComparer.Ordinal)
-            .ToDictionary(
-                text => text,
-                _owner.State.Settings.GetExcludeMode,
-                StringComparer.Ordinal
-            );
+    private void RemoveRule(Func<ViewRule, bool> kind, int index)
+    {
+        var rules = _owner.State.Settings.Rules.ToList();
+        var at = AbsoluteIndex(rules, kind, index);
+        if (at < 0)
+            return;
+        rules.RemoveAt(at);
+        _ = CommitAsync(_owner.State.Settings with { Rules = rules });
+    }
 
     internal async Task CommitAsync(AppSettings settings)
     {
@@ -799,18 +796,18 @@ internal sealed class LabelSettingViewModel : ReactiveObject
         }
     }
 
-    internal void Sync(GlobalLabel label)
+    internal void Sync(ViewRule rule)
     {
-        if (HasValidationError && label.Text == _persistedText)
+        if (HasValidationError && rule.Pattern == _persistedText)
             return;
-        _persistedText = label.Text;
+        _persistedText = rule.Pattern;
         _syncing = true;
         try
         {
-            Text = label.Text;
-            Mode = label.Mode ?? CompiledQuery.DetectMode(label.Text);
-            Color = Avalonia.Media.Color.Parse(label.Color);
-            ShowInOpenFile = label.ShowInOpenFile;
+            Text = rule.Pattern;
+            Mode = rule.Mode;
+            Color = Avalonia.Media.Color.Parse(rule.Color);
+            ShowInOpenFile = rule.PinnedAsTab;
         }
         finally
         {

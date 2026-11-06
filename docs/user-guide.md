@@ -35,6 +35,8 @@ Closing Settings with Elastic drafts offers **Save changes**, **Discard changes*
 
 Passwords and API keys are stored in the operating-system credential vault, never in `session.json`. Authenticated configuration fails closed when the vault is unavailable. Linux needs an active Secret Service session and `libsecret`. See [native build and platform setup](native-build.md).
 
+**Upgrading the session file.** The first launch of this version migrates `session.json` (global labels and exclusions become filter rules) and keeps the original as `session.v1.json.bak` in the same folder. Going back to an older build afterwards loses labels and exclusions; copy the backup over `session.json` to recover them. If `session.json` cannot be read, or was written by a newer build, HexTail copies it to `session.unreadable.bak` before saving anything new. An existing backup is never overwritten; a later, different file is kept under a timestamped name such as `session.unreadable.20260101120000.bak`.
+
 ## Set an Elastic log interval
 
 A newly opened source initially loads the previous five minutes. Select an Elastic source and click the clock pill in the top toolbar. It shows the applied range and state, for example **Last 5 min · live**, and its tooltip shows the exact applied instants in the display zone. The pill opens the time range:
@@ -58,7 +60,7 @@ Preset offsets are relative to the load's clock. Live polling appends from the l
 
 Connection and source health describe reachability and authentication: an untested or failed connection is not shown as connected. Open errors appear under the source in the sidebar, and hovering a source shows whether its logs are closed, loading, live, historical, or failed. A reachable server can still have a failed log query or an interval with no logs; read the selected tab's load status and result message as well.
 
-Each view distinguishes loading, query failure, no returned logs, no search matches, and logs hidden by global exclusions. Counts show **visible** rows and rows **loaded from source**, not the server's total matching count.
+Each view distinguishes loading, query failure, no returned logs, no search matches, and logs hidden by filter rules. Counts show **visible** rows and rows **loaded from source**, not the server's total matching count.
 
 The initial fetch is bounded (10,000 newest logs by default). If the initial limit is reached, the view says that the interval may contain more logs. Narrow the interval to inspect earlier history. The application also keeps a bounded log buffer, so a long-running session does not retain every row indefinitely.
 

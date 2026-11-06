@@ -6,6 +6,10 @@ namespace HexTail.Application;
 
 public sealed class FileTabState : IAsyncDisposable
 {
+    private IReadOnlyList<ViewRule>? _effectiveGlobal;
+    private IReadOnlyList<ViewRule>? _effectiveSource;
+    private RuleSet _effectiveRules = RuleSet.Empty;
+
     internal FileTabState(
         string id,
         string path,
@@ -50,6 +54,7 @@ public sealed class FileTabState : IAsyncDisposable
     public bool FollowAll { get; set; } = true;
     public List<bool> FollowSearches { get; } = [];
     public bool ShowContext { get; set; }
+    public LogLevels Levels { get; set; } = LogLevels.All;
     public int? SelectedLine { get; set; }
     public int? ExpandedLine { get; set; }
     public int ContextAbove { get; set; } = 3;
@@ -93,7 +98,36 @@ public sealed class FileTabState : IAsyncDisposable
         return Buffer.RemoveSearch(search);
     }
 
-    public void SyncGlobalLabelSearches(IEnumerable<GlobalLabel> labels)
+    /// <summary>Source-scope rules for this open source.</summary>
+    public IReadOnlyList<ViewRule> Rules { get; private set; } = [];
+
+    /// <summary>Bumped whenever <see cref="Rules"/> is replaced, so views re-render highlights.</summary>
+    public int RulesVersion { get; private set; }
+
+    public void SetRules(IEnumerable<ViewRule> rules)
+    {
+        Rules = rules.ToList();
+        RulesVersion++;
+    }
+
+    /// <summary>Global + source rules. UI thread only (it caches the last combination).</summary>
+    public RuleSet EffectiveRules(AppSettings settings)
+    {
+        // RestoreAsync may call SetRules off the UI thread: read each list once.
+        var global = settings.Rules;
+        var source = Rules;
+        if (
+            !ReferenceEquals(_effectiveGlobal, global) || !ReferenceEquals(_effectiveSource, source)
+        )
+        {
+            _effectiveRules = RuleSet.Combine(global, source);
+            _effectiveGlobal = global;
+            _effectiveSource = source;
+        }
+        return _effectiveRules;
+    }
+
+    public void SyncGlobalRuleSearches(IEnumerable<ViewRule> rules)
     {
         for (var index = Searches.Count - 1; index >= 0; index--)
         {
@@ -104,17 +138,17 @@ public sealed class FileTabState : IAsyncDisposable
             FollowSearches.RemoveAt(index);
         }
 
-        foreach (var label in labels.Where(label => label.ShowInOpenFile))
+        foreach (
+            var rule in rules.Where(rule =>
+                rule.Enabled && rule.PinnedAsTab && rule.Action != RuleAction.Hide
+            )
+        )
             try
             {
                 AddSearch(
                     new Search(
-                        new CompiledQuery(
-                            label.Text,
-                            label.Mode ?? CompiledQuery.DetectMode(label.Text),
-                            false
-                        ),
-                        label.Color,
+                        new CompiledQuery(rule.Pattern, rule.Mode, rule.CaseSensitive),
+                        rule.Color,
                         Buffer,
                         true
                     )

@@ -187,7 +187,7 @@ public sealed class FollowAndPauseTests
             await viewModel.State.UpdateSettingsAsync(
                 viewModel.State.Settings with
                 {
-                    GlobalExcludeLabels = ["line 9"],
+                    Rules = [TestRules.Hide("line 9")],
                 }
             );
             view.Sync();

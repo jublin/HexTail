@@ -130,7 +130,11 @@ internal sealed class LogLineViewModel : ReactiveObject
         ParsedFieldsText = Line.ParsedFields is { Count: > 0 }
             ? string.Join("  ", Line.ParsedFields.Select(field => $"{field.Key}={field.Value}"))
             : string.Empty;
-        Spans = _file.HighlightSpans.Get(Line, _file.Model.Searches, settings);
+        Spans = _file.HighlightSpans.Get(
+            Line,
+            _file.Model.Searches,
+            _file.Model.EffectiveRules(settings)
+        );
         this.RaisePropertyChanged(nameof(Spans));
         this.RaisePropertyChanged(nameof(ParsedFieldsText));
         _renderDirty = false;

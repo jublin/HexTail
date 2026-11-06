@@ -320,12 +320,17 @@ public sealed class AppState : IAsyncDisposable
                 .ConfigureAwait(false);
             tab.FollowAll = persisted.FollowAll;
             tab.ShowContext = persisted.ShowContext;
+            tab.SetRules(NormalizeRules(persisted.Rules, RuleScope.Source));
+            tab.Levels = NormalizeLevels(persisted.Levels);
             tab.SelectedLine = persisted.SelectedLine;
             tab.ContextAbove = persisted.ContextAbove;
             tab.ContextBelow = persisted.ContextBelow;
 
-            foreach (var search in persisted.Searches)
+            // Global-rule searches were added when the tab opened; the persisted lists only hold user
+            // searches, so each follow flag is applied to the search it was saved with.
+            for (var i = 0; i < persisted.Searches.Count; i++)
             {
+                var search = persisted.Searches[i];
                 try
                 {
                     var active = new Search(
@@ -334,15 +339,14 @@ public sealed class AppState : IAsyncDisposable
                         tab.Buffer
                     );
                     tab.AddSearch(active);
+                    if (i < persisted.FollowSearches.Count)
+                        tab.FollowSearches[^1] = persisted.FollowSearches[i];
                 }
                 catch (ArgumentException)
                 {
                     // A stale invalid regex must not prevent the rest of the session from loading.
                 }
             }
-
-            for (var i = 0; i < tab.FollowSearches.Count && i < persisted.FollowSearches.Count; i++)
-                tab.FollowSearches[i] = persisted.FollowSearches[i];
         }
         foreach (var persisted in config.OpenElasticTabs)
         {
@@ -360,9 +364,13 @@ public sealed class AppState : IAsyncDisposable
                     .ConfigureAwait(false);
                 tab.FollowAll = persisted.FollowAll;
                 tab.ShowContext = persisted.ShowContext;
+                tab.SetRules(NormalizeRules(persisted.Rules, RuleScope.Source));
+                tab.Levels = NormalizeLevels(persisted.Levels);
                 tab.ContextAbove = persisted.ContextAbove;
                 tab.ContextBelow = persisted.ContextBelow;
-                foreach (var search in persisted.Searches)
+                for (var i = 0; i < persisted.Searches.Count; i++)
+                {
+                    var search = persisted.Searches[i];
                     try
                     {
                         tab.AddSearch(
@@ -372,14 +380,11 @@ public sealed class AppState : IAsyncDisposable
                                 tab.Buffer
                             )
                         );
+                        if (i < persisted.FollowSearches.Count)
+                            tab.FollowSearches[^1] = persisted.FollowSearches[i];
                     }
                     catch (ArgumentException) { }
-                for (
-                    var i = 0;
-                    i < tab.FollowSearches.Count && i < persisted.FollowSearches.Count;
-                    i++
-                )
-                    tab.FollowSearches[i] = persisted.FollowSearches[i];
+                }
             }
             catch (ArgumentException) { }
             catch (InvalidOperationException) { }
@@ -448,7 +453,7 @@ public sealed class AppState : IAsyncDisposable
                     Error = File.Exists(fullPath) ? null : "File missing",
                     Ephemeral = ephemeral,
                 };
-                tab.SyncGlobalLabelSearches(_settings.GlobalLabels);
+                tab.SyncGlobalRuleSearches(_settings.Rules);
                 _files.Add(tab);
                 SelectedFile = tab;
             }
@@ -530,7 +535,7 @@ public sealed class AppState : IAsyncDisposable
             tab.ElasticTo = to;
             tab.ElasticInputZone = inputZone;
         }
-        tab.SyncGlobalLabelSearches(_settings.GlobalLabels);
+        tab.SyncGlobalRuleSearches(_settings.Rules);
         lock (_gate)
         {
             _files.Add(tab);
@@ -655,6 +660,47 @@ public sealed class AppState : IAsyncDisposable
         await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async ValueTask SetSourceRulesAsync(
+        FileTabState tab,
+        IEnumerable<ViewRule> rules,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(rules);
+        lock (_gate)
+        {
+            if (!_files.Contains(tab))
+                return;
+            tab.SetRules(NormalizeRules(rules, RuleScope.Source));
+        }
+        NotifyChanged();
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async ValueTask SetLevelsAsync(
+        FileTabState tab,
+        LogLevels levels,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        lock (_gate)
+        {
+            if (!_files.Contains(tab))
+                return;
+            tab.Levels = NormalizeLevels(levels);
+        }
+        NotifyChanged();
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static LogLevels NormalizeLevels(LogLevels levels)
+    {
+        var known = levels & LogLevels.All;
+        return known == LogLevels.None ? LogLevels.All : known;
+    }
+
     public async ValueTask SetShowContextAsync(
         FileTabState tab,
         bool value,
@@ -738,7 +784,7 @@ public sealed class AppState : IAsyncDisposable
         {
             _settings = NormalizeSettings(settings);
             foreach (var file in _files)
-                file.SyncGlobalLabelSearches(_settings.GlobalLabels);
+                file.SyncGlobalRuleSearches(_settings.Rules);
         }
         NotifyChanged();
         SignalHealthCheck();
@@ -896,6 +942,8 @@ public sealed class AppState : IAsyncDisposable
                             .Select(item => tab.FollowSearches[item.index])
                             .ToList(),
                         ShowContext = tab.ShowContext,
+                        Rules = [.. tab.Rules],
+                        Levels = tab.Levels,
                         SelectedLine = tab.SelectedLine,
                         ContextAbove = tab.ContextAbove,
                         ContextBelow = tab.ContextBelow,
@@ -928,6 +976,8 @@ public sealed class AppState : IAsyncDisposable
                             .Select(item => tab.FollowSearches[item.index])
                             .ToList(),
                         ShowContext = tab.ShowContext,
+                        Rules = [.. tab.Rules],
+                        Levels = tab.Levels,
                         SelectedLine = tab.SelectedLine,
                         ContextAbove = tab.ContextAbove,
                         ContextBelow = tab.ContextBelow,
@@ -1019,39 +1069,12 @@ public sealed class AppState : IAsyncDisposable
 
     private static AppSettings NormalizeSettings(AppSettings settings)
     {
-        var labels = (settings.GlobalLabels ?? [])
-            .OfType<GlobalLabel>()
-            .Where(label => !string.IsNullOrWhiteSpace(label.Text))
-            .Select(label => new GlobalLabel
-            {
-                Text = label.Text.Trim(),
-                Color = NormalizeColor(label.Color),
-                ShowInOpenFile = label.ShowInOpenFile,
-                Mode = label.Mode ?? CompiledQuery.DetectMode(label.Text),
-            })
-            .DistinctBy(label => label.Text, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        var exclusions = (settings.GlobalExcludeLabels ?? [])
-            .Where(label => !string.IsNullOrWhiteSpace(label))
-            .Select(label => label.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
         return new AppSettings
         {
             MaxLines = settings.MaxLines,
             ContextAbove = settings.ContextAbove,
             ContextBelow = settings.ContextBelow,
-            GlobalLabels = labels,
-            GlobalExcludeLabels = exclusions,
-            GlobalExcludeModes = (settings.GlobalExcludeLabels ?? [])
-                .Where(label => !string.IsNullOrWhiteSpace(label))
-                .GroupBy(label => label.Trim(), StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(
-                    group => group.Key,
-                    group => settings.GetExcludeMode(group.First()),
-                    StringComparer.OrdinalIgnoreCase
-                ),
+            Rules = NormalizeRules(settings.Rules, RuleScope.Global),
             Theme = ThemeCatalog.Normalize(settings.Theme),
             Density = Enum.IsDefined(settings.Density) ? settings.Density : UiDensity.Comfortable,
             LogFontSize = Enum.IsDefined(settings.LogFontSize)
@@ -1064,6 +1087,37 @@ public sealed class AppState : IAsyncDisposable
             ElasticConnections = NormalizeElasticConnections(settings.ElasticConnections),
         };
     }
+
+    internal static List<ViewRule> NormalizeRules(IEnumerable<ViewRule>? rules, RuleScope scope) =>
+        (rules ?? [])
+            .OfType<ViewRule>()
+            .Where(rule => !string.IsNullOrWhiteSpace(rule.Pattern))
+            .Select(rule =>
+                rule with
+                {
+                    Pattern = rule.Pattern.Trim(),
+                    Color = NormalizeColor(rule.Color),
+                    Scope = scope,
+                    Mode = Enum.IsDefined(rule.Mode)
+                        ? rule.Mode
+                        : CompiledQuery.DetectMode(rule.Pattern),
+                    Action = Enum.IsDefined(rule.Action) ? rule.Action : RuleAction.Highlight,
+                    // Only global rules own a view tab; pinning source rules is not supported yet.
+                    PinnedAsTab =
+                        scope == RuleScope.Global
+                        && rule.PinnedAsTab
+                        && rule.Action != RuleAction.Hide,
+                }
+            )
+            .DistinctBy(rule =>
+                (
+                    rule.CaseSensitive ? rule.Pattern : rule.Pattern.ToUpperInvariant(),
+                    rule.CaseSensitive,
+                    rule.Mode,
+                    rule.Action
+                )
+            )
+            .ToList();
 
     private static List<ElasticConnectionSettings> NormalizeElasticConnections(
         IEnumerable<ElasticConnectionSettings>? connections

@@ -140,6 +140,15 @@ system application-data directory. The file is written atomically and stores
 open paths, searches, settings, window geometry, and context-pane size. Remove
 that file when a clean first-launch session is needed.
 
+The first launch of this version migrates `session.json` to the rule-based
+format (global labels and exclusions become rules) and keeps the original next
+to it as `session.v1.json.bak`. An older build cannot read the migrated file, so
+going back to one loses labels and exclusions; copy the backup over
+`session.json` to recover them. A file that cannot be read, or that a newer
+build wrote, is copied to `session.unreadable.bak` before anything is saved.
+An existing backup is never overwritten: a later, different file is kept under a
+timestamped name such as `session.unreadable.20260101120000.bak`.
+
 ## Development
 
 Restore, build, and test the solution with:

@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using HexTail.Domain;
 using HexTail.Persistence;
 using HexTail.Tests.Support;
+using HexTail.ViewModels;
 
 namespace HexTail.Tests.Ui;
 
@@ -19,20 +20,22 @@ public sealed class GlobalRuleTests
         owner.Settings.AddLabelCommand.Execute().Subscribe();
         owner.Settings.AddExclusionCommand.Execute().Subscribe();
         Dispatcher.UIThread.RunJobs();
-        Assert.Equal(MatchMode.Literal, Assert.Single(owner.State.Settings.GlobalLabels).Mode);
-        Assert.Equal(MatchMode.Literal, owner.State.Settings.GetExcludeMode("[ERROR]"));
-        Assert.False(owner.State.Settings.Excludes("READY"));
-        Assert.True(owner.State.Settings.Excludes("[ERROR] failed"));
+        Assert.Equal(MatchMode.Literal, Assert.Single(HighlightRules(owner)).Mode);
+        Assert.Equal(MatchMode.Literal, Assert.Single(HideRules(owner)).Mode);
+        Assert.False(IsHidden(owner, "READY"));
+        Assert.True(IsHidden(owner, "[ERROR] failed"));
 
         var exclusion = Assert.Single(owner.Settings.Exclusions);
         exclusion.Text = "health|probe";
         Dispatcher.UIThread.RunJobs();
-        Assert.Equal(MatchMode.Literal, owner.State.Settings.GetExcludeMode("health|probe"));
-        Assert.False(owner.State.Settings.Excludes("health"));
+        var edited = Assert.Single(HideRules(owner));
+        Assert.Equal("health|probe", edited.Pattern);
+        Assert.Equal(MatchMode.Literal, edited.Mode);
+        Assert.False(IsHidden(owner, "health"));
         exclusion.Mode = MatchMode.Regex;
         Dispatcher.UIThread.RunJobs();
-        Assert.True(owner.State.Settings.Excludes("health"));
-        Assert.DoesNotContain("[ERROR]", owner.State.Settings.GlobalExcludeModes.Keys);
+        Assert.True(IsHidden(owner, "health"));
+        Assert.DoesNotContain(HideRules(owner), rule => rule.Pattern == "[ERROR]");
         window.Close();
         await owner.DisposeAsync();
     }
@@ -46,8 +49,7 @@ public sealed class GlobalRuleTests
             {
                 Settings = new AppSettings
                 {
-                    GlobalLabels = [new GlobalLabel { Text = "ERROR|WARN" }],
-                    GlobalExcludeLabels = ["health|probe"],
+                    Rules = [TestRules.Highlight("ERROR|WARN"), TestRules.Hide("health|probe")],
                 },
             }
         );
@@ -59,8 +61,8 @@ public sealed class GlobalRuleTests
         exclusion.Text = "[";
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal("ERROR|WARN", Assert.Single(owner.State.Settings.GlobalLabels).Text);
-        Assert.Equal("health|probe", Assert.Single(owner.State.Settings.GlobalExcludeLabels));
+        Assert.Equal("ERROR|WARN", Assert.Single(HighlightRules(owner)).Pattern);
+        Assert.Equal("health|probe", Assert.Single(HideRules(owner)).Pattern);
         Assert.Equal("[", label.Text);
         Assert.Equal("[", exclusion.Text);
         Assert.False(string.IsNullOrEmpty(label.ValidationError));
@@ -73,8 +75,8 @@ public sealed class GlobalRuleTests
         owner.Settings.AddLabelCommand.Execute().Subscribe();
         owner.Settings.AddExclusionCommand.Execute().Subscribe();
         Dispatcher.UIThread.RunJobs();
-        Assert.Single(owner.State.Settings.GlobalLabels);
-        Assert.Single(owner.State.Settings.GlobalExcludeLabels);
+        Assert.Single(HighlightRules(owner));
+        Assert.Single(HideRules(owner));
         Assert.Equal("[", owner.Settings.NewLabelText);
         Assert.Equal("[", owner.Settings.NewExclusionText);
         Assert.False(string.IsNullOrEmpty(owner.Settings.NewLabelError));
@@ -84,10 +86,19 @@ public sealed class GlobalRuleTests
         Dispatcher.UIThread.RunJobs();
         Assert.Null(label.ValidationError);
         Assert.Null(exclusion.ValidationError);
-        Assert.Equal("[", Assert.Single(owner.State.Settings.GlobalLabels).Text);
-        Assert.True(owner.State.Settings.Excludes("[literal"));
-        Assert.False(owner.State.Settings.Excludes("ERROR"));
+        Assert.Equal("[", Assert.Single(HighlightRules(owner)).Pattern);
+        Assert.True(IsHidden(owner, "[literal"));
+        Assert.False(IsHidden(owner, "ERROR"));
         window.Close();
         await owner.DisposeAsync();
     }
+
+    private static List<ViewRule> HighlightRules(MainWindowViewModel owner) =>
+        [.. owner.State.Settings.Rules.Where(rule => rule.Action == RuleAction.Highlight)];
+
+    private static List<ViewRule> HideRules(MainWindowViewModel owner) =>
+        [.. owner.State.Settings.Rules.Where(rule => rule.Action == RuleAction.Hide)];
+
+    private static bool IsHidden(MainWindowViewModel owner, string text) =>
+        !RuleSet.For(owner.State.Settings.Rules).IsVisible(new Line(text));
 }

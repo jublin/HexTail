@@ -64,6 +64,47 @@ public sealed class AccessibilityTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task SettingsFocusReturnsWhenTheCloseButtonIsUsableAgain()
+    {
+        await using var owner = new MainWindowViewModel(
+            new AppState(
+                new LogSourceService(),
+                new TestPersistence(),
+                credentials: new InMemoryCredentialVault()
+            ),
+            startPolling: false
+        );
+        await owner.InitializeAsync();
+        var window = new MainWindow(owner, registerNativePicker: false);
+        try
+        {
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            await owner.ToggleSettingsCommand.Execute().FirstAsync();
+            Dispatcher.UIThread.RunJobs();
+            var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
+            await UiWait.Until(() => FocusInPanel(window, panel));
+
+            // The command bound to the close button disables it while it finishes, which drops focus.
+            var close = panel.FindControl<Button>("SettingsCloseButton")!;
+            close.IsEnabled = false;
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(FocusInPanel(window, panel));
+            close.IsEnabled = true;
+            await UiWait.Until(() => FocusInPanel(window, panel));
+
+            // Focus pulled out by anything else (the dialog host grabbing it as it opens) comes back.
+            Assert.True(window.FindControl<Control>("SettingsButton")!.Focus());
+            await UiWait.Until(() => FocusInPanel(window, panel));
+        }
+        finally
+        {
+            await owner.DisposeAsync();
+            window.Close();
+        }
+    }
+
     [AvaloniaTheory]
     [InlineData(RawInputModifiers.Control)]
     [InlineData(RawInputModifiers.Meta)]

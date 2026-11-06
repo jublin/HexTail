@@ -623,22 +623,27 @@ public sealed class AppStateTests
         await state.UpdateSettingsAsync(
             new AppSettings
             {
-                GlobalLabels =
+                Rules =
                 [
-                    new GlobalLabel { Text = " Error ", Color = "#ff0000" },
-                    new GlobalLabel { Text = "error", Color = "#00ff00" },
+                    TestRules.Highlight(" Error ", "#ff0000"),
+                    TestRules.Highlight("error", "#00ff00"),
+                    TestRules.Hide(" Health "),
+                    TestRules.Hide("health"),
+                    TestRules.Hide(""),
                 ],
-                GlobalExcludeLabels = [" Health ", "health", ""],
                 Theme = "not-a-theme",
                 SettingsMenuAlignment = SettingsMenuAlignment.Left,
             }
         );
 
         var settings = Assert.IsType<AppConfig>(persistence.Config).Settings;
-        var label = Assert.Single(settings.GlobalLabels);
-        Assert.Equal("Error", label.Text);
+        Assert.Equal(2, settings.Rules.Count);
+        var label = Assert.Single(settings.Rules, rule => rule.Action == RuleAction.Highlight);
+        Assert.Equal("Error", label.Pattern);
         Assert.Equal("#ff0000", label.Color);
-        Assert.Equal(["Health"], settings.GlobalExcludeLabels);
+        var exclusion = Assert.Single(settings.Rules, rule => rule.Action == RuleAction.Hide);
+        Assert.Equal("Health", exclusion.Pattern);
+        Assert.All(settings.Rules, rule => Assert.Equal(RuleScope.Global, rule.Scope));
         Assert.Equal("cyber-tail", settings.Theme);
         Assert.Equal(SettingsMenuAlignment.Right, settings.SettingsMenuAlignment);
     }
@@ -657,10 +662,7 @@ public sealed class AppStateTests
             var tab = await state.OpenFileAsync(path, save: false);
 
             await state.UpdateSettingsAsync(
-                new AppSettings
-                {
-                    GlobalLabels = [new GlobalLabel { Text = "error", Color = "#ff0000" }],
-                }
+                new AppSettings { Rules = [TestRules.Highlight("error", "#ff0000", pinned: true)] }
             );
 
             var search = Assert.Single(tab.Searches);
@@ -675,14 +677,13 @@ public sealed class AppStateTests
     [Fact]
     public void AppSettings_MatchesLabelsAndExclusionsCaseInsensitively()
     {
-        var settings = new AppSettings
-        {
-            GlobalLabels = [new GlobalLabel { Text = @"warn\s+id", Color = "#f59e0b" }],
-            GlobalExcludeLabels = [@"health\s+check"],
-        };
+        var rules = RuleSet.For([
+            TestRules.Highlight(@"warn\s+id", "#f59e0b"),
+            TestRules.Hide(@"health\s+check"),
+        ]);
 
-        Assert.True(settings.Excludes("GET /HEALTH CHECK"));
-        var highlight = settings.GetLabelHighlights("WARN ID: warn id").First();
+        Assert.False(rules.IsVisible(new Line("GET /HEALTH CHECK")));
+        var highlight = rules.Highlights(new Line("WARN ID: warn id")).First();
         Assert.Equal(0, highlight.Start);
         Assert.Equal(7, highlight.Length);
     }

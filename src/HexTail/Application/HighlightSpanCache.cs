@@ -1,5 +1,4 @@
 using HexTail.Domain;
-using HexTail.Persistence;
 
 namespace HexTail.Application;
 
@@ -15,7 +14,7 @@ internal sealed class HighlightSpanCache
     );
     private readonly LinkedList<Entry> _recent = new();
     private Search[] _searches = [];
-    private GlobalLabel[] _labels = [];
+    private RuleSet? _rules;
     private int _spanCount;
 
     internal HighlightSpanCache(int maxLines = 512, int maxSpans = 16_384)
@@ -29,18 +28,18 @@ internal sealed class HighlightSpanCache
     internal IReadOnlyList<HighlightSpan> Get(
         Line line,
         IReadOnlyList<Search> searches,
-        AppSettings settings
+        RuleSet rules
     )
     {
-        // Search queries/colors and label properties are immutable. Snapshot identities
-        // detect replacement, removal and reordering without hashing every pattern.
-        if (!_searches.SequenceEqual(searches) || !_labels.SequenceEqual(settings.GlobalLabels))
+        // Search queries/colors are immutable and rule sets are replaced, never mutated. Snapshot
+        // identities detect replacement, removal and reordering without hashing every pattern.
+        if (!_searches.SequenceEqual(searches) || !ReferenceEquals(_rules, rules))
         {
             _entries.Clear();
             _recent.Clear();
             _spanCount = 0;
             _searches = searches.ToArray();
-            _labels = settings.GlobalLabels.ToArray();
+            _rules = rules;
         }
         if (_entries.TryGetValue(line, out var cached))
         {
@@ -49,7 +48,7 @@ internal sealed class HighlightSpanCache
             return cached.Value.Spans;
         }
 
-        var spans = Compute(line, searches, settings);
+        var spans = Compute(line, searches, rules);
         // A single unusually dense line must not consume the entire cache budget.
         if (spans.Count > _maxSpans)
             return spans;
@@ -68,7 +67,7 @@ internal sealed class HighlightSpanCache
     private static IReadOnlyList<HighlightSpan> Compute(
         Line line,
         IReadOnlyList<Search> searches,
-        AppSettings settings
+        RuleSet rules
     )
     {
         var candidates = searches
@@ -78,8 +77,8 @@ internal sealed class HighlightSpanCache
                     .Select(range => new HighlightSpan(range.Start, range.Length, search.Color))
             )
             .Concat(
-                settings
-                    .GetLabelHighlights(line.Raw, includeSearchTabs: false)
+                rules
+                    .Highlights(line)
                     .Select(range => new HighlightSpan(range.Start, range.Length, range.Color))
             )
             .Where(span =>

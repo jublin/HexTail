@@ -25,20 +25,10 @@ public sealed class LogViewTests
         {
             var settings = new AppSettings
             {
-                GlobalLabels =
+                Rules =
                 [
-                    new GlobalLabel
-                    {
-                        Text = "error",
-                        Color = "#FF0000",
-                        ShowInOpenFile = true,
-                    },
-                    new GlobalLabel
-                    {
-                        Text = "warn",
-                        Color = "#00FF00",
-                        ShowInOpenFile = false,
-                    },
+                    TestRules.Highlight("error", "#FF0000", pinned: true),
+                    TestRules.Highlight("warn", "#00FF00"),
                 ],
             };
             await using var state = new AppState(
@@ -68,12 +58,15 @@ public sealed class LogViewTests
                 file.Model.Searches.Where(search => search.IsGlobalLabel)
                     .Select(search => search.Query.Query)
             );
-            // The settings pass should only evaluate labels not already supplied by search tabs.
+            // The rule pass should only evaluate rules not already supplied by search tabs.
+            var sample = new Line("error warn");
             Assert.Equal(
-                [new LabelHighlight(6, 4, "#00FF00")],
-                state.Settings.GetLabelHighlights("error warn", includeSearchTabs: false)
+                [new ColoredRange(6, 4, "#00FF00")],
+                RuleSet.For(state.Settings.Rules).Highlights(sample)
             );
-            Assert.Equal(2, state.Settings.GetLabelHighlights("error warn").Count());
+            Assert.Single(
+                file.Model.Searches.Single(search => search.IsGlobalLabel).GetHighlights(sample)
+            );
             file.Model.ShowContext = true;
             file.Views[0].Sync();
             var contextRow = Assert.Single(file.Views[0].ContextLines);
@@ -87,15 +80,7 @@ public sealed class LogViewTests
             await state.UpdateSettingsAsync(
                 state.Settings with
                 {
-                    GlobalLabels =
-                    [
-                        new GlobalLabel
-                        {
-                            Text = "warn",
-                            Color = "#FF00FF",
-                            ShowInOpenFile = false,
-                        },
-                    ],
+                    Rules = [TestRules.Highlight("warn", "#FF00FF")],
                 },
                 TestContext.Current.CancellationToken
             );
@@ -365,5 +350,138 @@ public sealed class LogViewTests
         {
             File.Delete(path);
         }
+    }
+
+    [AvaloniaFact]
+    public async Task SourceRulesAndLevelMaskFilterRowsAndExplainAnEmptyView()
+    {
+        var path = Path.GetTempFileName();
+        var other = Path.GetTempFileName();
+        await File.WriteAllLinesAsync(
+            path,
+            ["INFO keep", "ERROR boom", "INFO healthz", "   at Foo.Bar()"],
+            TestContext.Current.CancellationToken
+        );
+        await File.WriteAllLinesAsync(other, ["INFO x"], TestContext.Current.CancellationToken);
+        try
+        {
+            var window = TestWindow.CreatePolling(out var viewModel);
+            window.Show();
+            await viewModel.OpenPathsCommand.Execute([path]);
+            var view = await LoadedView(viewModel, 4);
+            var tab = viewModel.SelectedFile!.Model;
+
+            await viewModel.State.SetSourceRulesAsync(
+                tab,
+                [
+                    new ViewRule
+                    {
+                        Pattern = "healthz",
+                        Action = RuleAction.Hide,
+                        Scope = RuleScope.Source,
+                    },
+                ],
+                TestContext.Current.CancellationToken
+            );
+            await UiWait.Until(() =>
+            {
+                view.Sync();
+                return view.Lines.Count == 3;
+            });
+            Assert.Equal(
+                ["INFO keep", "ERROR boom", "   at Foo.Bar()"],
+                view.Lines.Select(row => row.Line.Raw)
+            );
+            Assert.Equal(string.Empty, view.ResultMessage);
+
+            await viewModel.State.SetLevelsAsync(
+                tab,
+                LogLevels.Error,
+                TestContext.Current.CancellationToken
+            );
+            await UiWait.Until(() =>
+            {
+                view.Sync();
+                return view.Lines.Count == 2;
+            });
+            Assert.Equal(["ERROR boom", "   at Foo.Bar()"], view.Lines.Select(row => row.Line.Raw));
+            Assert.Equal(string.Empty, view.ResultMessage);
+
+            await viewModel.OpenPathsCommand.Execute([other]);
+            var otherView = await LoadedView(viewModel, 1);
+            await viewModel.State.SetLevelsAsync(
+                viewModel.SelectedFile!.Model,
+                LogLevels.Warn,
+                TestContext.Current.CancellationToken
+            );
+            await UiWait.Until(() =>
+            {
+                otherView.Sync();
+                return otherView.Lines.Count == 0;
+            });
+            Assert.Equal("All matching logs are hidden by filter rules.", otherView.ResultMessage);
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(other);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task SourceRuleChangeRefreshesAlreadyRenderedRowHighlights()
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllLinesAsync(
+            path,
+            ["INFO keep", "INFO marked"],
+            TestContext.Current.CancellationToken
+        );
+        try
+        {
+            var window = TestWindow.CreatePolling(out var viewModel);
+            window.Show();
+            await viewModel.OpenPathsCommand.Execute([path]);
+            var view = await LoadedView(viewModel, 2);
+            var row = view.Lines.Single(item => item.Line.Raw == "INFO marked");
+            row.SetVisible(true);
+            Assert.Empty(row.Spans);
+
+            await viewModel.State.SetSourceRulesAsync(
+                viewModel.SelectedFile!.Model,
+                [
+                    new ViewRule
+                    {
+                        Pattern = "marked",
+                        Color = "#112233",
+                        Action = RuleAction.Highlight,
+                        Scope = RuleScope.Source,
+                    },
+                ],
+                TestContext.Current.CancellationToken
+            );
+            await UiWait.Until(() =>
+            {
+                view.Sync();
+                return row.Spans.Count == 1;
+            });
+            Assert.Equal([new HighlightSpan(5, 6, "#112233")], row.Spans);
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static async Task<LogViewViewModel> LoadedView(MainWindowViewModel viewModel, int lines)
+    {
+        await UiWait.Until(() =>
+        {
+            viewModel.State.DrainTailerEvents();
+            return viewModel.SelectedFile?.SelectedView.Lines.Count == lines;
+        });
+        return viewModel.SelectedFile!.SelectedView;
     }
 }

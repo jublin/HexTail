@@ -1,5 +1,5 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using HexTail.Domain;
 
@@ -7,6 +7,7 @@ namespace HexTail.Persistence;
 
 public sealed class AppConfig
 {
+    public int Version { get; init; } = RuleMigration.CurrentVersion;
     public List<PersistedFileTab> OpenFiles { get; init; } = [];
     public List<PersistedElasticTab> OpenElasticTabs { get; init; } = [];
     public string? SelectedFilePath { get; init; }
@@ -30,6 +31,8 @@ public sealed class PersistedElasticTab
     public int? SelectedLine { get; init; }
     public int ContextAbove { get; init; } = 3;
     public int ContextBelow { get; init; } = 10;
+    public List<ViewRule> Rules { get; init; } = [];
+    public LogLevels Levels { get; init; } = LogLevels.All;
 }
 
 public sealed class PersistedFileTab
@@ -42,6 +45,8 @@ public sealed class PersistedFileTab
     public int? SelectedLine { get; init; }
     public int ContextAbove { get; init; } = 3;
     public int ContextBelow { get; init; } = 10;
+    public List<ViewRule> Rules { get; init; } = [];
+    public LogLevels Levels { get; init; } = LogLevels.All;
 }
 
 public sealed class PersistedSearch
@@ -68,75 +73,13 @@ public sealed record AppSettings
     public int MaxLines { get; init; } = FileBuffer.DefaultMaxLines;
     public int ContextAbove { get; init; } = 3;
     public int ContextBelow { get; init; } = 10;
-    public List<GlobalLabel> GlobalLabels { get; init; } = [];
-    public List<string> GlobalExcludeLabels { get; init; } = [];
-    public Dictionary<string, MatchMode> GlobalExcludeModes { get; init; } =
-        new(StringComparer.Ordinal);
+    public List<ViewRule> Rules { get; init; } = [];
     public string Theme { get; init; } = "cyber-tail";
     public UiDensity Density { get; init; } = UiDensity.Comfortable;
     public LogFontSize LogFontSize { get; init; } = LogFontSize.Medium;
     public SettingsMenuAlignment SettingsMenuAlignment { get; init; } = SettingsMenuAlignment.Right;
     public AppTimeZoneMode TimeZoneMode { get; init; } = AppTimeZoneMode.Local;
     public List<ElasticConnectionSettings> ElasticConnections { get; init; } = [];
-
-    public bool Excludes(string text) =>
-        GlobalExcludeLabels.Any(label =>
-            CreateGlobalQuery(label, GetExcludeMode(label))?.IsMatch(text) is true
-        );
-
-    public MatchMode GetExcludeMode(string label) =>
-        GlobalExcludeModes is not null && GlobalExcludeModes.TryGetValue(label, out var mode)
-            ? mode
-            : CompiledQuery.DetectMode(label);
-
-    public IEnumerable<LabelHighlight> GetLabelHighlights(
-        string text,
-        bool includeSearchTabs = true
-    )
-    {
-        foreach (var label in GlobalLabels)
-        {
-            if (!includeSearchTabs && label.ShowInOpenFile)
-                continue;
-            var query = CreateGlobalQuery(
-                label.Text,
-                label.Mode ?? CompiledQuery.DetectMode(label.Text)
-            );
-            if (query is null)
-                continue;
-
-            foreach (var range in query.GetHighlights(text))
-                yield return new LabelHighlight(range.Start, range.Length, label.Color);
-        }
-    }
-
-    // Keys are immutable rule strings. Weak keys release compiled regexes when rules
-    // are removed, and keep record copies/serialization independent of cache state.
-    private static readonly ConditionalWeakTable<string, CachedGlobalQuery> LiteralQueries = new();
-    private static readonly ConditionalWeakTable<string, CachedGlobalQuery> RegexQueries = new();
-
-    private static CompiledQuery? CreateGlobalQuery(string query, MatchMode mode) =>
-        mode is MatchMode.Regex
-            ? RegexQueries
-                .GetValue(query, static text => new(CompileGlobalQuery(text, MatchMode.Regex)))
-                .Query
-            : LiteralQueries
-                .GetValue(query, static text => new(CompileGlobalQuery(text, MatchMode.Literal)))
-                .Query;
-
-    private sealed record CachedGlobalQuery(CompiledQuery? Query);
-
-    private static CompiledQuery? CompileGlobalQuery(string query, MatchMode mode)
-    {
-        try
-        {
-            return new CompiledQuery(query, mode, caseSensitive: false);
-        }
-        catch (ArgumentException)
-        {
-            return null;
-        }
-    }
 }
 
 public static class ThemeCatalog
@@ -160,16 +103,6 @@ public static class ThemeCatalog
 }
 
 public sealed record ThemeOption(string Id, string DisplayName);
-
-public sealed class GlobalLabel
-{
-    public string Text { get; init; } = string.Empty;
-    public MatchMode? Mode { get; init; }
-    public string Color { get; init; } = "#f59e0b";
-    public bool ShowInOpenFile { get; init; } = true;
-}
-
-public readonly record struct LabelHighlight(int Start, int Length, string Color);
 
 public enum UiDensity
 {
@@ -203,5 +136,66 @@ public static class AppConfigJson
     public static string Serialize(AppConfig config) => JsonSerializer.Serialize(config, Options);
 
     public static AppConfig Deserialize(string json) =>
-        JsonSerializer.Deserialize<AppConfig>(json, Options) ?? new AppConfig();
+        JsonSerializer.Deserialize<AppConfig>(Sanitize(RuleMigration.Apply(json).Json), Options)
+        ?? new AppConfig();
+
+    /// <summary>
+    /// Drops individual rules that do not deserialize (an unknown action, scope or mode name written
+    /// by another build) and treats an unusable <c>levels</c> value as absent, so one bad value costs
+    /// that value, not the whole session.
+    /// </summary>
+    private static string Sanitize(string json)
+    {
+        try
+        {
+            if (JsonNode.Parse(json) is not JsonObject root)
+                return json;
+
+            if (root["settings"] is JsonObject settings)
+                SanitizeRules(settings);
+            foreach (var tabs in new[] { root["openFiles"], root["openElasticTabs"] })
+                if (tabs is JsonArray array)
+                    foreach (var tab in array.OfType<JsonObject>())
+                    {
+                        SanitizeRules(tab);
+                        if (
+                            tab.ContainsKey("levels")
+                            && !(tab["levels"] is { } levels && Parses<LogLevels>(levels))
+                        )
+                            tab.Remove("levels");
+                    }
+            return root.ToJsonString();
+        }
+        catch (Exception exception) when (RuleMigration.IsUnreadableTree(exception))
+        {
+            // The real deserializer reports a malformed document (and accepts duplicate keys).
+            return json;
+        }
+    }
+
+    private static void SanitizeRules(JsonObject owner)
+    {
+        if (!owner.ContainsKey("rules"))
+            return;
+        if (owner["rules"] is not JsonArray rules)
+        {
+            owner.Remove("rules");
+            return;
+        }
+        for (var index = rules.Count - 1; index >= 0; index--)
+            if (rules[index] is not JsonObject rule || !Parses<ViewRule>(rule))
+                rules.RemoveAt(index);
+    }
+
+    private static bool Parses<T>(JsonNode node)
+    {
+        try
+        {
+            return node.Deserialize<T>(Options) is not null;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 }
