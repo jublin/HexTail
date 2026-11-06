@@ -1,5 +1,6 @@
 using HexTail.Domain;
 using HexTail.Persistence;
+using HexTail.Tests.Support;
 
 namespace HexTail.Tests.Persistence;
 
@@ -17,12 +18,13 @@ public sealed class JsonFileAppPersistenceTests
             } }
             """
         );
-        Assert.False(config.Settings.Excludes("READY"));
-        Assert.Empty(config.Settings.GetLabelHighlights("READY"));
-        Assert.True(config.Settings.Excludes("[ERROR] failed"));
-        Assert.Single(config.Settings.GetLabelHighlights("[ERROR] failed"));
+        var rules = RuleSet.For(config.Settings.Rules);
+        Assert.True(rules.IsVisible(new Line("READY")));
+        Assert.Empty(rules.Highlights(new Line("READY")));
+        Assert.False(rules.IsVisible(new Line("[ERROR] failed")));
+        Assert.Single(rules.Highlights(new Line("[ERROR] failed")));
         var restored = AppConfigJson.Deserialize(AppConfigJson.Serialize(config));
-        Assert.False(restored.Settings.Excludes("READY"));
+        Assert.True(RuleSet.For(restored.Settings.Rules).IsVisible(new Line("READY")));
     }
 
     [Fact]
@@ -36,34 +38,45 @@ public sealed class JsonFileAppPersistenceTests
             } }
             """
         );
-        var text = Assert.Single(legacy.Settings.GlobalExcludeLabels);
-        Assert.True(legacy.Settings.Excludes("WARN"));
-        Assert.Single(legacy.Settings.GetLabelHighlights("WARN"));
+        Assert.Equal(2, legacy.Settings.Rules.Count);
+        Assert.All(legacy.Settings.Rules, rule => Assert.Equal(MatchMode.Regex, rule.Mode));
+        var text = legacy.Settings.Rules[0].Pattern;
+        var regexRules = RuleSet.For(legacy.Settings.Rules);
+        Assert.False(regexRules.IsVisible(new Line("WARN")));
+        Assert.Single(regexRules.Highlights(new Line("WARN")));
         var literal = legacy.Settings with
         {
-            GlobalExcludeModes = new() { [text] = MatchMode.Literal },
-            GlobalLabels = [new GlobalLabel { Text = text, Mode = MatchMode.Literal }],
+            Rules =
+            [
+                .. legacy.Settings.Rules.Select(rule => rule with { Mode = MatchMode.Literal }),
+            ],
         };
-        Assert.False(literal.Excludes("WARN"));
-        Assert.Empty(literal.GetLabelHighlights("WARN"));
-        Assert.True(literal.Excludes(text));
-        Assert.True(legacy.Settings.Excludes("WARN"));
+        var literalRules = RuleSet.For(literal.Rules);
+        Assert.True(literalRules.IsVisible(new Line("WARN")));
+        Assert.Empty(literalRules.Highlights(new Line("WARN")));
+        Assert.False(literalRules.IsVisible(new Line(text)));
+        Assert.False(regexRules.IsVisible(new Line("WARN")));
         var restored = AppConfigJson.Deserialize(
             AppConfigJson.Serialize(new AppConfig { Settings = literal })
         );
-        Assert.Equal(MatchMode.Literal, Assert.Single(restored.Settings.GlobalLabels).Mode);
-        Assert.Equal(MatchMode.Literal, restored.Settings.GetExcludeMode(text));
+        Assert.Equal(2, restored.Settings.Rules.Count);
+        Assert.All(restored.Settings.Rules, rule => Assert.Equal(MatchMode.Literal, rule.Mode));
+        Assert.Equal(
+            [RuleAction.Highlight, RuleAction.Hide],
+            restored.Settings.Rules.Select(rule => rule.Action)
+        );
     }
 
     [Fact]
     public void GlobalExclusions_ReuseCompiledQueriesDuringRefresh()
     {
-        var settings = new AppSettings { GlobalExcludeLabels = [@"health\s+check"] };
-        Assert.True(settings.Excludes("HEALTH CHECK"));
+        var rules = RuleSet.For([TestRules.Hide(@"health\s+check")]);
+        var completed = new Line("request completed");
+        Assert.False(rules.IsVisible(new Line("HEALTH CHECK")));
         var before = GC.GetAllocatedBytesForCurrentThread();
         var timer = System.Diagnostics.Stopwatch.StartNew();
         for (var i = 0; i < 1_000; i++)
-            Assert.False(settings.Excludes("request completed"));
+            Assert.True(rules.IsVisible(completed));
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         TestContext.Current.TestOutputHelper?.WriteLine(
             $"1,000 exclusion checks: {allocated:N0} bytes, {timer.Elapsed.TotalMilliseconds:N3} ms"
@@ -184,7 +197,7 @@ public sealed class JsonFileAppPersistenceTests
                 X = 12,
                 Y = 34,
             },
-            Settings = new AppSettings { Theme = "light", GlobalExcludeLabels = ["health"] },
+            Settings = new AppSettings { Theme = "light", Rules = [TestRules.Hide("health")] },
         };
 
         await persistence.SaveAsync(config);
@@ -195,6 +208,7 @@ public sealed class JsonFileAppPersistenceTests
         Assert.Equal(900, restored.Window.Width);
         Assert.Equal(34, restored.Window.Y);
         Assert.Equal("light", restored.Settings.Theme);
+        Assert.Equal(TestRules.Hide("health"), Assert.Single(restored.Settings.Rules));
         Assert.Equal("error", Assert.Single(Assert.Single(restored.OpenFiles).Searches).Query);
         Assert.True(File.Exists(path));
     }

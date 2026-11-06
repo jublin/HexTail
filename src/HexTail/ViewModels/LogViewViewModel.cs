@@ -56,7 +56,7 @@ internal sealed class LogViewViewModel : ReactiveObject
                     ? "No logs returned for the applied interval."
                 : "No logs in this source yet."
         : Search is not null && Search.Results.Count == 0 ? "No logs match this search."
-        : "All matching logs are hidden by global exclusions.";
+        : "All matching logs are hidden by filter rules.";
     public bool HasResultMessage => ResultMessage.Length > 0;
     public string InitialLimitMessage =>
         File.ElasticInitialLimitReached is { } limit
@@ -452,17 +452,17 @@ internal sealed class LogViewViewModel : ReactiveObject
             : Search
                 .Results.Where(index => index >= 0 && index < _file.Model.Buffer.Count)
                 .Select(index => _file.Model.Buffer[index]);
-        return _owner.State.Settings.GlobalExcludeLabels.Count == 0
-            ? lines as IReadOnlyList<Line> ?? lines.ToList()
-            : lines.Where(line => !_owner.State.Settings.Excludes(line.Raw)).ToList();
+        var rules = _file.Model.EffectiveRules(_owner.State.Settings);
+        return rules.HasVisibilityRules
+            ? lines.Where(rules.IsVisible).ToList()
+            : lines as IReadOnlyList<Line> ?? lines.ToList();
     }
 
     private IReadOnlyList<Line> ContextLinesFor()
     {
         var lines = _file.Model.Buffer.Lines;
-        return _owner.State.Settings.GlobalExcludeLabels.Count == 0
-            ? lines
-            : lines.Where(line => !_owner.State.Settings.Excludes(line.Raw)).ToList();
+        var rules = _file.Model.EffectiveRules(_owner.State.Settings);
+        return rules.HasVisibilityRules ? lines.Where(rules.IsVisible).ToList() : lines;
     }
 
     private static string Truncate(string value) => value.Length > 24 ? $"{value[..21]}..." : value;

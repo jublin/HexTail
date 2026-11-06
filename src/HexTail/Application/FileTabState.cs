@@ -93,7 +93,38 @@ public sealed class FileTabState : IAsyncDisposable
         return Buffer.RemoveSearch(search);
     }
 
-    public void SyncGlobalLabelSearches(IEnumerable<GlobalLabel> labels)
+    private IReadOnlyList<ViewRule>? _effectiveGlobal;
+    private IReadOnlyList<ViewRule>? _effectiveSource;
+    private RuleSet _effectiveRules = RuleSet.Empty;
+
+    /// <summary>Source-scope rules for this open source.</summary>
+    public IReadOnlyList<ViewRule> Rules { get; private set; } = [];
+
+    /// <summary>Bumped whenever <see cref="Rules"/> is replaced, so views re-render highlights.</summary>
+    public int RulesVersion { get; private set; }
+
+    public void SetRules(IEnumerable<ViewRule> rules)
+    {
+        Rules = rules.ToList();
+        RulesVersion++;
+    }
+
+    /// <summary>Global + source rules. UI thread only (it caches the last combination).</summary>
+    public RuleSet EffectiveRules(AppSettings settings)
+    {
+        if (
+            !ReferenceEquals(_effectiveGlobal, settings.Rules)
+            || !ReferenceEquals(_effectiveSource, Rules)
+        )
+        {
+            _effectiveRules = RuleSet.Combine(settings.Rules, Rules);
+            _effectiveGlobal = settings.Rules;
+            _effectiveSource = Rules;
+        }
+        return _effectiveRules;
+    }
+
+    public void SyncGlobalRuleSearches(IEnumerable<ViewRule> rules)
     {
         for (var index = Searches.Count - 1; index >= 0; index--)
         {
@@ -104,17 +135,17 @@ public sealed class FileTabState : IAsyncDisposable
             FollowSearches.RemoveAt(index);
         }
 
-        foreach (var label in labels.Where(label => label.ShowInOpenFile))
+        foreach (
+            var rule in rules.Where(rule =>
+                rule.Enabled && rule.PinnedAsTab && rule.Action != RuleAction.Hide
+            )
+        )
             try
             {
                 AddSearch(
                     new Search(
-                        new CompiledQuery(
-                            label.Text,
-                            label.Mode ?? CompiledQuery.DetectMode(label.Text),
-                            false
-                        ),
-                        label.Color,
+                        new CompiledQuery(rule.Pattern, rule.Mode, rule.CaseSensitive),
+                        rule.Color,
                         Buffer,
                         true
                     )

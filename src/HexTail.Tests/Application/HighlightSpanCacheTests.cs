@@ -1,6 +1,6 @@
 using HexTail.Application;
 using HexTail.Domain;
-using HexTail.Persistence;
+using HexTail.Tests.Support;
 
 namespace HexTail.Tests.Application;
 
@@ -10,31 +10,20 @@ public sealed class HighlightSpanCacheTests
     public void RepeatedViewsReuseSpansWithoutRepeatingMatchAllocations()
     {
         var cache = new HighlightSpanCache(maxLines: 1);
-        var settings = new AppSettings
-        {
-            GlobalLabels =
-            [
-                new GlobalLabel
-                {
-                    Text = @"error\s+\d+",
-                    Color = "red",
-                    ShowInOpenFile = false,
-                },
-            ],
-        };
+        var rules = RuleSet.For([TestRules.Highlight(@"error\s+\d+", "red")]);
         var line = new Line(string.Join(" ", Enumerable.Repeat("error 123", 20)));
         var other = new Line(line.Raw);
-        cache.Get(line, [], settings);
+        cache.Get(line, [], rules);
         var before = GC.GetAllocatedBytesForCurrentThread();
         var timer = System.Diagnostics.Stopwatch.StartNew();
         for (var i = 0; i < 1_000; i++)
-            cache.Get(line, [], settings);
+            cache.Get(line, [], rules);
         var warmBytes = GC.GetAllocatedBytesForCurrentThread() - before;
         var warmTime = timer.Elapsed;
         before = GC.GetAllocatedBytesForCurrentThread();
         timer.Restart();
         for (var i = 0; i < 1_000; i++)
-            cache.Get(i % 2 == 0 ? other : line, [], settings);
+            cache.Get(i % 2 == 0 ? other : line, [], rules);
         var coldBytes = GC.GetAllocatedBytesForCurrentThread() - before;
         TestContext.Current.TestOutputHelper?.WriteLine(
             $"1,000 lookups: cached {warmBytes:N0} bytes / {warmTime.TotalMilliseconds:N3} ms; uncached {coldBytes:N0} bytes / {timer.Elapsed.TotalMilliseconds:N3} ms"
@@ -47,42 +36,23 @@ public sealed class HighlightSpanCacheTests
     {
         var cache = new HighlightSpanCache();
         var line = new Line("error warn");
-        var settings = new AppSettings
-        {
-            GlobalLabels =
-            [
-                new GlobalLabel
-                {
-                    Text = "error",
-                    Color = "red",
-                    ShowInOpenFile = false,
-                },
-            ],
-        };
-        var spans = cache.Get(line, [], settings);
+        var rules = RuleSet.For([TestRules.Highlight("error", "red")]);
+        var spans = cache.Get(line, [], rules);
         Assert.Equal([new HighlightSpan(0, 5, "red")], spans);
-        Assert.Same(spans, cache.Get(line, [], settings));
-        Assert.NotSame(spans, cache.Get(new Line(line.Raw), [], settings));
-        Assert.Same(spans, cache.Get(line, [], settings with { LogFontSize = LogFontSize.Large }));
-        settings.GlobalLabels[0] = new GlobalLabel
-        {
-            Text = "warn",
-            Color = "green",
-            ShowInOpenFile = false,
-        };
-        Assert.Equal([new HighlightSpan(6, 4, "green")], cache.Get(line, [], settings));
+        Assert.Same(spans, cache.Get(line, [], rules));
+        Assert.NotSame(spans, cache.Get(new Line(line.Raw), [], rules));
+        Assert.Same(spans, cache.Get(line, [], rules));
+        var changed = RuleSet.For([TestRules.Highlight("warn", "green")]);
+        Assert.Equal([new HighlightSpan(6, 4, "green")], cache.Get(line, [], changed));
     }
 
     [Fact]
-    public void PreservesLongestMatchAndStableSearchPriorityWithoutDuplicateGlobalLabels()
+    public void PreservesLongestMatchAndStableSearchPriorityWithoutDuplicateGlobalRules()
     {
         var line = new Line("error warn");
         var buffer = new FileBuffer();
         buffer.Append(line);
-        var settings = new AppSettings
-        {
-            GlobalLabels = [new GlobalLabel { Text = "error", Color = "red" }],
-        };
+        var rules = RuleSet.For([TestRules.Highlight("error", "red", pinned: true)]);
         var first = new Search(
             new CompiledQuery("error", MatchMode.Literal, true),
             "red",
@@ -95,54 +65,45 @@ public sealed class HighlightSpanCacheTests
             buffer
         );
         var cache = new HighlightSpanCache();
-        Assert.Equal([new HighlightSpan(0, 5, "red")], cache.Get(line, [first, second], settings));
-        Assert.Equal([new HighlightSpan(0, 5, "blue")], cache.Get(line, [second, first], settings));
+        Assert.Equal([new HighlightSpan(0, 5, "red")], cache.Get(line, [first, second], rules));
+        Assert.Equal([new HighlightSpan(0, 5, "blue")], cache.Get(line, [second, first], rules));
         var longer = new Search(
             new CompiledQuery("error warn", MatchMode.Literal, true),
             "green",
             buffer
         );
-        Assert.Equal(
-            [new HighlightSpan(0, 10, "green")],
-            cache.Get(line, [first, longer], settings)
-        );
-        Assert.Empty(cache.Get(line, [], new AppSettings()));
+        Assert.Equal([new HighlightSpan(0, 10, "green")], cache.Get(line, [first, longer], rules));
+        Assert.Empty(cache.Get(line, [], RuleSet.Empty));
     }
 
     [Fact]
     public void EvictsLeastRecentlyUsedLineAndDoesNotCacheOversizedResults()
     {
         var cache = new HighlightSpanCache(maxLines: 2, maxSpans: 2);
-        var settings = new AppSettings
-        {
-            GlobalLabels = [new GlobalLabel { Text = "a", ShowInOpenFile = false }],
-        };
+        var rules = RuleSet.For([TestRules.Highlight("a")]);
         var first = new Line("a");
         var second = new Line("a");
         var third = new Line("a");
-        var firstSpans = cache.Get(first, [], settings);
-        var secondSpans = cache.Get(second, [], settings);
-        Assert.Same(firstSpans, cache.Get(first, [], settings));
-        cache.Get(third, [], settings);
-        Assert.Same(firstSpans, cache.Get(first, [], settings));
-        Assert.NotSame(secondSpans, cache.Get(second, [], settings));
+        var firstSpans = cache.Get(first, [], rules);
+        var secondSpans = cache.Get(second, [], rules);
+        Assert.Same(firstSpans, cache.Get(first, [], rules));
+        cache.Get(third, [], rules);
+        Assert.Same(firstSpans, cache.Get(first, [], rules));
+        Assert.NotSame(secondSpans, cache.Get(second, [], rules));
         var oversized = new Line("aaa");
-        var spans = cache.Get(oversized, [], settings);
+        var spans = cache.Get(oversized, [], rules);
         Assert.Equal(3, spans.Count);
-        Assert.NotSame(spans, cache.Get(oversized, [], settings));
+        Assert.NotSame(spans, cache.Get(oversized, [], rules));
     }
 
     [Fact]
     public void EnforcesTotalSpanBudgetAcrossCachedLines()
     {
         var cache = new HighlightSpanCache(maxLines: 10, maxSpans: 3);
-        var settings = new AppSettings
-        {
-            GlobalLabels = [new GlobalLabel { Text = "a", ShowInOpenFile = false }],
-        };
+        var rules = RuleSet.For([TestRules.Highlight("a")]);
         var first = new Line("aa");
-        var firstSpans = cache.Get(first, [], settings);
-        cache.Get(new Line("aa"), [], settings);
-        Assert.NotSame(firstSpans, cache.Get(first, [], settings));
+        var firstSpans = cache.Get(first, [], rules);
+        cache.Get(new Line("aa"), [], rules);
+        Assert.NotSame(firstSpans, cache.Get(first, [], rules));
     }
 }

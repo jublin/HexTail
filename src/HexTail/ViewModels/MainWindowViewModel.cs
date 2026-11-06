@@ -799,7 +799,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             SearchColor = Color.Parse(
                 NextSearchColor(
                     file.Model.Searches.Select(search => search.Color),
-                    State.Settings.GlobalLabels.Select(label => label.Color)
+                    State.Settings.Rules.Select(rule => rule.Color)
                 )
             );
             Query = string.Empty;

@@ -27,6 +27,8 @@ public sealed class JsonFileAppPersistence : IAppPersistence
         try
         {
             var json = await File.ReadAllTextAsync(Path, cancellationToken).ConfigureAwait(false);
+            if (RuleMigration.NeedsMigration(json))
+                BackUpLegacySession();
             return AppConfigJson.Deserialize(json);
         }
         catch (JsonException)
@@ -41,6 +43,21 @@ public sealed class JsonFileAppPersistence : IAppPersistence
         {
             return null;
         }
+    }
+
+    private void BackUpLegacySession()
+    {
+        var backup = System.IO.Path.Combine(
+            System.IO.Path.GetDirectoryName(Path)!,
+            "session.v1.json.bak"
+        );
+        try
+        {
+            if (!File.Exists(backup))
+                File.Copy(Path, backup);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     public async ValueTask SaveAsync(

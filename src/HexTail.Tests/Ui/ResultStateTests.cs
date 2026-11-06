@@ -164,12 +164,12 @@ public sealed class ResultStateTests
             await workspace.State.UpdateSettingsAsync(
                 workspace.State.Settings with
                 {
-                    GlobalExcludeLabels = ["alpha", "beta"],
+                    Rules = [TestRules.Hide("alpha"), TestRules.Hide("beta")],
                 }
             );
             file.SyncViews();
             Dispatcher.UIThread.RunJobs();
-            Assert.Equal("All matching logs are hidden by global exclusions.", Message().Text);
+            Assert.Equal("All matching logs are hidden by filter rules.", Message().Text);
             Assert.Equal("0 visible · 2 loaded from source", Count().Text);
         }
         finally

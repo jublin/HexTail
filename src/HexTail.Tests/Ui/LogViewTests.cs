@@ -25,20 +25,10 @@ public sealed class LogViewTests
         {
             var settings = new AppSettings
             {
-                GlobalLabels =
+                Rules =
                 [
-                    new GlobalLabel
-                    {
-                        Text = "error",
-                        Color = "#FF0000",
-                        ShowInOpenFile = true,
-                    },
-                    new GlobalLabel
-                    {
-                        Text = "warn",
-                        Color = "#00FF00",
-                        ShowInOpenFile = false,
-                    },
+                    TestRules.Highlight("error", "#FF0000", pinned: true),
+                    TestRules.Highlight("warn", "#00FF00"),
                 ],
             };
             await using var state = new AppState(
@@ -68,12 +58,15 @@ public sealed class LogViewTests
                 file.Model.Searches.Where(search => search.IsGlobalLabel)
                     .Select(search => search.Query.Query)
             );
-            // The settings pass should only evaluate labels not already supplied by search tabs.
+            // The rule pass should only evaluate rules not already supplied by search tabs.
+            var sample = new Line("error warn");
             Assert.Equal(
-                [new LabelHighlight(6, 4, "#00FF00")],
-                state.Settings.GetLabelHighlights("error warn", includeSearchTabs: false)
+                [new ColoredRange(6, 4, "#00FF00")],
+                RuleSet.For(state.Settings.Rules).Highlights(sample)
             );
-            Assert.Equal(2, state.Settings.GetLabelHighlights("error warn").Count());
+            Assert.Single(
+                file.Model.Searches.Single(search => search.IsGlobalLabel).GetHighlights(sample)
+            );
             file.Model.ShowContext = true;
             file.Views[0].Sync();
             var contextRow = Assert.Single(file.Views[0].ContextLines);
@@ -87,15 +80,7 @@ public sealed class LogViewTests
             await state.UpdateSettingsAsync(
                 state.Settings with
                 {
-                    GlobalLabels =
-                    [
-                        new GlobalLabel
-                        {
-                            Text = "warn",
-                            Color = "#FF00FF",
-                            ShowInOpenFile = false,
-                        },
-                    ],
+                    Rules = [TestRules.Highlight("warn", "#FF00FF")],
                 },
                 TestContext.Current.CancellationToken
             );
