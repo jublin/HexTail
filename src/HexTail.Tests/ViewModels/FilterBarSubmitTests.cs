@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using HexTail.Domain;
+using HexTail.Persistence;
 using HexTail.Tests.Support;
 
 namespace HexTail.Tests.ViewModels;
@@ -165,6 +166,205 @@ public sealed class FilterBarSubmitTests
         finally
         {
             File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task SaveFailureSurfacesAsErrorAndKeepsTheQuery()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var persistence = new TestPersistence();
+            var window = TestWindow.Create(persistence, out var owner);
+            await owner.InitializeAsync();
+            await owner.OpenPathsCommand.Execute([path]);
+            var bar = owner.FilterBar;
+            persistence.SaveError = new IOException("disk full");
+            bar.Query = "  boom  ";
+            await bar.SubmitAsync(RuleAction.Highlight);
+            Assert.True(bar.HasError);
+            Assert.Equal("disk full", bar.Error);
+            Assert.Equal("  boom  ", bar.Query);
+            persistence.SaveError = null;
+            window.Close();
+            await owner.DisposeAsync();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task ConcurrentSubmitsOfTheSameQueryCreateExactlyOneRule()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var persistence = new GatedPersistence();
+            var window = TestWindow.Create(persistence, out var owner);
+            await owner.InitializeAsync();
+            await owner.OpenPathsCommand.Execute([path]);
+            var bar = owner.FilterBar;
+            persistence.Gate = new TaskCompletionSource();
+            bar.Query = "boom";
+            var first = bar.SubmitAsync(RuleAction.Highlight);
+            var second = bar.SubmitAsync(RuleAction.Highlight);
+            persistence.Gate.SetResult();
+            await Task.WhenAll(first, second);
+            Assert.Equal(["boom"], owner.SelectedFile!.Model.Rules.Select(rule => rule.Pattern));
+            window.Close();
+            await owner.DisposeAsync();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task SecondSubmitWhileFirstIsSavingIsIgnoredEvenWithTheSameQueryRetyped()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var persistence = new GatedPersistence();
+            var window = TestWindow.Create(persistence, out var owner);
+            await owner.InitializeAsync();
+            await owner.OpenPathsCommand.Execute([path]);
+            var bar = owner.FilterBar;
+            persistence.Gate = new TaskCompletionSource();
+            bar.Query = "boom";
+            var first = bar.SubmitAsync(RuleAction.Highlight);
+            Assert.Equal(string.Empty, bar.Query);
+            bar.Query = "boom";
+            await bar.SubmitAsync(RuleAction.Highlight);
+            persistence.Gate.SetResult();
+            await first;
+            Assert.Single(owner.SelectedFile!.Model.Rules);
+            window.Close();
+            await owner.DisposeAsync();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task EditingQueryOrMatchModeClearsTheError()
+    {
+        var window = TestWindow.Create(out var owner);
+        await owner.InitializeAsync();
+        var bar = owner.FilterBar;
+        bar.Error = "oops";
+        bar.Query = "x";
+        Assert.False(bar.HasError);
+        bar.Error = "oops";
+        bar.MatchMode = MatchMode.Regex;
+        Assert.False(bar.HasError);
+        window.Close();
+        await owner.DisposeAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task StoredPatternIsTrimmed()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var window = TestWindow.Create(out var owner);
+            await owner.InitializeAsync();
+            await owner.OpenPathsCommand.Execute([path]);
+            owner.FilterBar.Query = "  padded \t";
+            await owner.FilterBar.SubmitAsync(RuleAction.Highlight);
+            Assert.Equal(["padded"], owner.SelectedFile!.Model.Rules.Select(rule => rule.Pattern));
+            window.Close();
+            await owner.DisposeAsync();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task AltEnterIgnoresPinAsTab()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var window = TestWindow.Create(out var owner);
+            window.Show();
+            await owner.InitializeAsync();
+            await owner.OpenPathsCommand.Execute([path]);
+            Dispatcher.UIThread.RunJobs();
+            var box = window
+                .GetVisualDescendants()
+                .OfType<TextBox>()
+                .Single(b => b.Name == "QueryBox");
+            box.Focus();
+            owner.FilterBar.PinAsTab = true;
+            owner.FilterBar.Query = "hidden";
+            window.KeyPress(Key.Enter, RawInputModifiers.Alt, PhysicalKey.Enter, null);
+            await UiWait.Until(() => owner.SelectedFile!.Model.Rules.Count == 1);
+            Assert.Equal(RuleAction.Hide, owner.SelectedFile!.Model.Rules[0].Action);
+            Assert.Empty(owner.SelectedFile.Model.Searches);
+            window.Close();
+            await owner.DisposeAsync();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task ControlEnterDoesNotSubmit()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var window = TestWindow.Create(out var owner);
+            window.Show();
+            await owner.InitializeAsync();
+            await owner.OpenPathsCommand.Execute([path]);
+            Dispatcher.UIThread.RunJobs();
+            var box = window
+                .GetVisualDescendants()
+                .OfType<TextBox>()
+                .Single(b => b.Name == "QueryBox");
+            box.Focus();
+            owner.FilterBar.Query = "keep";
+            window.KeyPress(Key.Enter, RawInputModifiers.Control, PhysicalKey.Enter, null);
+            Dispatcher.UIThread.RunJobs();
+            await Task.Delay(50);
+            Assert.Empty(owner.SelectedFile!.Model.Rules);
+            Assert.Equal("keep", owner.FilterBar.Query);
+            window.Close();
+            await owner.DisposeAsync();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private sealed class GatedPersistence : IAppPersistence
+    {
+        public TaskCompletionSource? Gate { get; set; }
+
+        public ValueTask<AppConfig?> LoadAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<AppConfig?>(new AppConfig());
+
+        public async ValueTask SaveAsync(
+            AppConfig config,
+            CancellationToken cancellationToken = default
+        )
+        {
+            if (Gate is { } gate)
+                await gate.Task;
         }
     }
 }

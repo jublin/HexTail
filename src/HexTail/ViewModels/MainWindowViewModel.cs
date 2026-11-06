@@ -5,8 +5,6 @@ using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using Avalonia.Controls;
-using Avalonia.Input;
-using Avalonia.Media;
 using Avalonia.Threading;
 using HexTail;
 using HexTail.Application;

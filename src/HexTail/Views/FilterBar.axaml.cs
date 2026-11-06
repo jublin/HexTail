@@ -20,7 +20,12 @@ public partial class FilterBar : UserControl
 
     private void OnQueryKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Enter || DataContext is not FilterBarViewModel bar)
+        if (
+            e.Key != Key.Enter
+            || e.KeyModifiers.HasFlag(KeyModifiers.Control)
+            || e.KeyModifiers.HasFlag(KeyModifiers.Meta)
+            || DataContext is not FilterBarViewModel bar
+        )
             return;
         var action =
             e.KeyModifiers.HasFlag(KeyModifiers.Alt) ? RuleAction.Hide

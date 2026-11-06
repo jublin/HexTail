@@ -16,6 +16,7 @@ internal sealed class FilterBarViewModel : ReactiveObject
     private bool _caseSensitive;
     private bool _pinAsTab;
     private string? _error;
+    private bool _submitting;
 
     internal FilterBarViewModel(MainWindowViewModel owner) => _owner = owner;
 
@@ -106,13 +107,16 @@ internal sealed class FilterBarViewModel : ReactiveObject
     {
         var file = _owner.SelectedFile?.Model;
         var pattern = Query.Trim();
-        if (file is null || pattern.Length == 0)
+        if (_submitting || file is null || pattern.Length == 0)
             return;
         if (RuleValidation.Validate(pattern, MatchMode) is { } error)
         {
             Error = error;
             return;
         }
+        _submitting = true;
+        var submitted = Query;
+        Query = string.Empty;
         try
         {
             var color = MainWindowViewModel.NextSearchColor(
@@ -143,12 +147,16 @@ internal sealed class FilterBarViewModel : ReactiveObject
                         Scope = RuleScope.Source,
                     }
                 );
-            Query = string.Empty;
-            Error = null;
         }
-        catch (ArgumentException ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            if (Query.Length == 0)
+                Query = submitted;
             Error = ex.Message;
+        }
+        finally
+        {
+            _submitting = false;
         }
     }
 
