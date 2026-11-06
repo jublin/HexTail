@@ -218,6 +218,32 @@ public sealed class JsonFileAppPersistenceTests
     }
 
     [Fact]
+    public async Task Load_SessionWithRemovedContextPaneMembers_IgnoresThemAndKeepsTheFileOpen()
+    {
+        using var directory = new TempDirectory();
+        var path = Path.Combine(directory.Path, "session.json");
+        await File.WriteAllTextAsync(
+            path,
+            """
+            { "version": 2,
+              "window": { "width": 1000, "height": 700, "contextPaneSize": 300 },
+              "openFiles": [
+                { "path": "/tmp/a.log", "showContext": true, "contextAbove": 5, "contextBelow": 5 }
+              ] }
+            """,
+            TestContext.Current.CancellationToken
+        );
+
+        var result = await new JsonFileAppPersistence(path).LoadAsync(
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.NotNull(result);
+        Assert.Equal("/tmp/a.log", Assert.Single(result.OpenFiles).Path);
+        Assert.Equal(1000, result.Window.Width);
+    }
+
+    [Fact]
     public async Task Load_MalformedJson_ReturnsNull()
     {
         using var directory = new TempDirectory();

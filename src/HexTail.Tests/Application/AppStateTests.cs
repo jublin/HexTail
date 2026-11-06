@@ -571,9 +571,7 @@ public sealed class AppStateTests
             var tab = await state.OpenFileAsync(path);
             await DrainUntilAsync(state, () => tab.Buffer.Count == 1);
             tab.FollowAll = false;
-            tab.ShowContext = true;
-            tab.ContextAbove = 4;
-            tab.ContextBelow = 8;
+            tab.Levels = LogLevels.Warn | LogLevels.Error;
             state.AddSearch(tab, "error", MatchMode.Literal, caseSensitive: false, "#ff0000");
             await state.SaveAsync();
         }
@@ -588,9 +586,7 @@ public sealed class AppStateTests
 
         var restoredTab = Assert.Single(restored.Files);
         Assert.False(restoredTab.FollowAll);
-        Assert.True(restoredTab.ShowContext);
-        Assert.Equal(4, restoredTab.ContextAbove);
-        Assert.Equal(8, restoredTab.ContextBelow);
+        Assert.Equal(LogLevels.Warn | LogLevels.Error, restoredTab.Levels);
         var search = Assert.Single(restoredTab.Searches);
         Assert.Equal("error", search.Query.Query);
         Assert.False(search.Query.CaseSensitive);
@@ -604,8 +600,8 @@ public sealed class AppStateTests
         var tab = Assert.Single(config.OpenFiles);
         Assert.Equal("/tmp/app.log", tab.Path);
         Assert.Empty(tab.Searches);
-        Assert.Equal(3, tab.ContextAbove);
-        Assert.Equal(10, tab.ContextBelow);
+        Assert.Equal(LogLevels.All, tab.Levels);
+        Assert.Null(tab.SelectedLine);
         Assert.Empty(config.OpenElasticTabs);
         Assert.Empty(config.Settings.ElasticConnections);
     }

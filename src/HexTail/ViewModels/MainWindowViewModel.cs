@@ -598,18 +598,6 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         }
     }
 
-    internal async Task SetShowContextAsync(FileTabViewModel file, bool value)
-    {
-        try
-        {
-            await _state.SetShowContextAsync(file.Model, value);
-        }
-        catch (Exception ex)
-        {
-            SetFileError(ex.Message);
-        }
-    }
-
     internal async Task SetSearchFollowAsync(FileTabViewModel file, Search search, bool value)
     {
         try

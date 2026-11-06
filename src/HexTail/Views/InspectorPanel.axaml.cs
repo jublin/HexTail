@@ -15,6 +15,15 @@ public partial class InspectorPanel : UserControl
     private async void OnCopyJson(object? sender, RoutedEventArgs e) =>
         await CopyAsync(viewModel => viewModel.JsonText);
 
+    private void OnContextRowClick(object? sender, RoutedEventArgs e)
+    {
+        if (
+            DataContext is InspectorViewModel viewModel
+            && sender is Button { DataContext: InspectorContextRowViewModel row }
+        )
+            viewModel.SelectContextRow(row);
+    }
+
     private async void OnCopyFieldValue(object? sender, RoutedEventArgs e)
     {
         if (sender is MenuItem { DataContext: InspectorFieldViewModel field })

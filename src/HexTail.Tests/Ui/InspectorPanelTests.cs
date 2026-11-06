@@ -1,5 +1,6 @@
 using System.Reactive.Linq;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -100,6 +101,53 @@ public sealed class InspectorPanelTests
             Assert.Equal(RuleAction.Hide, rule.Action);
             Assert.Equal("tick", rule.Pattern);
             await UiWait.Until(() => file.SelectedView.Lines.Count == 1);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task TheContextToggleListsNeighboursAndClickingOneSelectsIt()
+    {
+        var path = Path.GetTempFileName();
+        var window = TestWindow.CreatePolling(out var owner);
+        try
+        {
+            await owner.OpenPathsCommand.Execute([path]);
+            var file = owner.SelectedFile!;
+            file.Model.Buffer.Append(Enumerable.Range(0, 8).Select(i => new Line($"row {i}")));
+            file.SyncViews();
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            owner.Inspector.Open();
+            window
+                .GetVisualDescendants()
+                .OfType<LogView>()
+                .Single()
+                .FindControl<ListBox>("LogList")!
+                .SelectedIndex = 4;
+            await UiWait.Until(() => owner.Inspector.HasLine);
+            var panel = window.GetVisualDescendants().OfType<InspectorPanel>().Single();
+            Assert.Empty(owner.Inspector.ContextRows);
+
+            panel.FindControl<ToggleButton>("InspectorContextToggle")!.IsChecked = true;
+            await UiWait.Until(() => owner.Inspector.ContextRows.Count == 7);
+            Dispatcher.UIThread.RunJobs();
+
+            var buttons = panel
+                .FindControl<ItemsControl>("InspectorContext")!
+                .GetVisualDescendants()
+                .OfType<Button>()
+                .ToList();
+            // Row 4 with 3 lines above and the file ending at row 7: rows 1 to 7.
+            Assert.Equal(7, buttons.Count);
+            buttons[0].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+
+            await UiWait.Until(() => file.Model.SelectedLine == 1);
         }
         finally
         {

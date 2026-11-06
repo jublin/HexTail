@@ -53,12 +53,9 @@ public sealed class FileTabState : IAsyncDisposable
     public List<Search> Searches { get; } = [];
     public bool FollowAll { get; set; } = true;
     public List<bool> FollowSearches { get; } = [];
-    public bool ShowContext { get; set; }
     public LogLevels Levels { get; set; } = LogLevels.All;
     public int? SelectedLine { get; set; }
     public int? ExpandedLine { get; set; }
-    public int ContextAbove { get; set; } = 3;
-    public int ContextBelow { get; set; } = 10;
     public AppTimeZoneMode ElasticInputZone { get; set; } = AppTimeZoneMode.Utc;
     public string ElasticFrom { get; set; } = "now-5m";
     public string ElasticTo { get; set; } = "now";
@@ -72,11 +69,6 @@ public sealed class FileTabState : IAsyncDisposable
     public bool Ephemeral { get; internal init; }
     public ILogTailer Tailer { get; internal set; }
     public string DisplayName => Source.DisplayName;
-
-    public IReadOnlyList<Line> ContextLines =>
-        SelectedLine is int selected && selected >= 0 && selected < Buffer.Count
-            ? Buffer.GetContextWindow(selected, ContextAbove, ContextBelow)
-            : [];
 
     public void AddSearch(Search search)
     {

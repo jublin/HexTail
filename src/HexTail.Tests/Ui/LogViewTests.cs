@@ -67,14 +67,9 @@ public sealed class LogViewTests
             Assert.Single(
                 file.Model.Searches.Single(search => search.IsGlobalRule).GetHighlights(sample)
             );
-            file.Model.ShowContext = true;
-            file.Views[0].Sync();
-            var contextRow = Assert.Single(file.Views[0].ContextLines);
-            contextRow.SetVisible(true);
             file.Views[1].Sync();
             var searchRow = Assert.Single(file.Views[1].Lines);
             searchRow.SetVisible(true);
-            Assert.Same(row.Spans, contextRow.Spans);
             Assert.Same(row.Spans, searchRow.Spans);
 
             await state.UpdateSettingsAsync(
@@ -151,69 +146,6 @@ public sealed class LogViewTests
     }
 
     [AvaloniaFact]
-    public async Task ContextPanelRequiresToggleAndSelectedLine()
-    {
-        var path = Path.GetTempFileName();
-        await File.WriteAllTextAsync(path, "line");
-        try
-        {
-            var window = TestWindow.Create(out var viewModel);
-            await viewModel.OpenPathsCommand.Execute([path]);
-            window.Show();
-            var file = viewModel.SelectedFile;
-            Assert.NotNull(file);
-            var view = window.GetVisualDescendants().OfType<LogView>().Single();
-            var contextList = view.FindControl<ListBox>("ContextList")!;
-
-            file.ShowContext = true;
-            file.Model.SelectedLine = null;
-            file.SyncViews();
-            Assert.False(contextList.IsVisible);
-
-            file.Model.SelectedLine = 0;
-            file.SyncViews();
-            Assert.True(contextList.IsVisible);
-
-            file.ShowContext = false;
-            file.SyncViews();
-            Assert.False(contextList.IsVisible);
-            window.Close();
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
-
-    [AvaloniaFact]
-    public async Task HiddenContextRowDoesNotReserveSpace()
-    {
-        var path = Path.GetTempFileName();
-        await File.WriteAllTextAsync(path, "line");
-        try
-        {
-            var window = TestWindow.Create(out var viewModel);
-            await viewModel.OpenPathsCommand.Execute([path]);
-            window.Show();
-            var view = window.GetVisualDescendants().OfType<LogView>().Single();
-            var layout = view.FindControl<Grid>("LogLayout")!;
-
-            Assert.Equal(0, layout.RowDefinitions[2].ActualHeight);
-            viewModel.SelectedFile!.ShowContext = true;
-            viewModel.SelectedFile.Model.SelectedLine = 0;
-            viewModel.SelectedFile.SyncViews();
-            Dispatcher.UIThread.RunJobs();
-            Assert.True(layout.RowDefinitions[2].ActualHeight > 0);
-
-            window.Close();
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
-
-    [AvaloniaFact]
     public async Task EnablingFollowScrollsToEndAndStaysEnabled()
     {
         var path = Path.GetTempFileName();
@@ -244,35 +176,7 @@ public sealed class LogViewTests
     }
 
     [AvaloniaFact]
-    public async Task ShowingContextIsIndependentFromFollow()
-    {
-        var path = Path.GetTempFileName();
-        await File.WriteAllTextAsync(path, "line");
-        try
-        {
-            var window = TestWindow.Create(out var viewModel);
-            await viewModel.OpenPathsCommand.Execute([path]);
-            window.Show();
-            var file = viewModel.SelectedFile!;
-            var log = file.Views[0];
-            file.Model.SelectedLine = 0;
-
-            log.ShowContext = true;
-            file.SyncViews();
-
-            Assert.True(file.Model.ShowContext);
-            Assert.True(log.IsFollowing);
-            Assert.True(log.ContextVisible);
-            window.Close();
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
-
-    [AvaloniaFact]
-    public async Task FollowDoesNotMoveInlineContextSelection()
+    public async Task FollowDoesNotMoveTheSelection()
     {
         var path = Path.GetTempFileName();
         await File.WriteAllLinesAsync(path, ["line 0", "line 1"]);
@@ -293,7 +197,6 @@ public sealed class LogViewTests
 
             file.Model.FollowAll = false;
             file.Model.SelectedLine = 0;
-            log.ShowContext = true;
             file.SyncViews();
 
             file.Model.FollowAll = true;
@@ -309,7 +212,7 @@ public sealed class LogViewTests
     }
 
     [AvaloniaFact]
-    public async Task ContextViewContainsFullFileAndOwnsScrolling()
+    public async Task AppendingToALargeBufferKeepsExistingRowsInPlace()
     {
         var path = Path.GetTempFileName();
         await File.WriteAllLinesAsync(
@@ -327,17 +230,9 @@ public sealed class LogViewTests
                 Enumerable.Range(0, 200).Select(index => new Line($"line {index}"))
             );
             file.Model.SelectedLine = 100;
-            file.Views[0].ShowContext = true;
             file.SyncViews();
             Dispatcher.UIThread.RunJobs();
-            Assert.Equal(200, file.Views[0].ContextLines.Count);
-
-            var view = window.GetVisualDescendants().OfType<LogView>().Single();
-            var contextList = view.FindControl<ListBox>("ContextList")!;
-            Assert.Equal(200, contextList.ItemCount);
-            Assert.NotNull(
-                contextList.GetVisualDescendants().OfType<ScrollViewer>().SingleOrDefault()
-            );
+            Assert.Equal(200, file.Views[0].Lines.Count);
 
             var firstRow = file.Views[0].Lines[0];
             file.Model.Buffer.Append(new Line("line 200"));

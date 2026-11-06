@@ -7,6 +7,11 @@
   x:DataType="vm:InspectorViewModel"
   AutomationProperties.Name="Row inspector"
 >
+  <UserControl.Styles>
+    <Style Selector="Border.source-row.selected TextBlock">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+  </UserControl.Styles>
   <Border
     Background="{DynamicResource RaisedBrush}"
     BorderBrush="{DynamicResource BorderBrush}"
@@ -97,6 +102,28 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
           </StackPanel>
+          <StackPanel Spacing="4" IsVisible="{Binding ContextOpen}">
+            <TextBlock Text="CONTEXT" Classes="sidebar-heading" />
+            <ItemsControl x:Name="InspectorContext" ItemsSource="{Binding ContextRows}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:InspectorContextRowViewModel">
+                  <Border Classes="source-row" Classes.selected="{Binding IsSelected}">
+                    <Button
+                      Classes="source-select"
+                      Click="OnContextRowClick"
+                      AutomationProperties.Name="{Binding Text, StringFormat='Select line {0}'}"
+                    >
+                      <TextBlock
+                        Text="{Binding Text}"
+                        TextTrimming="CharacterEllipsis"
+                        FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+                      />
+                    </Button>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
         </StackPanel>
       </ScrollViewer>
       <WrapPanel Grid.Row="3" Margin="8,4,8,8">
@@ -115,6 +142,14 @@
           IsEnabled="{Binding CanCopyJson}"
           Click="OnCopyJson"
           AutomationProperties.Name="Copy fields as JSON"
+        />
+        <ToggleButton
+          x:Name="InspectorContextToggle"
+          Content="Show context"
+          Margin="2"
+          IsChecked="{Binding ContextOpen, Mode=TwoWay}"
+          IsEnabled="{Binding HasLine}"
+          AutomationProperties.Name="Show surrounding lines"
         />
       </WrapPanel>
     </Grid>

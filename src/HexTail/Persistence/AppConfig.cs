@@ -36,10 +36,7 @@ public sealed class PersistedElasticTab
     public List<PersistedSearch> Searches { get; init; } = [];
     public bool FollowAll { get; init; } = true;
     public List<bool> FollowSearches { get; init; } = [];
-    public bool ShowContext { get; init; }
     public int? SelectedLine { get; init; }
-    public int ContextAbove { get; init; } = 3;
-    public int ContextBelow { get; init; } = 10;
     public List<ViewRule> Rules { get; init; } = [];
     public LogLevels Levels { get; init; } = LogLevels.All;
 }
@@ -50,10 +47,7 @@ public sealed class PersistedFileTab
     public List<PersistedSearch> Searches { get; init; } = [];
     public bool FollowAll { get; init; } = true;
     public List<bool> FollowSearches { get; init; } = [];
-    public bool ShowContext { get; init; }
     public int? SelectedLine { get; init; }
-    public int ContextAbove { get; init; } = 3;
-    public int ContextBelow { get; init; } = 10;
     public List<ViewRule> Rules { get; init; } = [];
     public LogLevels Levels { get; init; } = LogLevels.All;
 }
@@ -70,7 +64,6 @@ public sealed class AppWindowState
 {
     public bool SidebarCollapsed { get; init; }
     public double SidebarWidth { get; init; }
-    public int ContextPaneSize { get; init; } = 300;
     public bool InspectorOpen { get; init; }
     public double InspectorWidth { get; init; } = 360;
     public double Width { get; init; } = 1280;

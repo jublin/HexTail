@@ -23,7 +23,6 @@ public partial class LogView : UserControl
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
         LogList.SelectionChanged += OnLogSelectionChanged;
-        ContextList.SelectionChanged += OnContextSelectionChanged;
         LogList.TemplateApplied += (_, _) => TryAttachScrollHandler();
         LogList.AttachedToVisualTree += (_, _) =>
             Dispatcher.UIThread.Post(TryAttachScrollHandler, DispatcherPriority.Background);
@@ -34,7 +33,6 @@ public partial class LogView : UserControl
         if (_viewModel is not null)
         {
             _viewModel.Lines.CollectionChanged -= OnLinesChanged;
-            _viewModel.ContextLines.CollectionChanged -= OnContextLinesChanged;
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             _viewModel.SelectionMoved -= OnSelectionMoved;
         }
@@ -49,7 +47,6 @@ public partial class LogView : UserControl
         if (_viewModel is not null)
         {
             _viewModel.Lines.CollectionChanged += OnLinesChanged;
-            _viewModel.ContextLines.CollectionChanged += OnContextLinesChanged;
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
             _viewModel.SelectionMoved += OnSelectionMoved;
             _viewModel.Sync();
@@ -60,7 +57,6 @@ public partial class LogView : UserControl
             {
                 TryAttachScrollHandler();
                 RequestScrollLogToEnd();
-                ScrollContextToSelected();
                 var viewModel = _viewModel;
                 Dispatcher.UIThread.Post(
                     () =>
@@ -86,14 +82,8 @@ public partial class LogView : UserControl
             Dispatcher.UIThread.Post(RequestScrollLogToEnd, DispatcherPriority.Background);
     }
 
-    private void OnContextLinesChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
-        Dispatcher.UIThread.Post(ScrollContextToSelected, DispatcherPriority.Background);
-
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(LogViewViewModel.ContextVisible))
-            Dispatcher.UIThread.Post(ScrollContextToSelected, DispatcherPriority.Background);
-
         if (e.PropertyName != nameof(LogViewViewModel.IsFollowing))
             return;
 
@@ -118,12 +108,6 @@ public partial class LogView : UserControl
     private void OnLogSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (_viewModel is not null && LogList.SelectedItem is LogLineViewModel row)
-            _viewModel.SelectLineCommand.Execute(row.Line).Subscribe();
-    }
-
-    private void OnContextSelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (_viewModel is not null && ContextList.SelectedItem is LogLineViewModel row)
             _viewModel.SelectLineCommand.Execute(row.Line).Subscribe();
     }
 
@@ -179,38 +163,5 @@ public partial class LogView : UserControl
         _viewModel.IsFollowing = false;
         if (LogList.ItemCount > 0)
             LogList.ScrollIntoView(0);
-    }
-
-    private void ScrollContextToSelected()
-    {
-        if (
-            _viewModel is null
-            || _viewModel.File.SelectedLine is not int selected
-            || selected < 0
-            || selected >= _viewModel.File.Buffer.Count
-        )
-            return;
-
-        var line = _viewModel.File.Buffer[selected];
-        var row = _viewModel.ContextLines.FirstOrDefault(item => ReferenceEquals(item.Line, line));
-        var index = row is null ? -1 : _viewModel.ContextLines.IndexOf(row);
-        if (index < 0)
-            return;
-
-        ContextList.SelectedItem = row;
-        Dispatcher.UIThread.Post(
-            () =>
-            {
-                if (
-                    _viewModel?.File.SelectedLine is int current
-                    && current >= 0
-                    && current < _viewModel.File.Buffer.Count
-                    && ReferenceEquals(_viewModel.File.Buffer[current], line)
-                    && index < _viewModel.ContextLines.Count
-                )
-                    ContextList.ScrollIntoView(index);
-            },
-            DispatcherPriority.Background
-        );
     }
 }

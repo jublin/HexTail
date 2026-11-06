@@ -213,4 +213,82 @@ public sealed class InspectorViewModelTests
             File.Delete(path);
         }
     }
+
+    [AvaloniaFact]
+    public async Task ContextListsTheTrueNeighboursOfTheSelectedRowAndClickingMovesTheSelection()
+    {
+        var lines = Enumerable.Range(0, 20).Select(i => new Line($"row {i}")).ToArray();
+        var (owner, file, path, window) = await OpenAsync(lines);
+        try
+        {
+            owner.State.SelectLine(file.Model, lines[10]);
+            owner.Inspector.ContextOpen = true;
+            owner.Inspector.Sync();
+
+            // Defaults are 3 lines above and 10 below; the file ends at row 19.
+            Assert.Equal(
+                Enumerable.Range(7, 13).Select(i => $"row {i}"),
+                owner.Inspector.ContextRows.Select(row => row.Text)
+            );
+            Assert.True(owner.Inspector.ContextRows.Single(row => row.IsSelected).Text == "row 10");
+
+            owner.Inspector.SelectContextRow(owner.Inspector.ContextRows[0]);
+            owner.Inspector.Sync();
+
+            Assert.Equal(7, file.Model.SelectedLine);
+            Assert.Equal("row 7", owner.Inspector.ContextRows.Single(r => r.IsSelected).Text);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task ContextRowsAreEmptyWhileTheContextToggleIsOff()
+    {
+        var lines = Enumerable.Range(0, 5).Select(i => new Line($"row {i}")).ToArray();
+        var (owner, file, path, window) = await OpenAsync(lines);
+        try
+        {
+            owner.State.SelectLine(file.Model, lines[2]);
+            owner.Inspector.Sync();
+
+            Assert.False(owner.Inspector.ContextOpen);
+            Assert.Empty(owner.Inspector.ContextRows);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task TurningContextOffAgainClearsTheRows()
+    {
+        var lines = Enumerable.Range(0, 5).Select(i => new Line($"row {i}")).ToArray();
+        var (owner, file, path, window) = await OpenAsync(lines);
+        try
+        {
+            owner.State.SelectLine(file.Model, lines[2]);
+            owner.Inspector.ContextOpen = true;
+            owner.Inspector.Sync();
+            Assert.Equal(5, owner.Inspector.ContextRows.Count);
+
+            await owner.Inspector.ToggleContextCommand.Execute();
+
+            Assert.False(owner.Inspector.ContextOpen);
+            Assert.Empty(owner.Inspector.ContextRows);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
 }

@@ -233,7 +233,6 @@ public partial class MainWindow : Window
                 Height = Height,
                 X = Position.X,
                 Y = Position.Y,
-                ContextPaneSize = ViewModel.State.Window.ContextPaneSize,
                 SidebarCollapsed = !ViewModel.SidebarOpen,
                 SidebarWidth = ViewModel.SidebarWidth,
                 InspectorOpen = ViewModel.Inspector.IsOpen,
@@ -294,9 +293,7 @@ public partial class MainWindow : Window
         var onLogRow =
             e.Key == Key.Space
             && e.Source is Visual source
-            && source.FindAncestorOfType<ListBox>(includeSelf: true)?.Name
-                is "LogList"
-                    or "ContextList";
+            && source.FindAncestorOfType<ListBox>(includeSelf: true)?.Name is "LogList";
         if (e.Key != Key.Tab && !onLogRow)
             return;
         var command = ShellShortcuts.Resolve(e.Key, e.KeyModifiers, textInputFocused: false);

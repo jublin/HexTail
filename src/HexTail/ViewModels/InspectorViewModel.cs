@@ -31,6 +31,7 @@ internal sealed class InspectorViewModel : ReactiveObject
     private string _rawText = string.Empty;
     private string? _jsonText;
     private string? _error;
+    private bool _contextOpen;
 
     internal InspectorViewModel(MainWindowViewModel owner)
     {
@@ -42,11 +43,31 @@ internal sealed class InspectorViewModel : ReactiveObject
             },
             owner.Scheduler
         );
+        ToggleContextCommand = ReactiveCommand.Create(
+            () =>
+            {
+                ContextOpen = !ContextOpen;
+            },
+            owner.Scheduler
+        );
     }
 
     internal MainWindowViewModel Owner => _owner;
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleContextCommand { get; }
     public ObservableCollection<InspectorFieldViewModel> Fields { get; } = [];
+    public ObservableCollection<InspectorContextRowViewModel> ContextRows { get; } = [];
+
+    /// <summary>Whether the row's true neighbours are listed. In-session only; not persisted.</summary>
+    public bool ContextOpen
+    {
+        get => _contextOpen;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _contextOpen, value);
+            RebuildContext();
+        }
+    }
 
     public bool IsOpen
     {
@@ -114,6 +135,21 @@ internal sealed class InspectorViewModel : ReactiveObject
         }
     }
 
+    internal void SelectContextRow(InspectorContextRowViewModel row)
+    {
+        var file = _owner.SelectedFile?.Model;
+        if (file is null)
+            return;
+        try
+        {
+            _owner.State.SelectLine(file, row.Line);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Error = ex.Message;
+        }
+    }
+
     internal void Open() => IsOpen = true;
 
     internal void Toggle() => IsOpen = !IsOpen;
@@ -131,7 +167,12 @@ internal sealed class InspectorViewModel : ReactiveObject
         }
 
         if (ReferenceEquals(line, _line) && index == _index)
+        {
+            // The neighbours can change under an unchanged selection (settings, appended lines).
+            RebuildContext();
             return;
+        }
+
         _line = line;
         _index = index;
         Error = null;
@@ -153,5 +194,39 @@ internal sealed class InspectorViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(HasFields));
         this.RaisePropertyChanged(nameof(JsonText));
         this.RaisePropertyChanged(nameof(CanCopyJson));
+        RebuildContext();
+    }
+
+    private void RebuildContext()
+    {
+        var file = _owner.SelectedFile?.Model;
+        if (!ContextOpen || file is null || _index < 0 || _index >= file.Buffer.Count)
+        {
+            if (ContextRows.Count > 0)
+                ContextRows.Clear();
+            return;
+        }
+
+        var settings = _owner.State.Settings;
+        var window = file.Buffer.GetContextWindow(
+            _index,
+            settings.ContextAbove,
+            settings.ContextBelow
+        );
+        // Sync runs on every poll; leave the list alone while nothing in it would change.
+        if (
+            ContextRows.Count == window.Count
+            && ContextRows
+                .Select(
+                    (row, i) =>
+                        ReferenceEquals(row.Line, window[i])
+                        && row.IsSelected == ReferenceEquals(window[i], _line)
+                )
+                .All(same => same)
+        )
+            return;
+        ContextRows.Clear();
+        foreach (var line in window)
+            ContextRows.Add(new InspectorContextRowViewModel(line, ReferenceEquals(line, _line)));
     }
 }

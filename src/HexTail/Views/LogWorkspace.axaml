@@ -206,17 +206,6 @@
                       </StackPanel>
                       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
                         <ToggleButton
-                          x:Name="InlineContextToggle"
-                          IsChecked="{Binding ShowContext, Mode=TwoWay}"
-                          ToolTip.Tip="Show surrounding lines for the selected row"
-                          AutomationProperties.Name="Show inline context"
-                        >
-                          <StackPanel Orientation="Horizontal" Spacing="4">
-                            <ic:Icon Value="mdi-arrow-expand-vertical" />
-                            <TextBlock Text="Context" />
-                          </StackPanel>
-                        </ToggleButton>
-                        <ToggleButton
                           x:Name="AutoScrollToggle"
                           IsChecked="{Binding IsFollowing, Mode=TwoWay}"
                           ToolTip.Tip="Keep the newest line in view (F)"

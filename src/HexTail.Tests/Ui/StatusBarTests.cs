@@ -74,7 +74,7 @@ public sealed class StatusBarTests
     }
 
     [AvaloniaFact]
-    public async Task ViewToolbarTogglesFollowAndContextForTheSelectedView()
+    public async Task ViewToolbarTogglesFollowForTheSelectedView()
     {
         var path = Path.GetTempFileName();
         try
@@ -84,14 +84,11 @@ public sealed class StatusBarTests
             await viewModel.OpenPathsCommand.Execute([path]);
             Dispatcher.UIThread.RunJobs();
             var follow = Toggle(window, "AutoScrollToggle");
-            var context = Toggle(window, "InlineContextToggle");
 
             follow.IsChecked = false;
-            context.IsChecked = true;
             Dispatcher.UIThread.RunJobs();
 
             Assert.False(viewModel.SelectedFile!.Model.FollowAll);
-            Assert.True(viewModel.SelectedFile.Model.ShowContext);
             window.Close();
         }
         finally

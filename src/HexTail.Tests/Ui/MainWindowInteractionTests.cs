@@ -110,7 +110,6 @@ public sealed class MainWindowInteractionTests
                     "OpenFileButton",
                     "SidebarToggleButton",
                     "AutoScrollToggle",
-                    "InlineContextToggle",
                     "PauseToggle",
                     "ElasticTimeRangeButton",
                 }

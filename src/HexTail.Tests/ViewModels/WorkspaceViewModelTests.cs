@@ -16,7 +16,7 @@ namespace HexTail.Tests.ViewModels;
 public sealed class WorkspaceViewModelTests
 {
     [AvaloniaFact]
-    public async Task SetShowContext_PersistsOnce()
+    public async Task SetFollowAll_PersistsOnce()
     {
         RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
         var persistence = new TestPersistence();
@@ -36,7 +36,7 @@ public sealed class WorkspaceViewModelTests
             var file = Assert.Single(viewModel.Files);
             var savesBeforeToggle = persistence.SaveCount;
 
-            await viewModel.SetShowContextAsync(file, true);
+            await viewModel.SetFollowAllAsync(file, false);
 
             Assert.Equal(savesBeforeToggle + 1, persistence.SaveCount);
         }
