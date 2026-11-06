@@ -1383,6 +1383,16 @@ public sealed class AppState : IAsyncDisposable
             })
             .ToList();
 
+    // A connection saved by the setup flow before any view exists legitimately has no views.
+    private static bool HasLegacyViewFields(ElasticConnectionSettings connection) =>
+        !string.IsNullOrWhiteSpace(connection.DataViewId)
+        || !string.IsNullOrWhiteSpace(connection.DataViewTitle)
+        || !string.IsNullOrWhiteSpace(connection.TimeFieldName)
+        || !string.IsNullOrWhiteSpace(connection.ServerField)
+        || !string.IsNullOrWhiteSpace(connection.NamespaceField)
+        || connection.OutputFields is { Count: > 0 }
+        || connection.Sources is { Count: > 0 };
+
     private static List<ElasticViewSettings> NormalizeElasticViews(
         ElasticConnectionSettings connection
     )
@@ -1392,7 +1402,7 @@ public sealed class AppState : IAsyncDisposable
             .GroupBy(view => view.Id.Trim(), StringComparer.Ordinal)
             .Select(group => NormalizeElasticView(group.First()))
             .ToList();
-        if (views.Count > 0)
+        if (views.Count > 0 || !HasLegacyViewFields(connection))
             return views;
 
         return

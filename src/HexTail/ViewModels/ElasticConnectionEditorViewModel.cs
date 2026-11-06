@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using HexTail.Elastic;
 using HexTail.Persistence;
 using ReactiveUI;
@@ -24,6 +25,11 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     private string? _savedSnapshot;
     private bool _isSaving;
     private bool _saveFailed;
+    private string _cloudId = string.Empty;
+    private string? _cloudIdError;
+    private int _editBatchDepth;
+    private bool _editPending;
+    private bool _credentialsTested;
 
     public ElasticConnectionEditorViewModel(SettingsViewModel owner, string id)
     {
@@ -36,8 +42,17 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             SaveAsync,
             this.WhenAnyValue(editor => editor.CanSave)
         );
+        EndpointResults =
+        [
+            new ElasticEndpointResultViewModel("Kibana"),
+            new ElasticEndpointResultViewModel("Elasticsearch"),
+            new ElasticEndpointResultViewModel("Credentials"),
+        ];
         Views.CollectionChanged += (_, _) => NotifySavePrerequisitesChanged();
     }
+
+    /// <summary>Raised whenever a field that affects the connection test changes.</summary>
+    public event EventHandler? ConnectionEdited;
 
     public string Id { get; }
     public string Name
@@ -48,6 +63,25 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             this.RaiseAndSetIfChanged(ref _name, value);
             NotifySavePrerequisitesChanged();
         }
+    }
+
+    /// <summary>Pasting a Cloud ID fills the URLs; it is a convenience input and is never persisted.</summary>
+    public string CloudId
+    {
+        get => _cloudId;
+        set
+        {
+            value ??= string.Empty;
+            if (_cloudId == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _cloudId, value);
+            ApplyCloudId(value);
+        }
+    }
+    public string? CloudIdError
+    {
+        get => _cloudIdError;
+        private set => this.RaiseAndSetIfChanged(ref _cloudIdError, value);
     }
     public string KibanaUrl
     {
@@ -122,6 +156,23 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ObservableCollection<ElasticViewEditorViewModel> Views { get; } = [];
     public ObservableCollection<ElasticDataViewChoiceViewModel> DataViews { get; } = [];
+    public IReadOnlyList<ElasticEndpointResultViewModel> EndpointResults { get; }
+    public bool EndpointsOk => EndpointResults[0].IsOk && EndpointResults[1].IsOk;
+    public bool CanTestConnection =>
+        KibanaUrlError is null
+        && ElasticsearchUrlError is null
+        && AuthMode switch
+        {
+            ElasticAuthMode.Basic => !string.IsNullOrWhiteSpace(Username) && HasSecret,
+            ElasticAuthMode.ApiKey => HasSecret,
+            _ => true,
+        };
+    public bool IsSaved => SavedConnection is not null;
+    private ElasticConnectionSettings? SavedConnection => _owner.SavedConnection(Id);
+    private bool NeedsSecret => AuthMode is ElasticAuthMode.Basic or ElasticAuthMode.ApiKey;
+    private bool HasStoredSecret =>
+        SavedConnection is { AuthMode: ElasticAuthMode.Basic or ElasticAuthMode.ApiKey };
+    private bool HasSecret => !string.IsNullOrWhiteSpace(Secret) || HasStoredSecret;
     public bool CanSave =>
         !IsTesting
         && !IsSaving
@@ -238,9 +289,55 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
 
     private void InvalidateConnectionTest()
     {
+        if (_editBatchDepth > 0)
+        {
+            _editPending = true;
+            return;
+        }
+
         _connectionVersion++;
         Status = "Not tested";
         Error = null;
+        _credentialsTested = false;
+        foreach (var result in EndpointResults)
+            result.Reset();
+        this.RaisePropertyChanged(nameof(EndpointsOk));
+        ConnectionEdited?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ApplyCloudId(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            CloudIdError = null;
+            return;
+        }
+
+        if (!HexTail.Elastic.CloudId.TryDecode(value, out var endpoints) || endpoints is null)
+        {
+            CloudIdError = "Enter a valid Cloud ID (name:base64…).";
+            return;
+        }
+
+        CloudIdError = null;
+        // Both URLs change together, so the test is invalidated once, not once per field.
+        _editBatchDepth++;
+        try
+        {
+            ElasticsearchUrl = endpoints.ElasticsearchUrl;
+            if (endpoints.KibanaUrl is not null)
+                KibanaUrl = endpoints.KibanaUrl;
+        }
+        finally
+        {
+            _editBatchDepth--;
+        }
+
+        if (_editBatchDepth == 0 && _editPending)
+        {
+            _editPending = false;
+            InvalidateConnectionTest();
+        }
     }
 
     private async Task TestConnectionAsync()
@@ -249,28 +346,59 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         IsTesting = true;
         Error = null;
         Status = "Checking…";
+        _credentialsTested = false;
+        EndpointResults[0].Set(EndpointState.Checking, "Checking…");
+        EndpointResults[1].Set(EndpointState.Checking, "Checking…");
+        EndpointResults[2].Reset();
+        this.RaisePropertyChanged(nameof(EndpointsOk));
         try
         {
-            var viewsTask = GetDataViewsAsync();
-            var elasticsearchTask = _owner.CheckElasticsearchAsync(
-                ToSettings(includeViews: false),
-                Secret
+            IReadOnlyList<ElasticDataViewSummary>? views = null;
+            var viewsError = CaptureAsync(async () => views = await GetDataViewsAsync());
+            var elasticsearchError = CaptureAsync(() =>
+                _owner.CheckElasticsearchAsync(ToSettings(includeViews: false), Secret)
             );
-            await Task.WhenAll(viewsTask, elasticsearchTask);
+            var kibanaFailure = await viewsError;
+            var elasticsearchFailure = await elasticsearchError;
             if (version != _connectionVersion)
                 return;
-            var views = await viewsTask;
-            UpdateDataViews(views);
-            foreach (var editor in Views)
-                editor.NotifyDataViewSelectionChanged();
-            foreach (var editor in Views)
-                await editor.RefreshDataViewAsync(
-                    views.FirstOrDefault(view => view.Id == editor.SelectedDataViewId)
+            EndpointResults[0]
+                .Set(
+                    kibanaFailure is null ? EndpointState.Ok : EndpointState.Failed,
+                    kibanaFailure is null
+                        ? $"✓ {DataViewCount(views!.Count)}"
+                        : $"✗ {kibanaFailure.Message}"
                 );
-            if (version != _connectionVersion)
-                return;
-            Status =
-                $"Connected ({views.Count} data view{(views.Count == 1 ? string.Empty : "s")})";
+            EndpointResults[1]
+                .Set(
+                    elasticsearchFailure is null ? EndpointState.Ok : EndpointState.Failed,
+                    elasticsearchFailure is null
+                        ? "✓ reachable"
+                        : $"✗ {elasticsearchFailure.Message}"
+                );
+            ShowCredentialsResult();
+            this.RaisePropertyChanged(nameof(EndpointsOk));
+            if (kibanaFailure is null)
+            {
+                UpdateDataViews(views!);
+                foreach (var editor in Views)
+                    editor.NotifyDataViewSelectionChanged();
+                foreach (var editor in Views)
+                    await editor.RefreshDataViewAsync(
+                        views!.FirstOrDefault(view => view.Id == editor.SelectedDataViewId)
+                    );
+                if (version != _connectionVersion)
+                    return;
+            }
+
+            var failure = kibanaFailure ?? elasticsearchFailure;
+            if (failure is not null)
+            {
+                Error = failure.Message;
+                Status = "Connection failed";
+            }
+            else
+                Status = $"Connected ({DataViewCount(views!.Count)})";
         }
         catch (Exception exception)
         {
@@ -283,6 +411,35 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         {
             IsTesting = false;
         }
+    }
+
+    // Every failure counts, cancellation included: no token is wired, so a cancelled request is a timeout.
+    private static async Task<Exception?> CaptureAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+            return null;
+        }
+        catch (Exception exception)
+        {
+            return exception;
+        }
+    }
+
+    private static string DataViewCount(int count) =>
+        $"{count} data view{(count == 1 ? string.Empty : "s")}";
+
+    private void ShowCredentialsResult()
+    {
+        _credentialsTested = true;
+        var credentials = EndpointResults[2];
+        if (!NeedsSecret)
+            credentials.Set(EndpointState.Ok, "no credentials (anonymous)");
+        else if (HasStoredSecret && string.IsNullOrWhiteSpace(Secret))
+            credentials.Set(EndpointState.Ok, "stored in keyring");
+        else
+            credentials.Set(EndpointState.NotTested, "will be stored in keyring on Next");
     }
 
     private void UpdateDataViews(IReadOnlyList<ElasticDataViewSummary> views)
@@ -304,6 +461,8 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     internal void NotifySavePrerequisitesChanged()
     {
         this.RaisePropertyChanged(nameof(CanSave));
+        this.RaisePropertyChanged(nameof(CanTestConnection));
+        this.RaisePropertyChanged(nameof(IsSaved));
         this.RaisePropertyChanged(nameof(IsDirty));
         this.RaisePropertyChanged(nameof(SaveStatus));
         _owner.NotifyElasticDraftsChanged();
@@ -366,6 +525,69 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             IsSaving = false;
         }
     }
+
+    /// <summary>
+    /// Persists only the connection (with the views already saved), leaving any in-progress view
+    /// out so the setup flow can store the credentials before the views are complete.
+    /// </summary>
+    internal async Task<bool> SaveConnectionOnlyAsync()
+    {
+        if (IsSaving || KibanaUrlError is not null || ElasticsearchUrlError is not null)
+            return false;
+        var secret = Secret;
+        _saveFailed = false;
+        IsSaving = true;
+        try
+        {
+            var connection = ToSettings(includeViews: false) with { Views = _owner.SavedViews(Id) };
+            await _owner.SaveElasticConnectionAsync(connection, secret);
+            if (Secret == secret)
+            {
+                // The stored secret is now what a test would use, so earlier results stay valid.
+                _secret = string.Empty;
+                this.RaisePropertyChanged(nameof(Secret));
+            }
+            UpdateSavedConnectionSnapshot();
+            if (_credentialsTested)
+                ShowCredentialsResult();
+            Error = null;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _saveFailed = true;
+            Error = exception.Message;
+            return false;
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+
+    private void UpdateSavedConnectionSnapshot()
+    {
+        // Only the connection fields were written; the views part keeps describing what is saved.
+        var current = JsonNode.Parse(DraftSnapshot())!.AsObject();
+        var saved = _savedSnapshot is null
+            ? current.DeepClone().AsObject()
+            : JsonNode.Parse(_savedSnapshot)!.AsObject();
+        if (_savedSnapshot is null)
+            saved["Views"] = new JsonArray();
+        else
+            foreach (var key in ConnectionSnapshotKeys)
+                saved[key] = current[key]?.DeepClone();
+        _savedSnapshot = saved.ToJsonString();
+    }
+
+    private static readonly string[] ConnectionSnapshotKeys =
+    [
+        nameof(Name),
+        nameof(KibanaUrl),
+        nameof(ElasticsearchUrl),
+        nameof(AuthMode),
+        nameof(Username),
+    ];
 }
 
 internal sealed class ElasticDataViewChoiceViewModel(string id, string title) : ReactiveObject

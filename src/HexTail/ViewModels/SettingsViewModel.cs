@@ -511,6 +511,14 @@ internal sealed class SettingsViewModel : ReactiveObject
         };
     }
 
+    internal ElasticConnectionSettings? SavedConnection(string connectionId) =>
+        _owner.State.Settings.ElasticConnections.FirstOrDefault(connection =>
+            connection.Id == connectionId
+        );
+
+    internal List<ElasticViewSettings> SavedViews(string connectionId) =>
+        SavedConnection(connectionId)?.Views.ToList() ?? [];
+
     internal Task SaveElasticConnectionAsync(ElasticConnectionSettings connection, string secret) =>
         _owner.State.SaveElasticConnectionAsync(connection, secret).AsTask();
 
