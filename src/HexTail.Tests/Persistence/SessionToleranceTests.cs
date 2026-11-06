@@ -320,6 +320,34 @@ public sealed class SessionToleranceTests
         Assert.Equal(2, directory.Backups.Length);
     }
 
+    [Fact]
+    public async Task ExistingBackupWithTheSameContentUnderAnEarlierTimestamp_IsNotDuplicated()
+    {
+        using var directory = new Dir();
+        const string garbage = "{ \"version\": 2, \"settings\": ";
+        await File.WriteAllTextAsync(
+            directory.Backup,
+            "old incident",
+            TestContext.Current.CancellationToken
+        );
+        var earlier = Path.Combine(
+            Path.GetDirectoryName(directory.Backup)!,
+            "session.unreadable.20000101000000.bak"
+        );
+        await File.WriteAllTextAsync(earlier, garbage, TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            directory.Session,
+            garbage,
+            TestContext.Current.CancellationToken
+        );
+
+        await new JsonFileAppPersistence(directory.Session).LoadAsync(
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(2, directory.Backups.Length);
+    }
+
     private sealed class Dir : IDisposable
     {
         private readonly string _path = Directory
