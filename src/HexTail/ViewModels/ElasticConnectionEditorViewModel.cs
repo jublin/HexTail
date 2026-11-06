@@ -278,6 +278,28 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     internal Task<ElasticDataView> GetDataViewAsync(string dataViewId) =>
         _owner.GetDataViewAsync(ToSettings(includeViews: false), dataViewId, Secret);
 
+    internal System.Reactive.Concurrency.IScheduler Scheduler => _owner.Scheduler;
+
+    internal Task<long> CountAsync(string title, string timeField, string field, string value) =>
+        _owner.CountAsync(ToSettings(includeViews: false), title, timeField, field, value, Secret);
+
+    internal Task<IReadOnlyList<ElasticHit>> PreviewAsync(
+        string title,
+        string timeField,
+        string? field,
+        string? value,
+        IReadOnlyList<string> outputFields
+    ) =>
+        _owner.PreviewAsync(
+            ToSettings(includeViews: false),
+            title,
+            timeField,
+            field,
+            value,
+            outputFields,
+            Secret
+        );
+
     private void AddView()
     {
         Views.Add(

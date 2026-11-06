@@ -538,6 +538,8 @@ internal sealed class SettingsViewModel : ReactiveObject
         string? secret = null
     ) => _owner.State.GetDataViewAsync(connection, dataViewId, secret);
 
+    internal IScheduler Scheduler => _owner.Scheduler;
+
     private const int PreviewSize = 5;
     private static readonly TimeSpan CountWindow = TimeSpan.FromMinutes(15);
 
