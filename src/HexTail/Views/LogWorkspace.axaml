@@ -181,7 +181,7 @@
             </TabControl.ItemTemplate>
             <TabControl.ContentTemplate>
               <DataTemplate x:DataType="vm:LogViewViewModel">
-                <Grid RowDefinitions="Auto,*">
+                <Grid RowDefinitions="Auto,Auto,*">
                   <Grid x:Name="ViewToolbar" ColumnDefinitions="*,Auto" Margin="12,4,8,4">
                     <StackPanel Spacing="2" VerticalAlignment="Center">
                       <TextBlock
@@ -224,7 +224,8 @@
                       </ToggleButton>
                     </StackPanel>
                   </Grid>
-                  <views:LogView Grid.Row="1" />
+                  <views:FilterBar Grid.Row="1" DataContext="{Binding Workspace.FilterBar}" />
+                  <views:LogView Grid.Row="2" />
                 </Grid>
               </DataTemplate>
             </TabControl.ContentTemplate>

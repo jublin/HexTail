@@ -79,6 +79,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         _scheduler = scheduler ?? RxSchedulers.MainThreadScheduler;
         _startPolling = startPolling;
         Settings = new SettingsViewModel(this, _scheduler);
+        FilterBar = new FilterBarViewModel(this);
         PickFiles = new Interaction<Unit, IReadOnlyList<string>>(_scheduler);
         Palette = new CommandPaletteViewModel(BuildPaletteItems, SetFileError);
         OpenPaletteCommand = ReactiveCommand.Create(Palette.Open, _scheduler);
@@ -192,6 +193,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public bool HasElasticWarning => _state.HasElasticWarning;
     public string ElasticSourceIcon => HasElasticWarning ? "mdi-cloud-alert" : "mdi-cloud-check";
     public SettingsViewModel Settings { get; }
+    public FilterBarViewModel FilterBar { get; }
     public Interaction<Unit, IReadOnlyList<string>> PickFiles { get; }
     public CommandPaletteViewModel Palette { get; }
     public ReactiveCommand<Unit, Unit> OpenPaletteCommand { get; }
@@ -982,6 +984,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             ? null
             : Files.FirstOrDefault(item => ReferenceEquals(item.Model, _state.SelectedFile));
         Settings.Sync(_state.Settings);
+        FilterBar.Sync();
         var configured = _state
             .Settings.ElasticConnections.SelectMany(connection =>
                 connection.Views.SelectMany(view =>

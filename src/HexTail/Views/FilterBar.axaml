@@ -1,0 +1,67 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTail.ViewModels"
+  xmlns:ic="https://github.com/projektanker/icons.avalonia"
+  x:Class="HexTail.Views.FilterBar"
+  x:DataType="vm:FilterBarViewModel"
+  AutomationProperties.Name="Filters"
+>
+  <StackPanel Margin="8,2,8,4" Spacing="4">
+    <ItemsControl x:Name="ChipList" ItemsSource="{Binding Chips}" IsVisible="{Binding HasChips}">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <WrapPanel />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:RuleChipViewModel">
+          <Grid
+            x:Name="RuleChip"
+            Margin="0,0,6,4"
+            Classes="rule-chip"
+            Classes.disabled="{Binding IsDisabled}"
+            ToolTip.Tip="{Binding ToolTip}"
+            AutomationProperties.Name="{Binding AutomationName}"
+          >
+            <Rectangle
+              Classes="chip-outline"
+              Classes.global="{Binding IsGlobal}"
+              RadiusX="10"
+              RadiusY="10"
+            />
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="8,2,4,2">
+              <Ellipse
+                Width="8"
+                Height="8"
+                Fill="{Binding SwatchBrush}"
+                IsVisible="{Binding HasSwatch}"
+                VerticalAlignment="Center"
+              />
+              <ic:Icon Value="mdi-eye-off-outline" IsVisible="{Binding IsHide}" />
+              <ic:Icon Value="mdi-filter-outline" IsVisible="{Binding IsShowOnly}" />
+              <ic:Icon Value="mdi-bookmark-outline" IsVisible="{Binding IsPinnedTab}" />
+              <Button
+                Classes="chip-body"
+                Command="{Binding ActivateCommand}"
+                AutomationProperties.Name="{Binding Text, StringFormat='Edit {0}'}"
+              >
+                <TextBlock Classes="chip-text" Text="{Binding Text}" />
+              </Button>
+              <Button
+                Classes="icon tab-close"
+                Width="18"
+                Height="18"
+                Command="{Binding RemoveCommand}"
+                ToolTip.Tip="Remove"
+                AutomationProperties.Name="{Binding Pattern, StringFormat='Remove {0}'}"
+              >
+                <ic:Icon Value="mdi-close" FontSize="12" />
+              </Button>
+            </StackPanel>
+          </Grid>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </StackPanel>
+</UserControl>

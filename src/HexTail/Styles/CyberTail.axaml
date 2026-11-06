@@ -213,4 +213,24 @@
     <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
+<Style Selector="Rectangle.chip-outline">
+  <Setter Property="Stroke" Value="{DynamicResource MutedBrush}" />
+  <Setter Property="StrokeThickness" Value="1" />
+  <Setter Property="Fill" Value="{DynamicResource RaisedAltBrush}" />
+</Style>
+<Style Selector="Rectangle.chip-outline.global">
+  <Setter Property="StrokeDashArray" Value="3,2" />
+</Style>
+<Style Selector="Grid.rule-chip.disabled">
+  <Setter Property="Opacity" Value="0.5" />
+</Style>
+<Style Selector="Grid.rule-chip.disabled TextBlock.chip-text">
+  <Setter Property="TextDecorations" Value="Strikethrough" />
+</Style>
+<Style Selector="Button.chip-body">
+  <Setter Property="Background" Value="Transparent" />
+  <Setter Property="BorderThickness" Value="0" />
+  <Setter Property="Padding" Value="2,0" />
+  <Setter Property="MinHeight" Value="0" />
+</Style>
 </Styles>
