@@ -16,6 +16,15 @@ public sealed class AppConfig
     public AppSettings Settings { get; init; } = new();
     public List<string> RecentFiles { get; init; } = [];
     public List<string> RecentElasticSourceIds { get; init; } = [];
+    public List<SavedFilter> SavedFilters { get; init; } = [];
+}
+
+/// <summary>A named bundle of source rules and a level mask that can be merged into any source.</summary>
+public sealed record SavedFilter
+{
+    public string Name { get; init; } = string.Empty;
+    public List<ViewRule> Rules { get; init; } = [];
+    public LogLevels Levels { get; init; } = LogLevels.All;
 }
 
 public sealed class PersistedElasticTab
@@ -156,14 +165,8 @@ public static class AppConfigJson
             foreach (var tabs in new[] { root["openFiles"], root["openElasticTabs"] })
                 if (tabs is JsonArray array)
                     foreach (var tab in array.OfType<JsonObject>())
-                    {
-                        SanitizeRules(tab);
-                        if (
-                            tab.ContainsKey("levels")
-                            && !(tab["levels"] is { } levels && Parses<LogLevels>(levels))
-                        )
-                            tab.Remove("levels");
-                    }
+                        SanitizeRulesAndLevels(tab);
+            SanitizeSavedFilters(root);
             return root.ToJsonString();
         }
         catch (Exception exception) when (RuleMigration.IsUnreadableTree(exception))
@@ -171,6 +174,38 @@ public static class AppConfigJson
             // The real deserializer reports a malformed document (and accepts duplicate keys).
             return json;
         }
+    }
+
+    private static void SanitizeRulesAndLevels(JsonObject owner)
+    {
+        SanitizeRules(owner);
+        if (
+            owner.ContainsKey("levels")
+            && !(owner["levels"] is { } levels && Parses<LogLevels>(levels))
+        )
+            owner.Remove("levels");
+    }
+
+    /// <summary>Saved filters are optional: a malformed list is dropped, as are entries without a name.</summary>
+    private static void SanitizeSavedFilters(JsonObject root)
+    {
+        if (!root.ContainsKey("savedFilters"))
+            return;
+        if (root["savedFilters"] is not JsonArray filters)
+        {
+            root.Remove("savedFilters");
+            return;
+        }
+        for (var index = filters.Count - 1; index >= 0; index--)
+            if (
+                filters[index] is not JsonObject filter
+                || filter["name"] is not JsonValue name
+                || !name.TryGetValue<string>(out var text)
+                || string.IsNullOrWhiteSpace(text)
+            )
+                filters.RemoveAt(index);
+            else
+                SanitizeRulesAndLevels(filter);
     }
 
     private static void SanitizeRules(JsonObject owner)

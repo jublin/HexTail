@@ -6,6 +6,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using HexTail.Domain;
 using HexTail.Persistence;
 using HexTail.Tests.Support;
 using HexTail.ViewModels;
@@ -273,6 +274,64 @@ public sealed class SidebarTests
         Assert.True(viewModel.SettingsOpen);
         Assert.Equal(2, viewModel.Settings.SectionIndex);
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task SavedFilterRowsListApplyAndDelete()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            window.Width = 1280;
+            window.Show();
+            await viewModel.OpenPathsCommand.Execute([path]);
+            var file = viewModel.SelectedFile!.Model;
+            var sidebar = Sidebar(window);
+            Assert.True(sidebar.FindControl<TextBlock>("SavedFiltersEmptyHint")!.IsVisible);
+
+            await viewModel.State.SetSourceRulesAsync(
+                file,
+                [TestRules.Source("boom"), TestRules.Source("noise", RuleAction.Hide)]
+            );
+            await viewModel.State.SetLevelsAsync(file, LogLevels.Warn | LogLevels.Error);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(viewModel.FilterBar.CanSaveFilter);
+            viewModel.FilterBar.NewFilterName = "mine";
+            await viewModel.FilterBar.SaveFilterCommand.Execute();
+            await UiWait.Until(() => viewModel.SavedFilters.Count == 1);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(sidebar.FindControl<TextBlock>("SavedFiltersEmptyHint")!.IsVisible);
+            Assert.Equal(string.Empty, viewModel.FilterBar.NewFilterName);
+            var saved = Assert.Single(viewModel.SavedFilters);
+            Assert.Equal("2 rules · levels W E", saved.Summary);
+            Assert.Single(
+                sidebar
+                    .FindControl<ItemsControl>("SavedFilterList")!
+                    .GetVisualDescendants()
+                    .OfType<Border>(),
+                border => border.Classes.Contains("source-row")
+            );
+
+            await viewModel.State.SetSourceRulesAsync(file, []);
+            await viewModel.State.SetLevelsAsync(file, LogLevels.All);
+            Dispatcher.UIThread.RunJobs();
+            SelectButton(window, saved).Command!.Execute(null);
+            await UiWait.Until(() => file.Rules.Count == 2);
+            Assert.Equal(["boom", "noise"], file.Rules.Select(rule => rule.Pattern));
+            Assert.Equal(LogLevels.Warn | LogLevels.Error, file.Levels);
+
+            CloseButton(window, saved).Command!.Execute(null);
+            await UiWait.Until(() => viewModel.SavedFilters.Count == 0);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(sidebar.FindControl<TextBlock>("SavedFiltersEmptyHint")!.IsVisible);
+            window.Close();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     private static async Task ResizeAsync(Window window, double width)

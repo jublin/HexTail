@@ -9,7 +9,7 @@
   AutomationProperties.Name="Filters"
 >
   <StackPanel Margin="8,2,8,4" Spacing="4">
-    <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="4">
+    <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="4">
       <TextBox
         x:Name="QueryBox"
         Name="QueryBox"
@@ -92,6 +92,61 @@
           </ItemsControl.ItemTemplate>
         </ItemsControl>
       </Border>
+      <Button
+        x:Name="SaveFilterButton"
+        Name="SaveFilterButton"
+        Grid.Column="5"
+        Height="{Binding Settings.SecondaryControlHeight}"
+        MinHeight="{Binding Settings.SecondaryControlHeight}"
+        Padding="{Binding Settings.SecondaryPadding}"
+        IsVisible="{Binding CanSaveFilter}"
+        ToolTip.Tip="Save this source's rules and level filter as a named filter"
+        AutomationProperties.Name="Save filter"
+      >
+        <ic:Icon Value="mdi-content-save-outline" />
+        <FlyoutBase.AttachedFlyout>
+          <Flyout Placement="BottomEdgeAlignedRight">
+            <StackPanel Width="260" Spacing="6" AutomationProperties.Name="Save filter">
+              <TextBlock Classes="hint" Text="Saves this source's rules and level filter." TextWrapping="Wrap" />
+              <TextBox
+                Name="SaveFilterNameBox"
+                Text="{Binding NewFilterName, Mode=TwoWay}"
+                PlaceholderText="Filter name"
+                AutomationProperties.Name="Saved filter name"
+              >
+                <TextBox.KeyBindings>
+                  <KeyBinding Gesture="Enter" Command="{Binding SaveFilterCommand}" />
+                  <KeyBinding Gesture="Escape" Command="{Binding CancelSaveFilterCommand}" />
+                </TextBox.KeyBindings>
+              </TextBox>
+              <TextBlock
+                Name="SaveFilterError"
+                Classes="error"
+                Text="{Binding SaveError}"
+                IsVisible="{Binding HasSaveError}"
+                TextWrapping="Wrap"
+                AutomationProperties.Name="Filter could not be saved"
+              />
+              <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                <Button
+                  Name="SaveFilterCancelButton"
+                  Content="Cancel"
+                  Command="{Binding CancelSaveFilterCommand}"
+                  AutomationProperties.Name="Cancel saving filter"
+                />
+                <Button
+                  Name="SaveFilterConfirmButton"
+                  Classes="primary"
+                  Content="Save"
+                  IsEnabled="{Binding HasFilterName}"
+                  Command="{Binding SaveFilterCommand}"
+                  AutomationProperties.Name="Save filter with this name"
+                />
+              </StackPanel>
+            </StackPanel>
+          </Flyout>
+        </FlyoutBase.AttachedFlyout>
+      </Button>
     </Grid>
     <TextBlock
       x:Name="FilterError"

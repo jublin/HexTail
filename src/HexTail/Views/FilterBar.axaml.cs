@@ -18,6 +18,58 @@ public partial class FilterBar : UserControl
         this.FindControl<TextBox>("QueryBox")!.KeyDown += OnQueryKeyDown;
         ChipList.AddHandler(PointerReleasedEvent, OnChipPointerReleased, RoutingStrategies.Bubble);
         ChipList.AddHandler(Button.ClickEvent, OnChipBodyClick, RoutingStrategies.Bubble);
+        this.FindControl<Button>("SaveFilterButton")!.Click += OnSaveFilterClick;
+    }
+
+    private void OnSaveFilterClick(object? sender, RoutedEventArgs e)
+    {
+        if (
+            sender is not Button button
+            || DataContext is not FilterBarViewModel bar
+            || FlyoutBase.GetAttachedFlyout(button)
+                is not Flyout { Content: Control content } flyout
+        )
+            return;
+        content.DataContext = bar;
+        bar.SaveError = null;
+        bar.SaveFlyoutOpen = true;
+        // The view model closes the flyout after a save or Cancel; light dismissal reports back.
+        void OnBarChanged(object? s, PropertyChangedEventArgs args)
+        {
+            if (
+                args.PropertyName == nameof(FilterBarViewModel.SaveFlyoutOpen)
+                && !bar.SaveFlyoutOpen
+            )
+                flyout.Hide();
+        }
+        void OnOpened(object? s, EventArgs args)
+        {
+            flyout.Opened -= OnOpened;
+            if (
+                content
+                    .GetVisualDescendants()
+                    .Prepend(content)
+                    .OfType<TextBox>()
+                    .FirstOrDefault(box => box.Name == "SaveFilterNameBox") is
+                { } nameBox
+            )
+            {
+                nameBox.Focus();
+                nameBox.SelectAll();
+            }
+        }
+        void OnClosed(object? s, EventArgs args)
+        {
+            flyout.Opened -= OnOpened;
+            flyout.Closed -= OnClosed;
+            bar.PropertyChanged -= OnBarChanged;
+            bar.SaveFlyoutOpen = false;
+        }
+        bar.PropertyChanged += OnBarChanged;
+        flyout.Opened += OnOpened;
+        flyout.Closed += OnClosed;
+        FlyoutBase.ShowAttachedFlyout(button);
+        e.Handled = true;
     }
 
     private void OnChipBodyClick(object? sender, RoutedEventArgs e)

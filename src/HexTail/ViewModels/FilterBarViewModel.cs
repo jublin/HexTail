@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Reactive;
 using System.Reactive.Concurrency;
 using HexTail.Domain;
 using ReactiveUI;
@@ -17,6 +18,10 @@ internal sealed class FilterBarViewModel : ReactiveObject
     private bool _pinAsTab;
     private string? _error;
     private bool _submitting;
+    private string _newFilterName = string.Empty;
+    private string? _saveError;
+    private bool _saveFlyoutOpen;
+    private bool _savingFilter;
 
     internal FilterBarViewModel(MainWindowViewModel owner)
     {
@@ -29,6 +34,14 @@ internal sealed class FilterBarViewModel : ReactiveObject
             new LevelToggleViewModel(this, LogLevels.Warn, "W", "Warn"),
             new LevelToggleViewModel(this, LogLevels.Error, "E", "Error"),
         ];
+        SaveFilterCommand = ReactiveCommand.CreateFromTask(SaveFilterAsync, owner.Scheduler);
+        CancelSaveFilterCommand = ReactiveCommand.Create(
+            () =>
+            {
+                SaveFlyoutOpen = false;
+            },
+            owner.Scheduler
+        );
     }
 
     internal IScheduler Scheduler => _owner.Scheduler;
@@ -37,6 +50,10 @@ internal sealed class FilterBarViewModel : ReactiveObject
     public IReadOnlyList<LevelToggleViewModel> LevelToggles { get; }
     public bool HasLevelFilter =>
         _owner.SelectedFile?.Model.Levels is { } levels && levels != LogLevels.All;
+    public bool CanSaveFilter =>
+        _owner.SelectedFile?.Model is { } file && (file.Rules.Count > 0 || HasLevelFilter);
+    public ReactiveCommand<Unit, Unit> SaveFilterCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelSaveFilterCommand { get; }
     public SettingsViewModel Settings => _owner.Settings;
     public IReadOnlyList<MatchMode> MatchModes { get; } = [MatchMode.Literal, MatchMode.Regex];
 
@@ -88,6 +105,38 @@ internal sealed class FilterBarViewModel : ReactiveObject
 
     public bool HasError => !string.IsNullOrWhiteSpace(Error);
 
+    public string NewFilterName
+    {
+        get => _newFilterName;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _newFilterName, value);
+            this.RaisePropertyChanged(nameof(HasFilterName));
+            SaveError = null;
+        }
+    }
+
+    public bool HasFilterName => !string.IsNullOrWhiteSpace(NewFilterName);
+
+    /// <summary>Shown inside the save flyout, which covers the filter bar's own error line.</summary>
+    public string? SaveError
+    {
+        get => _saveError;
+        internal set
+        {
+            this.RaiseAndSetIfChanged(ref _saveError, value);
+            this.RaisePropertyChanged(nameof(HasSaveError));
+        }
+    }
+
+    public bool HasSaveError => !string.IsNullOrWhiteSpace(SaveError);
+
+    public bool SaveFlyoutOpen
+    {
+        get => _saveFlyoutOpen;
+        internal set => this.RaiseAndSetIfChanged(ref _saveFlyoutOpen, value);
+    }
+
     // ViewRule compares by value, Search by reference: that keeps Sync cheap and stable.
     private readonly record struct ChipKey(ViewRule? Rule, Search? Search);
 
@@ -115,6 +164,7 @@ internal sealed class FilterBarViewModel : ReactiveObject
         foreach (var toggle in LevelToggles)
             toggle.Refresh();
         this.RaisePropertyChanged(nameof(HasLevelFilter));
+        this.RaisePropertyChanged(nameof(CanSaveFilter));
         SyncChips();
     }
 
@@ -227,6 +277,30 @@ internal sealed class FilterBarViewModel : ReactiveObject
         finally
         {
             _submitting = false;
+        }
+    }
+
+    internal async Task SaveFilterAsync()
+    {
+        var file = _owner.SelectedFile?.Model;
+        var name = NewFilterName.Trim();
+        if (_savingFilter || file is null || name.Length == 0 || !CanSaveFilter)
+            return;
+        _savingFilter = true;
+        SaveError = null;
+        try
+        {
+            await _owner.State.SaveFilterAsync(name, file.Rules, file.Levels);
+            NewFilterName = string.Empty;
+            SaveFlyoutOpen = false;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            SaveError = ex.Message;
+        }
+        finally
+        {
+            _savingFilter = false;
         }
     }
 

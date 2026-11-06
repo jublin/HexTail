@@ -76,6 +76,54 @@ public sealed class SessionToleranceTests
     }
 
     [Fact]
+    public void SavedFilters_DropUnusableEntriesAndKeepTheRestWithTabTolerance()
+    {
+        var config = AppConfigJson.Deserialize(
+            """
+            { "version": 2,
+              "savedFilters": [
+                { "name": "ok", "rules": [{ "pattern": "a" }], "levels": "Error" },
+                { "rules": [] },
+                "junk",
+                { "name": "bad", "levels": "Nope",
+                  "rules": [{ "pattern": "b", "action": "Bogus" }] }
+              ] }
+            """
+        );
+
+        Assert.Equal(["ok", "bad"], config.SavedFilters.Select(filter => filter.Name));
+        var ok = config.SavedFilters[0];
+        Assert.Equal("a", Assert.Single(ok.Rules).Pattern);
+        Assert.Equal(LogLevels.Error, ok.Levels);
+        var bad = config.SavedFilters[1];
+        Assert.Equal(LogLevels.All, bad.Levels);
+        Assert.Empty(bad.Rules);
+    }
+
+    [Fact]
+    public void SavedFilters_AMalformedValueOrBlankNameCostsOnlyThatValue()
+    {
+        Assert.Empty(
+            AppConfigJson.Deserialize("""{ "version": 2, "savedFilters": "oops" }""").SavedFilters
+        );
+        var config = AppConfigJson.Deserialize(
+            """
+            { "version": 2,
+              "savedFilters": [{ "name": "  " }, { "name": 5 }, { "name": "n", "rules": "x" }] }
+            """
+        );
+        var filter = Assert.Single(config.SavedFilters);
+        Assert.Equal("n", filter.Name);
+        Assert.Empty(filter.Rules);
+    }
+
+    [Fact]
+    public void SessionsWithoutSavedFilters_LoadWithAnEmptyList()
+    {
+        Assert.Empty(AppConfigJson.Deserialize("""{ "version": 2 }""").SavedFilters);
+    }
+
+    [Fact]
     public void ExclusionModeLookup_AlsoTriesTheTrimmedText()
     {
         var rule = Assert.Single(

@@ -260,6 +260,117 @@ public sealed class FilterBarTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task SaveFilterFlyoutFocusesTheNameEnterSavesAndEscapeCloses()
+    {
+        var (window, owner, path) = await OpenWithRuleAsync();
+        try
+        {
+            var button = window
+                .GetVisualDescendants()
+                .OfType<Button>()
+                .Single(item => item.Name == "SaveFilterButton");
+            Assert.True(button.IsVisible);
+            Assert.Equal("Save filter", AutomationProperties.GetName(button));
+
+            Click(window, button);
+            var box = await FindFlyoutControlAsync<TextBox>(window, "SaveFilterNameBox");
+            await UiWait.Until(() =>
+                ReferenceEquals(window.FocusManager!.GetFocusedElement(), box)
+            );
+            Assert.True(owner.FilterBar.SaveFlyoutOpen);
+            window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+            await UiWait.Until(() => !owner.FilterBar.SaveFlyoutOpen);
+            Assert.Empty(owner.State.SavedFilters);
+
+            Click(window, button);
+            box = await FindFlyoutControlAsync<TextBox>(window, "SaveFilterNameBox");
+            await UiWait.Until(() =>
+                ReferenceEquals(window.FocusManager!.GetFocusedElement(), box)
+            );
+            window.KeyTextInput("mine");
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            await UiWait.Until(() => owner.State.SavedFilters.Count == 1);
+            await UiWait.Until(() => !owner.FilterBar.SaveFlyoutOpen);
+            Assert.Equal("mine", owner.State.SavedFilters[0].Name);
+            Assert.Equal(["boom"], owner.State.SavedFilters[0].Rules.Select(rule => rule.Pattern));
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task SaveFilterNeedsRulesOrALevelFilterAndReportsFailuresInTheFlyout()
+    {
+        var path = System.IO.Path.GetTempFileName();
+        var persistence = new TestPersistence();
+        var window = TestWindow.Create(persistence, out var owner);
+        window.Show();
+        try
+        {
+            await owner.InitializeAsync();
+            await owner.OpenPathsCommand.Execute([path]);
+            var file = owner.SelectedFile!.Model;
+            owner.FilterBar.Sync();
+            Assert.False(owner.FilterBar.CanSaveFilter);
+            owner.FilterBar.NewFilterName = "nothing";
+            await owner.FilterBar.SaveFilterCommand.Execute();
+            Assert.Empty(owner.State.SavedFilters);
+
+            await owner.State.SetLevelsAsync(file, LogLevels.Error);
+            owner.FilterBar.Sync();
+            Assert.True(owner.FilterBar.CanSaveFilter);
+
+            persistence.SaveError = new IOException("disk full");
+            await owner.FilterBar.SaveFilterCommand.Execute();
+            Assert.Equal("disk full", owner.FilterBar.SaveError);
+            Assert.True(owner.FilterBar.HasSaveError);
+            Assert.Equal("nothing", owner.FilterBar.NewFilterName);
+        }
+        finally
+        {
+            persistence.SaveError = null;
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task SavedFiltersAppearInThePaletteOnlyWithASelectedSource()
+    {
+        var path = System.IO.Path.GetTempFileName();
+        var window = TestWindow.Create(out var owner);
+        window.Show();
+        try
+        {
+            await owner.InitializeAsync();
+            await owner.State.SaveFilterAsync(
+                "errors",
+                [TestRules.Source("boom")],
+                LogLevels.Error
+            );
+            Assert.DoesNotContain(owner.BuildPaletteItems(), item => item.Category == "Filters");
+
+            await owner.OpenPathsCommand.Execute([path]);
+            var item = Assert.Single(owner.BuildPaletteItems(), i => i.Category == "Filters");
+            Assert.Equal("Apply filter: errors", item.Title);
+            await item.Execute();
+            Assert.Equal(["boom"], owner.SelectedFile!.Model.Rules.Select(rule => rule.Pattern));
+            Assert.Equal(LogLevels.Error, owner.SelectedFile.Model.Levels);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
     private static bool EditorIsOpen(Window window)
     {
         Dispatcher.UIThread.RunJobs();

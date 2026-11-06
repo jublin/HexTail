@@ -20,6 +20,7 @@ public sealed class AppState : IAsyncDisposable
     public const int MaxRecent = 10;
     private readonly List<string> _recentFiles = [];
     private readonly List<string> _recentElasticSourceIds = [];
+    private readonly List<SavedFilter> _savedFilters = [];
     private AppSettings _settings;
     private int _nextFileId;
     private Task? _healthLoop;
@@ -60,6 +61,15 @@ public sealed class AppState : IAsyncDisposable
         {
             lock (_gate)
                 return _recentFiles.ToArray();
+        }
+    }
+
+    public IReadOnlyList<SavedFilter> SavedFilters
+    {
+        get
+        {
+            lock (_gate)
+                return [.. _savedFilters];
         }
     }
 
@@ -308,6 +318,9 @@ public sealed class AppState : IAsyncDisposable
         {
             _settings = NormalizeSettings(config.Settings ?? new AppSettings());
             Window = config.Window ?? new AppWindowState();
+            _savedFilters.Clear();
+            foreach (var filter in config.SavedFilters ?? [])
+                UpsertSavedFilter(filter?.Name, filter?.Rules, filter?.Levels ?? LogLevels.All);
         }
         foreach (var persisted in config.OpenFiles)
         {
@@ -782,6 +795,83 @@ public sealed class AppState : IAsyncDisposable
         await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Stores the source rules and level mask under a name, replacing a filter of the same name (ignoring case).</summary>
+    public async ValueTask SaveFilterAsync(
+        string name,
+        IEnumerable<ViewRule> rules,
+        LogLevels levels,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        lock (_gate)
+            UpsertSavedFilter(name, rules, levels);
+        NotifyChanged();
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async ValueTask DeleteSavedFilterAsync(
+        string name,
+        CancellationToken cancellationToken = default
+    )
+    {
+        int removed;
+        lock (_gate)
+            removed = _savedFilters.RemoveAll(filter =>
+                string.Equals(filter.Name, name?.Trim(), StringComparison.OrdinalIgnoreCase)
+            );
+        if (removed == 0)
+            return;
+        NotifyChanged();
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Merges a saved filter into a source: new rules are appended and the level mask is replaced unless it is All.</summary>
+    public async ValueTask ApplySavedFilterAsync(
+        FileTabState? tab,
+        string name,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (tab is null)
+            return;
+        SavedFilter? filter;
+        List<ViewRule> merged;
+        lock (_gate)
+        {
+            filter = _savedFilters.FirstOrDefault(item =>
+                string.Equals(item.Name, name?.Trim(), StringComparison.OrdinalIgnoreCase)
+            );
+            if (filter is null || !_files.Contains(tab))
+                return;
+            merged = [.. tab.Rules, .. filter.Rules.Where(rule => !tab.Rules.Contains(rule))];
+        }
+        await SetSourceRulesAsync(tab, merged, cancellationToken).ConfigureAwait(false);
+        if (filter.Levels != LogLevels.All)
+            await SetLevelsAsync(tab, filter.Levels, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Callers hold _gate.
+    private void UpsertSavedFilter(string? name, IEnumerable<ViewRule>? rules, LogLevels levels)
+    {
+        var trimmed = name?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+            return;
+        var filter = new SavedFilter
+        {
+            Name = trimmed,
+            Rules = NormalizeRules(rules, RuleScope.Source),
+            Levels = NormalizeLevels(levels),
+        };
+        var index = _savedFilters.FindIndex(item =>
+            string.Equals(item.Name, trimmed, StringComparison.OrdinalIgnoreCase)
+        );
+        if (index >= 0)
+            _savedFilters[index] = filter;
+        else
+            _savedFilters.Add(filter);
+    }
+
     public async ValueTask SetLevelsAsync(
         FileTabState tab,
         LogLevels levels,
@@ -1109,6 +1199,7 @@ public sealed class AppState : IAsyncDisposable
                         : null,
                 Window = Window,
                 Settings = _settings,
+                SavedFilters = [.. _savedFilters],
             };
         }
         await _persistence.SaveAsync(config, cancellationToken).ConfigureAwait(false);

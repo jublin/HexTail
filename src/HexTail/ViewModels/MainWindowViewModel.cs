@@ -137,6 +137,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 .Subscribe(_ => QueueSyncFromState())
         );
         FileTabs.CollectionChanged += (_, _) => this.RaisePropertyChanged(nameof(HasFileTabs));
+        SavedFilters.CollectionChanged += (_, _) =>
+            this.RaisePropertyChanged(nameof(HasSavedFilters));
 
         _subscriptions.Add(
             Observable
@@ -162,6 +164,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ObservableCollection<FileTabViewModel> Files { get; } = [];
     public ObservableCollection<FileTabViewModel> FileTabs { get; } = [];
     public bool HasFileTabs => FileTabs.Count > 0;
+    public ObservableCollection<SavedFilterViewModel> SavedFilters { get; } = [];
+    public bool HasSavedFilters => SavedFilters.Count > 0;
     public ObservableCollection<ElasticSourceOptionViewModel> ElasticSources { get; } = [];
     public ObservableCollection<ElasticConnectionGroupViewModel> ElasticConnectionGroups { get; } =
     [];
@@ -772,6 +776,13 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                     return Task.CompletedTask;
                 }
             );
+            foreach (var saved in _state.SavedFilters)
+                yield return new(
+                    $"Apply filter: {saved.Name}",
+                    "Filters",
+                    null,
+                    async () => await _state.ApplySavedFilterAsync(file.Model, saved.Name)
+                );
             foreach (var view in file.Views)
                 yield return new(
                     $"View: {view.Header}",
@@ -940,6 +951,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         }
         SyncConnectionGroups();
         SyncRecents();
+        SyncSavedFilters();
         if (
             _sample is { } sample
             && !_state.Files.Any(file =>
@@ -977,6 +989,21 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             this.RaisePropertyChanged(nameof(HasElasticWarning));
         if (previous.ElasticSourceIcon != current.ElasticSourceIcon)
             this.RaisePropertyChanged(nameof(ElasticSourceIcon));
+    }
+
+    private void SyncSavedFilters()
+    {
+        var filters = _state.SavedFilters;
+        // Rows hold focus and a pending click: leave them alone unless a name or summary changed.
+        if (
+            filters
+                .Select(filter => (filter.Name, SavedFilterViewModel.Summarize(filter)))
+                .SequenceEqual(SavedFilters.Select(row => (row.Name, row.Summary)))
+        )
+            return;
+        SavedFilters.Clear();
+        foreach (var filter in filters)
+            SavedFilters.Add(new SavedFilterViewModel(this, filter));
     }
 
     private void SyncConnectionGroups()
