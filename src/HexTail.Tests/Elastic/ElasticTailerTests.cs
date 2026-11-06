@@ -84,6 +84,46 @@ public sealed class ElasticTailerTests
     }
 
     [Fact]
+    public async Task CreateElastic_HonoursAnInitialLineOverride()
+    {
+        using var sortDocument = JsonDocument.Parse("[1]");
+        var baseTime = new DateTimeOffset(2026, 8, 20, 10, 0, 0, TimeSpan.Zero);
+        var client = new FakeElasticApiClient();
+        var hits = Enumerable
+            .Range(1, 20)
+            .Reverse()
+            .Select(index => new ElasticHit(
+                $"id-{index}",
+                baseTime.AddSeconds(index),
+                new Line($"line-{index}"),
+                [sortDocument.RootElement[0].Clone()]
+            ));
+        client.Pages.Enqueue(new ElasticSearchPage("pit-1", [.. hits]));
+        var connection = Connection();
+        await using var service = new LogSourceService();
+        await using var tailer = service.CreateElastic(
+            connection,
+            connection.Views[0],
+            connection.Views[0].Sources[0],
+            "secret",
+            client,
+            () => new DateTimeOffset(2026, 8, 20, 10, 5, 0, TimeSpan.Zero),
+            maxInitialLines: 7
+        );
+
+        var loaded = await tailer.PollOnceAsync(CancellationToken.None);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(7, loaded.InitialLimitReached);
+        var lines = Assert.IsType<SourceLines>(
+            await service.Events.ReadAsync(TestContext.Current.CancellationToken)
+        );
+        Assert.Equal(7, lines.Lines.Count);
+        Assert.Equal("line-14", lines.Lines[0].Raw);
+        Assert.Equal("line-20", lines.Lines[^1].Raw);
+    }
+
+    [Fact]
     public async Task PollOnce_EmitsOnlyNewHitsFromInclusiveCursor()
     {
         using var sortDocument = JsonDocument.Parse("[1]");

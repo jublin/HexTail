@@ -172,7 +172,8 @@ public sealed class AppState : IAsyncDisposable
                 match.source,
                 secret,
                 _elastic,
-                Now
+                Now,
+                maxInitialLines: _settings.ElasticInitialLines
             );
             replacement.SetTimeRange(
                 tab.ElasticResolvedFrom?.ToString("O") ?? tab.ElasticFrom,
@@ -521,7 +522,15 @@ public sealed class AppState : IAsyncDisposable
             ? _credentials.Get(connection.Id)
                 ?? throw new InvalidOperationException("The Elastic credential is unavailable.")
             : string.Empty;
-        var tailer = _tailers.CreateElastic(connection, view, match.source, secret, _elastic, Now);
+        var tailer = _tailers.CreateElastic(
+            connection,
+            view,
+            match.source,
+            secret,
+            _elastic,
+            Now,
+            maxInitialLines: _settings.ElasticInitialLines
+        );
         var tab = new FileTabState(
             LogSourceDescriptor.Elastic(connection, view, match.source),
             new FileBuffer(_settings.MaxLines),
@@ -1230,9 +1239,10 @@ public sealed class AppState : IAsyncDisposable
     {
         return new AppSettings
         {
-            MaxLines = settings.MaxLines,
+            MaxLines = Math.Clamp(settings.MaxLines, 1_000, 1_000_000),
             ContextAbove = Math.Clamp(settings.ContextAbove, 0, 50),
             ContextBelow = Math.Clamp(settings.ContextBelow, 0, 50),
+            ElasticInitialLines = Math.Clamp(settings.ElasticInitialLines, 100, 100_000),
             Rules = NormalizeRules(settings.Rules, RuleScope.Global),
             Theme = ThemeCatalog.Normalize(settings.Theme),
             Density = Enum.IsDefined(settings.Density) ? settings.Density : UiDensity.Comfortable,

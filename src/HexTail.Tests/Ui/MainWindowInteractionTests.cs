@@ -551,8 +551,8 @@ public sealed class MainWindowInteractionTests
 
         var panel = window.GetVisualDescendants().OfType<SettingsPanel>().Single();
         var tabs = panel.GetVisualDescendants().OfType<TabControl>().Single();
-        Assert.Equal(2, tabs.ItemCount);
-        for (var section = 0; section < 2; section++)
+        Assert.Equal(3, tabs.ItemCount);
+        for (var section = 0; section < 3; section++)
         {
             viewModel.Settings.SectionIndex = section;
             Dispatcher.UIThread.RunJobs();

@@ -55,7 +55,8 @@ public sealed class LogSourceService : IAsyncDisposable
         Persistence.ElasticSourceSettings source,
         string secret,
         Elastic.IElasticApiClient client,
-        Func<DateTimeOffset>? now = null
+        Func<DateTimeOffset>? now = null,
+        int? maxInitialLines = null
     )
     {
         var tailer = new Elastic.ElasticTailer(
@@ -66,7 +67,12 @@ public sealed class LogSourceService : IAsyncDisposable
             client,
             _channel.Writer,
             now,
-            options: _options
+            options: maxInitialLines is { } lines
+                ? _options with
+                {
+                    MaxInitialLines = lines,
+                }
+                : _options
         );
         lock (_gate)
             _tailers.Add(tailer);

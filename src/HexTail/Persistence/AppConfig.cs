@@ -77,6 +77,7 @@ public sealed record AppSettings
     public int MaxLines { get; init; } = FileBuffer.DefaultMaxLines;
     public int ContextAbove { get; init; } = 3;
     public int ContextBelow { get; init; } = 10;
+    public int ElasticInitialLines { get; init; } = 10_000;
     public List<ViewRule> Rules { get; init; } = [];
     public string Theme { get; init; } = "cyber-tail";
     public UiDensity Density { get; init; } = UiDensity.Comfortable;

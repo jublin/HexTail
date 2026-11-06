@@ -607,6 +607,33 @@ public sealed class AppStateTests
     }
 
     [Fact]
+    public async Task UpdateSettings_ClampsLimitsToTheirSupportedRanges()
+    {
+        var persistence = new MemoryPersistence();
+        await using var state = new AppState(
+            NewTailers(),
+            persistence,
+            credentials: new InMemoryCredentialVault()
+        );
+
+        await state.UpdateSettingsAsync(
+            new AppSettings { MaxLines = 0, ElasticInitialLines = 50 },
+            TestContext.Current.CancellationToken
+        );
+        var low = Assert.IsType<AppConfig>(persistence.Config).Settings;
+        Assert.Equal(1_000, low.MaxLines);
+        Assert.Equal(100, low.ElasticInitialLines);
+
+        await state.UpdateSettingsAsync(
+            new AppSettings { MaxLines = 5_000_000, ElasticInitialLines = 3_000_000 },
+            TestContext.Current.CancellationToken
+        );
+        var high = Assert.IsType<AppConfig>(persistence.Config).Settings;
+        Assert.Equal(1_000_000, high.MaxLines);
+        Assert.Equal(100_000, high.ElasticInitialLines);
+    }
+
+    [Fact]
     public async Task UpdateSettings_PersistsNormalizedGlobalRules()
     {
         var persistence = new MemoryPersistence();

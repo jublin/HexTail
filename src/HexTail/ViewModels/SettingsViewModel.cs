@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Concurrency;
 using Avalonia;
+using Avalonia.Threading;
 using HexTail.Elastic;
 using HexTail.Persistence;
 using ReactiveUI;
@@ -19,6 +20,10 @@ internal sealed class SettingsViewModel : ReactiveObject
     private int _sectionIndex;
     private bool _isSaving;
     private bool _syncing;
+    private decimal? _maxLinesValue;
+    private decimal? _contextAboveValue;
+    private decimal? _contextBelowValue;
+    private decimal? _elasticInitialLinesValue;
     private ThemeOption _selectedTheme;
     private AppTimeZoneMode _timeZoneMode;
     private ElasticConnectionEditorViewModel? _selectedElasticConnection;
@@ -161,13 +166,14 @@ internal sealed class SettingsViewModel : ReactiveObject
         get => _sectionIndex;
         set
         {
-            var index = Math.Clamp(value, 0, 1);
+            var index = Math.Clamp(value, 0, 2);
             if (_sectionIndex == index)
                 return;
             this.RaiseAndSetIfChanged(ref _sectionIndex, index);
             _section = index switch
             {
                 1 => "elastic",
+                2 => "limits",
                 _ => "appearance",
             };
         }
@@ -210,6 +216,110 @@ internal sealed class SettingsViewModel : ReactiveObject
             if (!_syncing)
                 _ = CommitAsync(_owner.State.Settings with { Density = value });
         }
+    }
+
+    public decimal? MaxLinesValue
+    {
+        get => _maxLinesValue;
+        set =>
+            SetLimit(
+                v => _maxLinesValue = v,
+                value,
+                nameof(MaxLinesValue),
+                _owner.State.Settings.MaxLines,
+                1_000,
+                1_000_000,
+                (settings, limit) => settings with { MaxLines = limit }
+            );
+    }
+
+    public decimal? ContextAboveValue
+    {
+        get => _contextAboveValue;
+        set =>
+            SetLimit(
+                v => _contextAboveValue = v,
+                value,
+                nameof(ContextAboveValue),
+                _owner.State.Settings.ContextAbove,
+                0,
+                50,
+                (settings, limit) => settings with { ContextAbove = limit }
+            );
+    }
+
+    public decimal? ContextBelowValue
+    {
+        get => _contextBelowValue;
+        set =>
+            SetLimit(
+                v => _contextBelowValue = v,
+                value,
+                nameof(ContextBelowValue),
+                _owner.State.Settings.ContextBelow,
+                0,
+                50,
+                (settings, limit) => settings with { ContextBelow = limit }
+            );
+    }
+
+    public decimal? ElasticInitialLinesValue
+    {
+        get => _elasticInitialLinesValue;
+        set =>
+            SetLimit(
+                v => _elasticInitialLinesValue = v,
+                value,
+                nameof(ElasticInitialLinesValue),
+                _owner.State.Settings.ElasticInitialLines,
+                100,
+                100_000,
+                (settings, limit) => settings with { ElasticInitialLines = limit }
+            );
+    }
+
+    /// <summary>
+    /// Shared setter for the numeric limits. A cleared field restores the current setting without
+    /// committing; anything else is clamped, re-synced into the field and committed.
+    /// </summary>
+    private void SetLimit(
+        Action<decimal?> store,
+        decimal? value,
+        string property,
+        int current,
+        int minimum,
+        int maximum,
+        Func<AppSettings, int, AppSettings> apply
+    )
+    {
+        if (_syncing)
+        {
+            store(value);
+            this.RaisePropertyChanged(property);
+            return;
+        }
+
+        var restored = value is null;
+        var limit = restored
+            ? current
+            : (int)Math.Clamp(Math.Floor(value!.Value), minimum, maximum);
+        store(limit);
+        this.RaisePropertyChanged(property);
+        if (value != limit)
+        {
+            // A binding ignores notifications raised while it is writing the value back, so a
+            // control still showing the rejected value (cleared, or out of range) is refreshed
+            // once that settles. The intermediate null makes the refresh a real change.
+            Dispatcher.UIThread.Post(() =>
+            {
+                store(null);
+                this.RaisePropertyChanged(property);
+                store(limit);
+                this.RaisePropertyChanged(property);
+            });
+        }
+        if (!restored && limit != current)
+            _ = CommitAsync(apply(_owner.State.Settings, limit));
     }
 
     public Thickness TabPadding =>
@@ -331,6 +441,10 @@ internal sealed class SettingsViewModel : ReactiveObject
             Density = settings.Density;
             FontSize = settings.LogFontSize;
             TimeZoneMode = settings.TimeZoneMode;
+            MaxLinesValue = settings.MaxLines;
+            ContextAboveValue = settings.ContextAbove;
+            ContextBelowValue = settings.ContextBelow;
+            ElasticInitialLinesValue = settings.ElasticInitialLines;
             SelectedTheme = ThemeOptions.First(option =>
                 option.Id == ThemeCatalog.Normalize(settings.Theme)
             );
