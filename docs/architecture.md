@@ -7,7 +7,7 @@ HTTP server in the runtime path.
 
 Elastic sources use a dual-endpoint, source-neutral path: Kibana provides
 supported data-view metadata and Elasticsearch provides read-only PIT/search
-requests. Local files and remote sources emit parsed `Line` batches into the
+requests, plus the count and preview queries behind the setup flow. Local files and remote sources emit parsed `Line` batches into the
 same buffer, search, inspector, and virtualized renderer. Secrets use the native
 credential vault and are excluded from session JSON.
 
@@ -46,13 +46,14 @@ flowchart LR
 
 | Area | Source | Responsibility |
 | --- | --- | --- |
-| Application shell | `src/HexTail/MainWindow.axaml` | Commands, tabs, search controls, follow toggle, inspector and settings panes |
+| Application shell | `src/HexTail/MainWindow.axaml` | Commands, tabs, search controls, follow toggle, inspector and settings panes; the Elastic setup page is shown in the workspace area while open |
 | State | `src/HexTail/Application/AppState.cs` | Open files, selected file, settings, searches, persistence coordination |
 | File state | `src/HexTail/Application/FileTabState.cs` | One file buffer, derived views, follow state, selected line (`SelectedLine`), bookmarks (`Bookmarks`) |
 | Domain | `src/HexTail/Domain/` | Lines, bounded buffers, parsers, search compilation, highlight ranges |
 | Tailing | `src/HexTail/Tailing/` | Background file monitoring and resilient tail events |
-| Views | `src/HexTail/Views/` | Native Avalonia log rows, search tabs, inspector panel, and settings controls |
-| View models | `src/HexTail/ViewModels/` | Window, settings and per-view state; `InspectorViewModel` owns the inspector (open state, width, fields, context list) and toggles bookmarks on the selected row |
+| Views | `src/HexTail/Views/` | Native Avalonia log rows, search tabs, inspector panel, settings controls (Appearance and Limits only), and `ElasticSetupPage`, the five-step Elastic setup page shown in the workspace area while the sidebar and status bar stay |
+| View models | `src/HexTail/ViewModels/` | Window, settings and per-view state; `InspectorViewModel` owns the inspector (open state, width, fields, context list) and toggles bookmarks on the selected row; `ElasticSetupViewModel` drives the Elastic setup flow (see below) |
+| Elastic | `src/HexTail/Elastic/` | Kibana and Elasticsearch clients (`IElasticApiClient`), tailer, health monitor, and the setup helpers `CloudId`, `Rison` and `DiscoverUrlImport` |
 | Persistence | `src/HexTail/Persistence/` | Atomic JSON session load/save and persisted configuration types |
 | Tests | `src/HexTail.Tests/` | Domain, tailing, persistence, view-model, and headless UI coverage |
 
@@ -79,6 +80,25 @@ flowchart LR
   bookmarks live on `FileTabState` for the session only and are not saved.
 - The default buffer cap is 100,000 lines per file, controlled by
   `AppSettings.MaxLines`.
+- Elastic setup is a five-step page (`ElasticSetupViewModel`, `ElasticSetupPage`):
+  Connection, Data view, Filter, Columns, Name & open. It is opened from the
+  sidebar, the empty state, or the command palette at the step that fits the
+  entry point. The connection (and its keyring secret) is saved on leaving step
+  1 through `ElasticConnectionEditorViewModel`; steps 2 to 4 edit an
+  `ElasticViewEditorViewModel` in memory, and step 5 saves the source and
+  optionally opens it. Closing mid-flow keeps what step 1 saved and drops the
+  rest without prompting.
+- The setup flow adds two read-only queries to `IElasticApiClient`: `CountAsync`
+  (documents matching a filter value over the last 15 minutes, shown as filter
+  chip counts) and `PreviewAsync` (the most recent documents with the chosen
+  output fields, shown as up to five preview rows). The connection test probes
+  Kibana, Elasticsearch and the credentials separately.
+- `CloudId` decodes an Elastic Cloud ID into the Kibana and Elasticsearch URLs.
+  `Rison` parses the Rison state in a Kibana Discover URL, and
+  `DiscoverUrlImport` turns it into a prefill (Kibana origin, data view id,
+  columns, and a single `field : value` clause) plus a list of ignored parts;
+  the view model applies each part once, when its step is reached, and never
+  over a choice the user has made.
 - Missing or malformed session JSON is treated as a first launch; atomic saves
   preserve the last good session file.
 
