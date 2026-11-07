@@ -337,7 +337,7 @@ public sealed class ElasticConnectionEditorTests
         editor.AuthMode = ElasticAuthMode.Basic;
         editor.Username = "user";
         editor.Secret = Secret;
-        editor.AddViewCommand.Execute().Subscribe();
+        editor.AddNewView();
         await editor.TestConnectionCommand.Execute().FirstAsync();
 
         var ok = await editor.SaveConnectionOnlyAsync();
@@ -360,7 +360,7 @@ public sealed class ElasticConnectionEditorTests
         var connection = ElasticFixtures.Connection("c1", "Ops", "api");
         await using var harness = await CreateAsync(connection);
         var editor = Assert.Single(harness.Owner.Settings.ElasticConnections);
-        editor.AddViewCommand.Execute().Subscribe();
+        editor.AddNewView();
         Assert.Equal(2, editor.Views.Count);
         editor.Name = "Ops renamed";
 
@@ -397,6 +397,205 @@ public sealed class ElasticConnectionEditorTests
 
         Assert.False(await editor.SaveConnectionOnlyAsync());
 
+        Assert.Empty(harness.Persistence.Config!.Settings.ElasticConnections);
+    }
+
+    private static async Task<(
+        Harness Harness,
+        ElasticConnectionEditorViewModel Editor
+    )> SavedAsync(ElasticAuthMode mode)
+    {
+        var harness = await CreateAsync();
+        var editor = harness.NewEditor();
+        editor.AuthMode = mode;
+        if (mode == ElasticAuthMode.Basic)
+            editor.Username = "user";
+        editor.Secret = Secret;
+        Assert.True(await editor.SaveConnectionOnlyAsync(), editor.Error);
+        harness.Client.DataViewSecrets.Clear();
+        return (harness, editor);
+    }
+
+    [AvaloniaFact]
+    public async Task StoredSecret_IsNotReusedWhenTheLoginMethodChangesFromApiKeyToPassword()
+    {
+        var (harness, editor) = await SavedAsync(ElasticAuthMode.ApiKey);
+        await using var _ = harness;
+
+        editor.AuthMode = ElasticAuthMode.Basic;
+        editor.Username = "alice";
+
+        Assert.False(editor.CanTestConnection);
+        Assert.False(await editor.SaveConnectionOnlyAsync());
+        Assert.Empty(harness.Client.DataViewSecrets);
+        Assert.Equal(Secret, harness.Vault.Get(editor.Id));
+        Assert.Equal(
+            ElasticAuthMode.ApiKey,
+            harness.Persistence.Config!.Settings.ElasticConnections.Single().AuthMode
+        );
+
+        editor.Secret = "new-password";
+        Assert.True(editor.CanTestConnection);
+        Assert.True(await editor.SaveConnectionOnlyAsync(), editor.Error);
+        Assert.Equal("new-password", harness.Vault.Get(editor.Id));
+    }
+
+    [AvaloniaFact]
+    public async Task StoredSecret_IsNotReusedWhenTheLoginMethodChangesFromPasswordToApiKey()
+    {
+        var (harness, editor) = await SavedAsync(ElasticAuthMode.Basic);
+        await using var _ = harness;
+
+        editor.AuthMode = ElasticAuthMode.ApiKey;
+
+        Assert.False(editor.CanTestConnection);
+        Assert.False(await editor.SaveConnectionOnlyAsync());
+        Assert.Empty(harness.Client.DataViewSecrets);
+        Assert.Equal(Secret, harness.Vault.Get(editor.Id));
+
+        editor.Secret = "new-key";
+        Assert.True(editor.CanTestConnection);
+        Assert.True(await editor.SaveConnectionOnlyAsync(), editor.Error);
+        Assert.Equal("new-key", harness.Vault.Get(editor.Id));
+    }
+
+    [AvaloniaTheory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task StoredSecret_IsNotReusedWhenAnEndpointMovesToAnotherHost(
+        bool kibana,
+        bool elasticsearch
+    )
+    {
+        var (harness, editor) = await SavedAsync(ElasticAuthMode.ApiKey);
+        await using var _ = harness;
+
+        if (kibana)
+            editor.KibanaUrl = "https://elsewhere.example/";
+        if (elasticsearch)
+            editor.ElasticsearchUrl = "https://elsewhere.example:9243/";
+
+        Assert.False(editor.CanTestConnection);
+        Assert.False(await editor.SaveConnectionOnlyAsync());
+        Assert.Empty(harness.Client.DataViewSecrets);
+        Assert.Equal(Secret, harness.Vault.Get(editor.Id));
+
+        editor.Secret = "other-key";
+        Assert.True(editor.CanTestConnection);
+        Assert.True(await editor.SaveConnectionOnlyAsync(), editor.Error);
+        Assert.Equal("other-key", harness.Vault.Get(editor.Id));
+    }
+
+    [AvaloniaFact]
+    public async Task StoredSecret_StillServesTheSameLoginMethodAndOrigins()
+    {
+        var (harness, editor) = await SavedAsync(ElasticAuthMode.ApiKey);
+        await using var _ = harness;
+
+        // A different path, case or trailing slash on the same origin is the same server.
+        editor.KibanaUrl = "HTTPS://Kibana.Example/s/ops/";
+        editor.ElasticsearchUrl = "https://elastic.example";
+
+        Assert.True(editor.CanTestConnection);
+        await editor.TestConnectionCommand.Execute().FirstAsync();
+        Assert.Equal([Secret], harness.Client.DataViewSecrets.Distinct());
+        Assert.True(await editor.SaveConnectionOnlyAsync(), editor.Error);
+        Assert.Equal(Secret, harness.Vault.Get(editor.Id));
+    }
+
+    [AvaloniaFact]
+    public async Task StoredSecret_IsNotSentByTheAppStateEitherWhenTheEditorIsBypassed()
+    {
+        var (harness, editor) = await SavedAsync(ElasticAuthMode.ApiKey);
+        await using var _ = harness;
+        var state = harness.Owner.State;
+        var saved = harness.Persistence.Config!.Settings.ElasticConnections.Single();
+
+        await state.GetDataViewsAsync(
+            saved with
+            {
+                AuthMode = ElasticAuthMode.Basic,
+                Username = "u",
+            }
+        );
+        await state.GetDataViewsAsync(saved with { KibanaUrl = "https://elsewhere.example/" });
+        await state.GetDataViewsAsync(saved);
+
+        Assert.Equal([null, null, Secret], harness.Client.DataViewSecrets);
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await state.SaveElasticConnectionAsync(
+                saved with
+                {
+                    AuthMode = ElasticAuthMode.Basic,
+                    Username = "u",
+                },
+                null
+            )
+        );
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await state.SaveElasticConnectionAsync(
+                saved with
+                {
+                    ElasticsearchUrl = "https://elsewhere.example/",
+                },
+                null
+            )
+        );
+        Assert.Equal(Secret, harness.Vault.Get(editor.Id));
+        await state.SaveElasticConnectionAsync(saved with { Name = "Renamed" }, null);
+        Assert.Equal(Secret, harness.Vault.Get(editor.Id));
+    }
+
+    [AvaloniaTheory]
+    [InlineData("https://user:pass@kibana.example/")]
+    [InlineData("https://user@kibana.example/")]
+    public async Task UrlsWithAUserNameOrPasswordAreRejected(string url)
+    {
+        await using var harness = await CreateAsync();
+        var editor = harness.NewEditor();
+
+        editor.KibanaUrl = url;
+        editor.ElasticsearchUrl = url;
+
+        Assert.Equal(
+            "Enter an absolute HTTP or HTTPS Kibana URL without a user name or password.",
+            editor.KibanaUrlError
+        );
+        Assert.Equal(
+            "Enter an absolute HTTP or HTTPS Elasticsearch URL without a user name or password.",
+            editor.ElasticsearchUrlError
+        );
+        Assert.False(editor.CanTestConnection);
+        Assert.False(await editor.SaveConnectionOnlyAsync());
+        Assert.Empty(harness.Persistence.Config!.Settings.ElasticConnections);
+
+        editor.KibanaUrl = "kibana.example";
+        Assert.Equal("Enter an absolute HTTP or HTTPS Kibana URL.", editor.KibanaUrlError);
+    }
+
+    [AvaloniaTheory]
+    [InlineData("https://user:pass@kibana.example/", "https://elastic.example/")]
+    [InlineData("https://kibana.example/", "https://user:pass@elastic.example/")]
+    public async Task AppState_RejectsUrlsThatCarryCredentials(string kibana, string elasticsearch)
+    {
+        await using var harness = await CreateAsync();
+        var connection = new ElasticConnectionSettings
+        {
+            Id = "c9",
+            Name = "Ops",
+            KibanaUrl = kibana,
+            ElasticsearchUrl = elasticsearch,
+        };
+
+        var failure = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await harness.Owner.State.SaveElasticConnectionAsync(connection, null)
+        );
+
+        Assert.Contains(
+            "without a user name or password",
+            failure.Message,
+            StringComparison.Ordinal
+        );
         Assert.Empty(harness.Persistence.Config!.Settings.ElasticConnections);
     }
 }

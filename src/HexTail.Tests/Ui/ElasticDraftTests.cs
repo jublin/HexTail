@@ -81,7 +81,7 @@ public sealed class ElasticDraftTests
         Assert.Equal("Unsaved", editor.SaveStatus);
 
         persistence.Pending = new TaskCompletionSource();
-        var saving = editor.SaveCommand.Execute().FirstAsync().ToTask();
+        var saving = editor.SaveConnectionOnlyAsync();
         Assert.True(editor.IsSaving);
         Assert.Equal("Saving…", editor.SaveStatus);
         persistence.Pending.SetResult();
@@ -97,7 +97,7 @@ public sealed class ElasticDraftTests
 
         editor.Name = "Submitted name";
         persistence.Pending = new TaskCompletionSource();
-        saving = editor.SaveCommand.Execute().FirstAsync().ToTask();
+        saving = editor.SaveConnectionOnlyAsync();
         editor.Name = "Newer draft";
         persistence.Pending.SetResult();
         await saving;
@@ -110,7 +110,7 @@ public sealed class ElasticDraftTests
         {
             persistence.SaveError = new InvalidOperationException("storage unavailable");
             editor.Name = "Draft kept";
-            await editor.SaveCommand.Execute().FirstAsync();
+            await editor.SaveConnectionOnlyAsync();
             Assert.True(editor.IsDirty);
             Assert.Equal("Save failed", editor.SaveStatus);
             Assert.Equal("Draft kept", editor.Name);

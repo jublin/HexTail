@@ -317,7 +317,9 @@ public partial class MainWindow : Window
             && ViewModel.ElasticSetup.IsOpen
         )
         {
-            ViewModel.ElasticSetup.CloseCommand.Execute().Subscribe();
+            // A failure while closing lands in the page's error line instead of escaping from here.
+            var setup = ViewModel.ElasticSetup;
+            setup.Run(() => setup.HandleEscape());
             e.Handled = true;
             return;
         }

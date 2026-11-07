@@ -1293,7 +1293,7 @@ public sealed class ElasticSetupPageTests
         var apply = fixture.Find<Button>("ApplyDiscoverUrlButton");
         var message = fixture.Find<TextBlock>("DiscoverMessageText");
         Assert.Equal("Paste a Kibana Discover URL to prefill (optional)", box.PlaceholderText);
-        Assert.Equal("Kibana Discover URL", AutomationProperties.GetName(box));
+        Assert.Equal(box.PlaceholderText, AutomationProperties.GetName(box));
         Assert.Equal("Apply", apply.Content);
         Assert.Equal("Apply Discover URL", AutomationProperties.GetName(apply));
         Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(message));
@@ -1318,5 +1318,122 @@ public sealed class ElasticSetupPageTests
         apply.Command!.Execute(null);
         fixture.Pump();
         Assert.Equal("That does not look like a Kibana Discover link.", message.Text);
+    }
+
+    private static bool InsidePage(Fixture fixture, IInputElement? element) =>
+        element is Visual visual
+        && (ReferenceEquals(visual, fixture.Page) || fixture.Page.IsVisualAncestorOf(visual));
+
+    [AvaloniaFact]
+    public async Task ClosingWithEscapeFromATextBoxReturnsFocusToTheOpenLogList()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            await using var fixture = await CreateAsync();
+            await fixture.Owner.OpenPathsCommand.Execute([path]);
+            var file = fixture.Owner.SelectedFile!;
+            foreach (var text in new[] { "one", "two", "three" })
+                file.Model.Buffer.Append(new Line(text));
+            file.SyncViews();
+            fixture.Pump();
+            var view = file.SelectedView;
+            var list = fixture
+                .Window.GetVisualDescendants()
+                .OfType<LogView>()
+                .Single()
+                .FindControl<ListBox>("LogList")!;
+            await UiWait.Until(() => list.ItemCount == 3);
+            await WalkToFilterStepAsync(fixture);
+            var input = fixture.Find<TextBox>("FilterValueInput");
+            Assert.True(input.Focus());
+            Assert.True(input.IsFocused);
+
+            fixture.Window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+            await UiWait.Until(() => !fixture.Setup.IsOpen);
+            fixture.Pump();
+            await UiWait.Until(() => !InsidePage(fixture, Focused(fixture)));
+
+            await UiWait.Until(() =>
+                Focused(fixture) is Visual focused && list.IsVisualAncestorOf(focused)
+            );
+            Assert.True(view.IsFollowing);
+            // A single key is a shortcut again, not text for a hidden box.
+            fixture.Window.KeyPress(Key.F, RawInputModifiers.None, PhysicalKey.F, "f");
+            Assert.False(view.IsFollowing);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task ClosingWithoutAnOpenSourceFocusesTheSidebarElasticButton()
+    {
+        await using var fixture = await CreateAsync();
+        await WalkToFilterStepAsync(fixture);
+        Assert.True(fixture.Find<TextBox>("FilterValueInput").Focus());
+
+        fixture.Find<Button>("SetupCloseButton").Command!.Execute(null);
+        await UiWait.Until(() => !fixture.Setup.IsOpen);
+        fixture.Pump();
+
+        var add = fixture
+            .Window.GetVisualDescendants()
+            .OfType<Button>()
+            .Single(button => button.Name == "SidebarElasticSetupButton");
+        await UiWait.Until(() => ReferenceEquals(Focused(fixture), add));
+        Assert.False(Focused(fixture) is TextBox);
+    }
+
+    [AvaloniaFact]
+    public async Task EscapeCancelsTheDeleteQuestionBeforeItClosesThePage()
+    {
+        await using var fixture = await CreateAsync();
+        fixture.Setup.StartNew();
+        fixture.Pump();
+        await WalkToDataViewStepAsync(fixture);
+        var connectionId = fixture.Setup.Connection!.Id;
+        fixture.Setup.Close();
+        fixture.Setup.EditConnection(connectionId);
+        fixture.Pump();
+        var delete = fixture.Find<Button>("SetupDeleteConnectionButton");
+        var cancel = fixture.Find<Button>("SetupCancelDeleteButton");
+
+        delete.Command!.Execute(null);
+        fixture.Pump();
+
+        Assert.True(fixture.Setup.DeleteConfirmationVisible);
+        await UiWait.Until(() => ReferenceEquals(Focused(fixture), cancel));
+
+        fixture.Window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        fixture.Pump();
+
+        Assert.True(fixture.Setup.IsOpen);
+        Assert.False(fixture.Setup.DeleteConfirmationVisible);
+        await UiWait.Until(() => ReferenceEquals(Focused(fixture), delete));
+
+        // With nothing left to cancel the next Escape closes the page.
+        fixture.Window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        await UiWait.Until(() => !fixture.Setup.IsOpen);
+    }
+
+    [AvaloniaFact]
+    public async Task EscapeReportsAFailureWhileClosingInsteadOfThrowing()
+    {
+        await using var fixture = await CreateAsync();
+        fixture.Setup.StartNew();
+        fixture.Pump();
+        await WalkToDataViewStepAsync(fixture);
+        var connection = fixture.Setup.Connection!;
+        // The new, still unsaved view is removed while the flow closes; make that blow up.
+        connection.Views.CollectionChanged += (_, _) => throw new InvalidOperationException("boom");
+
+        fixture.Window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        fixture.Pump();
+
+        Assert.Equal("boom", fixture.Setup.Error);
+        Assert.True(fixture.Setup.IsOpen);
     }
 }

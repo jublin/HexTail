@@ -611,9 +611,15 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         {
             if (!ImportMatchesDataView(view))
             {
+                var dropped = _pendingColumns is not null || _pendingFilter is not null;
                 _pendingColumns = null;
                 _pendingFilter = null;
                 this.RaisePropertyChanged(nameof(HasPendingDiscoverImport));
+                AddDiscoverNote(
+                    dropped
+                        ? "Kept your data view; the data view, filter and columns from the URL were not applied."
+                        : "Kept your data view; the data view from the URL was not applied."
+                );
             }
             return;
         }
@@ -640,12 +646,22 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
             return false;
         _pendingFilter = null;
         this.RaisePropertyChanged(nameof(HasPendingDiscoverImport));
+        if (!ImportMatchesDataView(view))
+        {
+            AddDiscoverNote(
+                "Kept your data view; the filter from the URL belongs to another one and was not applied."
+            );
+            return false;
+        }
         if (
-            !ImportMatchesDataView(view)
-            || !string.IsNullOrWhiteSpace(view.ServerField)
+            !string.IsNullOrWhiteSpace(view.ServerField)
             || view.Sources.Any(source => !string.IsNullOrWhiteSpace(source.ServerValue))
-            || string.IsNullOrWhiteSpace(filter.Value)
         )
+        {
+            AddDiscoverNote("Kept your choice; the Discover filter was not applied.");
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(filter.Value))
             return false;
         if (!view.SearchableFields.Any(field => field.Name == filter.Field))
         {
@@ -664,8 +680,18 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
             return;
         _pendingColumns = null;
         this.RaisePropertyChanged(nameof(HasPendingDiscoverImport));
-        if (!ImportMatchesDataView(view) || view.SelectedOutputFields.Count > 0)
+        if (!ImportMatchesDataView(view))
+        {
+            AddDiscoverNote(
+                "Kept your data view; the columns from the URL belong to another one and were not applied."
+            );
             return;
+        }
+        if (view.SelectedOutputFields.Count > 0)
+        {
+            AddDiscoverNote("Kept your choice; the Discover columns were not applied.");
+            return;
+        }
         var missing = 0;
         // The preview is fetched once for the step, not once per column.
         _applyingImport = true;
@@ -705,9 +731,14 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         }
     }
 
+    // The four entry points below do nothing while a save or delete runs: starting another flow
+    // would drop the editor the running work still writes to.
+
     /// <summary>Starts a brand new connection at the first step.</summary>
     internal void StartNew()
     {
+        if (IsBusy)
+            return;
         Begin();
         Connection = _owner.Settings.AddElasticConnection();
         _createdConnection = true;
@@ -717,7 +748,7 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
     /// <summary>Re-checks and re-saves a saved connection; the test has to pass again before Next.</summary>
     internal void EditConnection(string connectionId)
     {
-        if (_owner.Settings.EditorFor(connectionId) is not { } editor)
+        if (IsBusy || _owner.Settings.EditorFor(connectionId) is not { } editor)
             return;
         Begin();
         Connection = editor;
@@ -728,7 +759,8 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
     internal void EditView(string connectionId, string viewId)
     {
         if (
-            _owner.Settings.EditorFor(connectionId) is not { } editor
+            IsBusy
+            || _owner.Settings.EditorFor(connectionId) is not { } editor
             || editor.Views.FirstOrDefault(view => view.Id == viewId) is not { } view
         )
             return;
@@ -741,7 +773,7 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
     /// <summary>Adds another view to a saved connection, starting at the data view.</summary>
     internal void AddSource(string connectionId)
     {
-        if (_owner.Settings.EditorFor(connectionId) is not { } editor)
+        if (IsBusy || _owner.Settings.EditorFor(connectionId) is not { } editor)
             return;
         Begin();
         Connection = editor;
@@ -784,6 +816,23 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(IsBusy));
         IsOpen = false;
         Reevaluate();
+    }
+
+    /// <summary>
+    /// What Escape does on the page: it takes back the delete question when that is showing and
+    /// otherwise closes the flow (nothing while a save runs). Returns whether the page used the key.
+    /// </summary>
+    internal bool HandleEscape()
+    {
+        if (!IsOpen)
+            return false;
+        if (IsBusy)
+            return true;
+        if (DeleteConfirmationVisible)
+            DeleteConfirmationVisible = false;
+        else
+            Close();
+        return true;
     }
 
     private void ResetDiscover()

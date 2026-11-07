@@ -453,6 +453,74 @@ public sealed class AppStateTests
     }
 
     [Fact]
+    public async Task AppState_KeepsAZeroViewConnectionZeroViewAcrossSaveAndReload()
+    {
+        var persistence = new MemoryPersistence();
+        var abandoned = new ElasticConnectionSettings
+        {
+            Id = "elastic-empty",
+            Name = "Abandoned after step 1",
+            KibanaUrl = "https://kibana/",
+            ElasticsearchUrl = "https://elastic/",
+        };
+        await using (
+            var original = new AppState(
+                NewTailers(),
+                persistence,
+                new AppSettings(),
+                new InMemoryCredentialVault(),
+                new FakeElasticApiClient()
+            )
+        )
+        {
+            await original.SaveElasticConnectionAsync(
+                abandoned,
+                null,
+                TestContext.Current.CancellationToken
+            );
+            Assert.Empty(Assert.Single(original.Settings.ElasticConnections).Views);
+        }
+
+        await using var restored = new AppState(
+            NewTailers(),
+            persistence,
+            elastic: new FakeElasticApiClient(),
+            credentials: new InMemoryCredentialVault()
+        );
+        await restored.RestoreAsync(TestContext.Current.CancellationToken);
+
+        var loaded = Assert.Single(restored.Settings.ElasticConnections);
+        Assert.Equal("elastic-empty", loaded.Id);
+        Assert.Empty(loaded.Views);
+        Assert.Empty(loaded.Sources);
+    }
+
+    [Fact]
+    public async Task AppState_MigratesLegacyFieldsIntoOneViewEvenWhenViewsIsAnEmptyList()
+    {
+        var connection = ElasticConnection("Ops") with
+        {
+            Views = [],
+            Sources = [new ElasticSourceSettings { Id = "source-1", ServerValue = "api" }],
+        };
+        await using var state = new AppState(
+            NewTailers(),
+            new MemoryPersistence(),
+            new AppSettings { ElasticConnections = [connection] },
+            new InMemoryCredentialVault(),
+            new FakeElasticApiClient()
+        );
+
+        var view = Assert.Single(Assert.Single(state.Settings.ElasticConnections).Views);
+
+        Assert.Equal(connection.DataViewId, view.DataViewId);
+        Assert.Equal(connection.DataViewTitle, view.DataViewTitle);
+        Assert.Equal(connection.ServerField, view.ServerField);
+        Assert.Equal(connection.OutputFields, view.OutputFields);
+        Assert.Equal("source-1", Assert.Single(view.Sources).Id);
+    }
+
+    [Fact]
     public async Task SaveElasticConnection_RestoresSecretAndSettingsWhenJsonSaveFails()
     {
         var old = ElasticConnection("Old name");

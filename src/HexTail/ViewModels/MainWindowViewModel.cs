@@ -96,7 +96,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         );
         SetUpElasticCommand = ReactiveCommand.Create(
             () => ElasticSetup.Run(ElasticSetup.StartNew),
-            outputScheduler: _scheduler
+            ElasticSetup.WhenAnyValue(setup => setup.IsBusy).Select(busy => !busy),
+            _scheduler
         );
         ToggleSidebarCommand = ReactiveCommand.Create(
             () =>

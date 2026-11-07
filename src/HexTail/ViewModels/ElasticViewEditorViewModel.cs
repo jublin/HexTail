@@ -214,8 +214,6 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             ? "No output fields selected."
             : string.Join(" → ", SelectedOutputFields);
     public string RowPreview => string.Join(' ', SelectedOutputFields.Select(name => $"<{name}>"));
-    public string FieldDiscoveryStatus =>
-        "Showing up to 50 matching candidates plus selected fields. Search by field name to find more.";
     public string FilterFieldStatus => DescribeField(ServerField);
     public string OutputFieldQuery
     {

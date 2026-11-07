@@ -237,7 +237,7 @@
                     x:Name="DiscoverUrlBox"
                     Text="{Binding DiscoverUrl, Mode=TwoWay}"
                     PlaceholderText="Paste a Kibana Discover URL to prefill (optional)"
-                    AutomationProperties.Name="Kibana Discover URL"
+                    AutomationProperties.Name="Paste a Kibana Discover URL to prefill (optional)"
                   />
                   <Button
                     x:Name="ApplyDiscoverUrlButton"

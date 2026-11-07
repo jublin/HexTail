@@ -383,18 +383,6 @@ internal sealed class SettingsViewModel : ReactiveObject
         }
     }
 
-    internal AppSettings ConnectionSettingsWith(ElasticConnectionSettings connection, string secret)
-    {
-        _ = secret;
-        return _owner.State.Settings with
-        {
-            ElasticConnections = _owner
-                .State.Settings.ElasticConnections.Where(item => item.Id != connection.Id)
-                .Append(connection)
-                .ToList(),
-        };
-    }
-
     internal ElasticConnectionSettings? SavedConnection(string connectionId) =>
         _owner.State.Settings.ElasticConnections.FirstOrDefault(connection =>
             connection.Id == connectionId

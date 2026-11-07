@@ -137,7 +137,7 @@ dotnet run --project src/HexTail.LogGenerator -- --format jsonl --output /tmp/he
 | `Alt+Up` / `Alt+Down` | Move the focused file up or down in the sidebar |
 | `Alt+Left` / `Alt+Right` | Move the focused view tab left or right |
 | `Ctrl+S` / `Cmd+S` | Save the session now (it also saves automatically) |
-| `Esc` | Close Settings or the command palette |
+| `Esc` | Close Settings, the command palette or the Elastic setup page (with a delete question showing, it takes the question back first) |
 
 The single-key shortcuts (`/`, `F`, `Space`, `g`, `Shift+G`, `j`, `k`, `n`, `N`) do not fire while a
 text box has focus. While the palette or Settings is open, the other shortcuts

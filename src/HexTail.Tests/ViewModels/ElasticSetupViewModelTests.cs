@@ -636,10 +636,10 @@ public sealed class ElasticSetupViewModelTests
         Assert.False(harness.Setup.DeleteConfirmationVisible);
     }
 
-    private sealed class GatedPersistence : IAppPersistence
+    private sealed class GatedPersistence(AppConfig? initial = null) : IAppPersistence
     {
         private TaskCompletionSource? _gate;
-        public AppConfig? Config { get; private set; } = new();
+        public AppConfig? Config { get; private set; } = initial ?? new();
         public int SaveCount { get; private set; }
 
         public void HoldNextSave() =>
@@ -713,6 +713,108 @@ public sealed class ElasticSetupViewModelTests
         Assert.False(setup.IsBusy);
         Assert.Equal(ElasticSetupStep.Connection, setup.Step);
         Assert.Null(setup.View);
+    }
+
+    [AvaloniaFact]
+    public async Task EntryPoints_RefuseToReplaceTheFlowWhileTheFinishSaveRuns()
+    {
+        var persistence = new GatedPersistence(
+            new AppConfig
+            {
+                Settings = new AppSettings
+                {
+                    ElasticConnections =
+                    [
+                        ElasticFixtures.Connection("c1", "Ops", "api"),
+                        ElasticFixtures.Connection("c2", "Other", "web"),
+                    ],
+                },
+            }
+        );
+        var client = new FakeElasticApiClient
+        {
+            DataViews = [new("logs", "logs-*")],
+            DataViewFields =
+            [
+                new("@timestamp", "date", true),
+                new("message", "text", true),
+                new("service", "keyword", true),
+            ],
+        };
+        client.DataViewHandler = id =>
+            Task.FromResult(new ElasticDataView(id, "logs-*", "@timestamp", client.DataViewFields));
+        await using var owner = new MainWindowViewModel(
+            new AppState(
+                new LogSourceService(),
+                persistence,
+                credentials: new InMemoryCredentialVault(),
+                elastic: client
+            ),
+            scheduler: ImmediateScheduler.Instance,
+            startPolling: false
+        );
+        await owner.InitializeAsync();
+        var setup = owner.ElasticSetup;
+        setup.AddSource("c1");
+        var view = setup.View!;
+        view.SelectedDataViewId = "logs";
+        await WaitForAsync(() => view.IsSelectionResolved);
+        await setup.NextCommand.Execute();
+        view.ServerField = "service";
+        view.AddFilterValue("db");
+        await setup.NextCommand.Execute();
+        view.Fields.Single(field => field.Name == "message").IsOutput = true;
+        view.Fields.Single(field => field.Name == "@timestamp").IsOutput = true;
+        await setup.NextCommand.Execute();
+        Assert.Equal(ElasticSetupStep.Finish, setup.Step);
+        setup.OpenNow = false;
+        var connection = setup.Connection;
+        persistence.HoldNextSave();
+
+        var finishing = setup.NextCommand.Execute().ToTask();
+        Assert.True(setup.IsBusy);
+        setup.StartNew();
+        setup.EditConnection("c2");
+        setup.EditView("c2", "c2-view");
+        setup.AddSource("c2");
+        owner.SetUpElasticCommand.Execute().Subscribe();
+        owner
+            .ElasticConnectionGroups.Single(group => group.Id == "c2")
+            .EditCommand.Execute()
+            .Subscribe();
+        owner
+            .ElasticConnectionGroups.Single(group => group.Id == "c2")
+            .AddSourceCommand.Execute()
+            .Subscribe();
+
+        Assert.True(setup.IsOpen);
+        Assert.Equal(ElasticSetupStep.Finish, setup.Step);
+        Assert.Same(connection, setup.Connection);
+        Assert.Same(view, setup.View);
+        Assert.Contains(view, setup.Connection!.Views);
+        Assert.Equal(2, owner.Settings.ElasticConnections.Count);
+        Assert.False(
+            await owner.ElasticConnectionGroups.First().EditCommand.CanExecute.FirstAsync()
+        );
+        Assert.False(await owner.SetUpElasticCommand.CanExecute.FirstAsync());
+
+        persistence.Release();
+        await finishing;
+        Assert.False(setup.IsOpen);
+        Assert.Contains(
+            view.Id,
+            persistence
+                .Config!.Settings.ElasticConnections.Single(item => item.Id == "c1")
+                .Views.Select(saved => saved.Id)
+        );
+
+        setup.EditConnection("c2");
+        Assert.True(setup.IsOpen);
+        Assert.Equal("c2", setup.Connection!.Id);
+        Assert.True(await owner.SetUpElasticCommand.CanExecute.FirstAsync());
+        setup.StartNew();
+        Assert.Equal(ElasticSetupStep.Connection, setup.Step);
+        Assert.NotEqual("c2", setup.Connection!.Id);
     }
 
     [AvaloniaFact]
@@ -1875,6 +1977,87 @@ public sealed class ElasticSetupViewModelTests
             harness.Setup.DiscoverMessage
         );
         Assert.False(harness.Setup.HasPendingDiscoverImport);
+    }
+
+    [AvaloniaFact]
+    public async Task DiscoverUrl_AFilterTheUserAlreadyChoseIsKeptAndSaidSo()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+        await ApplyDiscoverAsync(harness, Discover());
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        await WaitForAsync(() => harness.Setup.View!.IsSelectionResolved);
+        harness.FillFilter();
+
+        await harness.NextAsync();
+
+        Assert.Equal(ElasticSetupStep.Filter, harness.Setup.Step);
+        Assert.Equal("service", harness.Setup.View!.ServerField);
+        Assert.Equal(
+            new[] { "api", "web" },
+            harness.Setup.View.Sources.Select(source => source.ServerValue)
+        );
+        Assert.Equal(
+            "Kept your choice; the Discover filter was not applied.",
+            harness.Setup.DiscoverNote
+        );
+    }
+
+    [AvaloniaFact]
+    public async Task DiscoverUrl_AnotherDataViewKeepsTheChoiceAndSaysTheFilterAndColumnsWereSkipped()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+        await ApplyDiscoverAsync(harness, Discover());
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        Assert.Equal("logs", harness.Setup.View!.SelectedDataViewId);
+        harness.Setup.View.SelectedDataViewId = "metrics";
+        await WaitForAsync(() => harness.Setup.View.IsSelectionResolved);
+
+        await harness.NextAsync();
+
+        Assert.Equal(ElasticSetupStep.Filter, harness.Setup.Step);
+        Assert.True(string.IsNullOrEmpty(harness.Setup.View.ServerField));
+        Assert.Contains("filter from the URL belongs to another one", harness.Setup.DiscoverNote);
+
+        harness.FillFilter();
+        await harness.NextAsync();
+
+        Assert.Equal(ElasticSetupStep.Columns, harness.Setup.Step);
+        Assert.Empty(harness.Setup.View.SelectedOutputFields);
+        Assert.Contains("columns from the URL belong to another one", harness.Setup.DiscoverNote);
+    }
+
+    [AvaloniaFact]
+    public async Task DiscoverUrl_TheNoteLineShowsOnLaterStepsOnlyAndIsClearedByANewFlow()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+        await ApplyDiscoverAsync(harness, Discover(columns: "service,ghost"));
+        Assert.False(harness.Setup.DiscoverNoteVisible);
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        await WaitForAsync(() => harness.Setup.View!.IsSelectionResolved);
+        await harness.NextAsync();
+        Assert.False(harness.Setup.DiscoverNoteVisible);
+        await harness.NextAsync();
+
+        Assert.Equal(ElasticSetupStep.Columns, harness.Setup.Step);
+        Assert.NotNull(harness.Setup.DiscoverNote);
+        Assert.True(harness.Setup.DiscoverNoteVisible);
+        await harness.Setup.GoToStepCommand.Execute(harness.Setup.Steps[0]);
+        Assert.Equal(ElasticSetupStep.Connection, harness.Setup.Step);
+        Assert.False(harness.Setup.DiscoverNoteVisible);
+        await harness.Setup.GoToStepCommand.Execute(harness.Setup.Steps[2]);
+        Assert.True(harness.Setup.DiscoverNoteVisible);
+
+        harness.Setup.StartNew();
+
+        Assert.Null(harness.Setup.DiscoverNote);
+        Assert.False(harness.Setup.DiscoverNoteVisible);
+        Assert.Null(harness.Setup.DiscoverMessage);
     }
 
     [AvaloniaFact]

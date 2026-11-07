@@ -35,16 +35,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
     {
         _owner = owner;
         Id = id;
-        AddViewCommand = ReactiveCommand.Create(() =>
-        {
-            AddNewView();
-        });
-        RemoveViewCommand = ReactiveCommand.Create<ElasticViewEditorViewModel>(RemoveView);
         TestConnectionCommand = ReactiveCommand.CreateFromTask(TestConnectionAsync);
-        SaveCommand = ReactiveCommand.CreateFromTask(
-            SaveAsync,
-            this.WhenAnyValue(editor => editor.CanSave)
-        );
         EndpointResults =
         [
             new ElasticEndpointResultViewModel("Kibana"),
@@ -129,7 +120,6 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             NotifySavePrerequisitesChanged();
         }
     }
-    public IReadOnlyList<ElasticAuthMode> AuthModes { get; } = Enum.GetValues<ElasticAuthMode>();
 
     /// <summary>The login methods with the text people read; the enum values stay what is stored.</summary>
     public IReadOnlyList<ElasticAuthModeChoice> AuthModeChoices { get; } =
@@ -164,10 +154,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             NotifySavePrerequisitesChanged();
         }
     }
-    public ReactiveCommand<Unit, Unit> AddViewCommand { get; }
-    public ReactiveCommand<ElasticViewEditorViewModel, Unit> RemoveViewCommand { get; }
     public ReactiveCommand<Unit, Unit> TestConnectionCommand { get; }
-    public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ObservableCollection<ElasticViewEditorViewModel> Views { get; } = [];
     public ObservableCollection<ElasticDataViewChoiceViewModel> DataViews { get; } = [];
     public IReadOnlyList<ElasticEndpointResultViewModel> EndpointResults { get; }
@@ -185,11 +172,21 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
 
     /// <summary>What saving the connection on its own needs: valid endpoints and no save running.</summary>
     internal bool CanSaveConnectionOnly =>
-        !IsSaving && NameError is null && KibanaUrlError is null && ElasticsearchUrlError is null;
+        !IsSaving
+        && NameError is null
+        && KibanaUrlError is null
+        && ElasticsearchUrlError is null
+        && (!NeedsSecret || HasSecret);
     private ElasticConnectionSettings? SavedConnection => _owner.SavedConnection(Id);
     private bool NeedsSecret => AuthMode is ElasticAuthMode.Basic or ElasticAuthMode.ApiKey;
+
+    // The stored secret belongs to the saved login method and servers; with another method or host
+    // it would be sent where it was never meant to go, so a new one has to be typed.
     private bool HasStoredSecret =>
-        SavedConnection is { AuthMode: ElasticAuthMode.Basic or ElasticAuthMode.ApiKey };
+        SavedConnection is { AuthMode: ElasticAuthMode.Basic or ElasticAuthMode.ApiKey } saved
+        && saved.AuthMode == AuthMode
+        && ElasticUrls.SameOrigin(saved.KibanaUrl, KibanaUrl)
+        && ElasticUrls.SameOrigin(saved.ElasticsearchUrl, ElasticsearchUrl);
     private bool HasSecret => !string.IsNullOrWhiteSpace(Secret) || HasStoredSecret;
     public bool CanSave =>
         !IsTesting
@@ -212,10 +209,8 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         : _saveFailed ? "Save failed"
         : IsDirty ? "Unsaved"
         : "Saved";
-    public string? KibanaUrlError =>
-        IsHttpUrl(KibanaUrl) ? null : "Enter an absolute HTTP or HTTPS Kibana URL.";
-    public string? ElasticsearchUrlError =>
-        IsHttpUrl(ElasticsearchUrl) ? null : "Enter an absolute HTTP or HTTPS Elasticsearch URL.";
+    public string? KibanaUrlError => UrlError(KibanaUrl, "Kibana");
+    public string? ElasticsearchUrlError => UrlError(ElasticsearchUrl, "Elasticsearch");
     public string? Error
     {
         get => _error;
@@ -328,8 +323,6 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         Views.Add(view);
         return view;
     }
-
-    private void RemoveView(ElasticViewEditorViewModel view) => Views.Remove(view);
 
     private void InvalidateConnectionTest()
     {
@@ -535,39 +528,11 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             }
         );
 
-    private static bool IsHttpUrl(string value) =>
-        Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https";
-
-    private async Task SaveAsync() => await SaveDraftAsync();
-
-    internal async Task<bool> SaveDraftAsync()
-    {
-        if (!CanSave)
-            return false;
-        var snapshot = DraftSnapshot();
-        var secret = Secret;
-        _saveFailed = false;
-        IsSaving = true;
-        try
-        {
-            await _owner.SaveElasticConnectionAsync(ToSettings(), secret);
-            if (Secret == secret)
-                Secret = string.Empty;
-            _savedSnapshot = snapshot;
-            Error = null;
-            return true;
-        }
-        catch (Exception exception)
-        {
-            _saveFailed = true;
-            Error = exception.Message;
-            return false;
-        }
-        finally
-        {
-            IsSaving = false;
-        }
-    }
+    private static string? UrlError(string value, string what) =>
+        !ElasticUrls.IsHttp(value) ? $"Enter an absolute HTTP or HTTPS {what} URL."
+        : ElasticUrls.HasUserInfo(value)
+            ? $"Enter an absolute HTTP or HTTPS {what} URL without a user name or password."
+        : null;
 
     /// <summary>
     /// Persists only the connection (with the views already saved), leaving any in-progress view
@@ -580,9 +545,15 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
             // Say why, so the setup flow has something to show instead of a silent refusal.
             if (!IsSaving && NameError is { } nameError)
                 Error = nameError;
+            else if (!IsSaving && NeedsSecret && !HasSecret)
+                Error =
+                    AuthMode == ElasticAuthMode.ApiKey
+                        ? "Enter the API key for this connection."
+                        : "Enter the password for this connection.";
             return false;
         }
         var secret = Secret;
+        var snapshot = DraftSnapshot();
         _saveFailed = false;
         IsSaving = true;
         try
@@ -595,7 +566,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
                 _secret = string.Empty;
                 this.RaisePropertyChanged(nameof(Secret));
             }
-            UpdateSavedConnectionSnapshot();
+            UpdateSavedConnectionSnapshot(snapshot);
             if (_credentialsTested)
                 ShowCredentialsResult();
             Error = null;
@@ -623,6 +594,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         if (!CanSaveConnectionOnly || !view.CanSave)
             return false;
         var secret = Secret;
+        var snapshot = DraftSnapshot();
         _saveFailed = false;
         IsSaving = true;
         try
@@ -641,7 +613,7 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
                 _secret = string.Empty;
                 this.RaisePropertyChanged(nameof(Secret));
             }
-            UpdateSavedConnectionSnapshot(view.Id);
+            UpdateSavedConnectionSnapshot(snapshot, view.Id);
             if (_credentialsTested)
                 ShowCredentialsResult();
             Error = null;
@@ -659,10 +631,11 @@ internal sealed class ElasticConnectionEditorViewModel : ReactiveObject
         }
     }
 
-    private void UpdateSavedConnectionSnapshot(string? savedViewId = null)
+    private void UpdateSavedConnectionSnapshot(string submitted, string? savedViewId = null)
     {
         // Only the connection fields were written; the views part keeps describing what is saved.
-        var current = JsonNode.Parse(DraftSnapshot())!.AsObject();
+        // The snapshot is the draft as it was submitted, so an edit made during the save stays unsaved.
+        var current = JsonNode.Parse(submitted)!.AsObject();
         var saved = _savedSnapshot is null
             ? current.DeepClone().AsObject()
             : JsonNode.Parse(_savedSnapshot)!.AsObject();

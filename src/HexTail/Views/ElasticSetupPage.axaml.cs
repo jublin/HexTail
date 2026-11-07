@@ -1,8 +1,11 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using HexTail.ViewModels;
 
 namespace HexTail.Views;
@@ -38,13 +41,64 @@ public partial class ElasticSetupPage : UserControl
 
     // Opening the page puts the cursor in the first control of the step it starts on, so keyboard
     // and screen reader users start inside the page instead of on whatever the click left behind.
+    // Closing it takes the cursor out again, and the delete question gets the cursor while it shows.
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
+        switch (e.PropertyName)
+        {
+            case nameof(ElasticSetupViewModel.IsOpen) when _viewModel is { IsOpen: true }:
+                Dispatcher.UIThread.Post(FocusStartingControl, DispatcherPriority.Background);
+                break;
+            case nameof(ElasticSetupViewModel.IsOpen):
+                Dispatcher.UIThread.Post(LeavePage, DispatcherPriority.Background);
+                break;
+            case nameof(ElasticSetupViewModel.DeleteConfirmationVisible):
+                Dispatcher.UIThread.Post(FocusDeleteControl, DispatcherPriority.Background);
+                break;
+        }
+    }
+
+    private void FocusDeleteControl()
+    {
+        if (_viewModel is not { IsOpen: true } viewModel)
+            return;
+        var name = viewModel.DeleteConfirmationVisible
+            ? "SetupCancelDeleteButton"
+            : "SetupDeleteConnectionButton";
+        // Cancel is the safe default for the destructive question; afterwards the cursor goes back
+        // to the button that asked it.
+        if (this.FindControl<Control>(name) is { IsEffectivelyVisible: true } control)
+            control.Focus();
+    }
+
+    // A hidden control keeps the keyboard focus, and a hidden text box would make the shell treat
+    // every single-key shortcut as typing. The cursor goes back to the log list when a source is
+    // open and to the sidebar's Elastic button otherwise.
+    private void LeavePage()
+    {
+        if (_viewModel is not { IsOpen: false } || TopLevel.GetTopLevel(this) is not { } top)
+            return;
+        var focused = top.FocusManager?.GetFocusedElement() as Visual;
         if (
-            e.PropertyName == nameof(ElasticSetupViewModel.IsOpen)
-            && _viewModel is { IsOpen: true }
+            focused is not null
+            && !ReferenceEquals(focused, this)
+            && !this.IsVisualAncestorOf(focused)
         )
-            Dispatcher.UIThread.Post(FocusStartingControl, DispatcherPriority.Background);
+            return;
+        var list = top.GetVisualDescendants()
+            .OfType<LogView>()
+            .FirstOrDefault(view => view.IsEffectivelyVisible)
+            ?.FindControl<ListBox>("LogList");
+        if (list is { IsEffectivelyVisible: true } && FocusLogList(list))
+            return;
+        var add = top.GetVisualDescendants()
+            .OfType<Button>()
+            .FirstOrDefault(button =>
+                button.Name == "SidebarElasticSetupButton" && button.IsEffectivelyVisible
+            );
+        if (add is not null && add.Focus())
+            return;
+        top.Focus();
     }
 
     // The list drops its selection while the chosen data view is filtered out and does not take the
@@ -130,6 +184,11 @@ public partial class ElasticSetupPage : UserControl
             DispatcherPriority.Background
         );
     }
+
+    // The list itself does not take focus; its rows do, so the selected (or first) one gets it.
+    private static bool FocusLogList(ListBox list) =>
+        list.Focus()
+        || list.ContainerFromIndex(Math.Max(list.SelectedIndex, 0)) is { } row && row.Focus();
 
     private void FocusStartingControl()
     {

@@ -100,8 +100,13 @@ public sealed class AppState : IAsyncDisposable
             item.Id == connection.Id
         );
         var previousSecret = previous is null ? null : _credentials.Get(connection.Id);
-        secret = string.IsNullOrWhiteSpace(secret) ? previousSecret : secret;
         connection = NormalizeElasticConnections([connection]).Single();
+        // A blank secret keeps the stored one only for the same login method on the same servers;
+        // otherwise it stays blank and the validation below asks for a new one.
+        secret =
+            !string.IsNullOrWhiteSpace(secret) ? secret
+            : StoredSecretApplies(previous, connection) ? previousSecret
+            : null;
         ValidateElasticConnection(connection, secret);
         var authenticated = connection.AuthMode is ElasticAuthMode.Basic or ElasticAuthMode.ApiKey;
         if (authenticated)
@@ -1465,10 +1470,24 @@ public sealed class AppState : IAsyncDisposable
             ? color
             : "#f59e0b";
 
-    private string? SecretFor(ElasticConnectionSettings connection) =>
-        connection.AuthMode is ElasticAuthMode.Basic or ElasticAuthMode.ApiKey
-            ? _credentials.Get(connection.Id)
-            : null;
+    // The stored secret was typed for one login method on one pair of servers. Sending it with
+    // another method (a password as an API key) or to another host would hand it to the wrong party.
+    private static bool StoredSecretApplies(
+        ElasticConnectionSettings? stored,
+        ElasticConnectionSettings connection
+    ) =>
+        stored is { AuthMode: ElasticAuthMode.Basic or ElasticAuthMode.ApiKey }
+        && stored.AuthMode == connection.AuthMode
+        && ElasticUrls.SameOrigin(stored.KibanaUrl, connection.KibanaUrl)
+        && ElasticUrls.SameOrigin(stored.ElasticsearchUrl, connection.ElasticsearchUrl);
+
+    private string? SecretFor(ElasticConnectionSettings connection)
+    {
+        if (connection.AuthMode is not (ElasticAuthMode.Basic or ElasticAuthMode.ApiKey))
+            return null;
+        var stored = _settings.ElasticConnections.FirstOrDefault(item => item.Id == connection.Id);
+        return StoredSecretApplies(stored, connection) ? _credentials.Get(connection.Id) : null;
+    }
 
     private static void ValidateElasticConnection(
         ElasticConnectionSettings connection,
@@ -1486,12 +1505,22 @@ public sealed class AppState : IAsyncDisposable
                 "Kibana URL must be absolute HTTP or HTTPS.",
                 nameof(connection)
             );
+        if (kibana.UserInfo.Length > 0)
+            throw new ArgumentException(
+                "Kibana URL must be absolute HTTP or HTTPS without a user name or password.",
+                nameof(connection)
+            );
         if (
             !Uri.TryCreate(connection.ElasticsearchUrl, UriKind.Absolute, out var elastic)
             || elastic.Scheme is not ("http" or "https")
         )
             throw new ArgumentException(
                 "Elasticsearch URL must be absolute HTTP or HTTPS.",
+                nameof(connection)
+            );
+        if (elastic.UserInfo.Length > 0)
+            throw new ArgumentException(
+                "Elasticsearch URL must be absolute HTTP or HTTPS without a user name or password.",
                 nameof(connection)
             );
         if (

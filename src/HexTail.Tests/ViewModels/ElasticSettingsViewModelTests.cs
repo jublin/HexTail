@@ -39,7 +39,7 @@ public sealed class ElasticSettingsViewModelTests
         );
         owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
-        editor.AddViewCommand.Execute().Subscribe();
+        editor.AddNewView();
         var view = Assert.Single(editor.Views);
         view.Sync(new ElasticViewSettings { Id = view.Id, OutputFields = ["message"] });
 
@@ -102,7 +102,7 @@ public sealed class ElasticSettingsViewModelTests
         );
         owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
-        editor.AddViewCommand.Execute().Subscribe();
+        editor.AddNewView();
         var view = Assert.Single(editor.Views);
         view.SelectedDataViewId = "pending";
 
@@ -144,7 +144,7 @@ public sealed class ElasticSettingsViewModelTests
         );
         owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
-        editor.AddViewCommand.Execute().Subscribe();
+        editor.AddNewView();
         var view = Assert.Single(editor.Views);
         var original = new ElasticViewSettings
         {
@@ -202,7 +202,7 @@ public sealed class ElasticSettingsViewModelTests
         var editor = Assert.Single(owner.Settings.ElasticConnections);
         editor.KibanaUrl = "https://kibana/";
         editor.ElasticsearchUrl = "https://elastic/";
-        editor.AddViewCommand.Execute().Subscribe();
+        editor.AddNewView();
         var view = Assert.Single(editor.Views);
         view.Sync(
             new ElasticViewSettings
@@ -217,7 +217,7 @@ public sealed class ElasticSettingsViewModelTests
                 Sources = [new ElasticSourceSettings { Id = "source", ServerValue = "api" }],
             }
         );
-        bool CanSave() => ((System.Windows.Input.ICommand)editor.SaveCommand).CanExecute(null);
+        bool CanSave() => editor.CanSave;
 
         Assert.True(CanSave());
         view.ServerField = null;
@@ -280,7 +280,7 @@ public sealed class ElasticSettingsViewModelTests
         );
         owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
-        editor.AddViewCommand.Execute().Subscribe();
+        editor.AddNewView();
         var view = Assert.Single(editor.Views);
 
         await editor.TestConnectionCommand.Execute().FirstAsync();
@@ -471,7 +471,7 @@ public sealed class ElasticSettingsViewModelTests
         );
         owner.Settings.Sync(state.Settings);
         var editor = Assert.Single(owner.Settings.ElasticConnections);
-        editor.AddViewCommand.Execute().Subscribe();
+        editor.AddNewView();
 
         await editor.TestConnectionCommand.Execute().FirstAsync();
 
@@ -495,7 +495,7 @@ public sealed class ElasticSettingsViewModelTests
         );
         owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
-        editor.AddViewCommand.Execute().Subscribe();
+        editor.AddNewView();
         var view = Assert.Single(editor.Views);
         view.Sync(
             new ElasticViewSettings
@@ -582,7 +582,7 @@ public sealed class ElasticSettingsViewModelTests
         );
         owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
-        editor.AddViewCommand.Execute().Subscribe();
+        editor.AddNewView();
 
         owner.Settings.Sync(new AppSettings());
 
@@ -653,7 +653,7 @@ public sealed class ElasticSettingsViewModelTests
 
         owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
-        editor.AddViewCommand.Execute().Subscribe();
+        editor.AddNewView();
 
         Assert.Matches("^[0-9a-f]{32}$", Assert.Single(Assert.Single(editor.Views).Sources).Id);
     }
