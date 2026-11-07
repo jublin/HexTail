@@ -214,6 +214,69 @@
     <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
+  <Style Selector="TextBlock.setup-title">
+    <Setter Property="FontSize" Value="18" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  </Style>
+  <Style Selector="Button.setup-step">
+    <Setter Property="Padding" Value="8,8" />
+    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+  </Style>
+  <Style Selector="Button.setup-step:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.setup-step.current">
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="Button.setup-step.done">
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  </Style>
+  <Style Selector="Border.filter-chip">
+    <Setter Property="Margin" Value="0,0,8,8" />
+    <Setter Property="Padding" Value="10,2,2,2" />
+    <Setter Property="CornerRadius" Value="14" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+    <Setter Property="Background" Value="{DynamicResource RaisedAltBrush}" />
+  </Style>
+  <Style Selector="Border.filter-chip.zero-count">
+    <Setter Property="BorderBrush" Value="{DynamicResource ErrorBrush}" />
+  </Style>
+  <Style Selector="TextBlock.chip-count">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,Menlo,monospace" />
+    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Border.filter-chip.zero-count TextBlock.chip-count">
+    <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+  </Style>
+  <Style Selector="TextBlock.preview-row">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,Menlo,monospace" />
+  </Style>
+  <Style Selector="Border.step-badge">
+    <Setter Property="Width" Value="24" />
+    <Setter Property="Height" Value="24" />
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+  </Style>
+  <Style Selector="Button.setup-step.current Border.step-badge">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+  </Style>
+  <Style Selector="Button.setup-step.current Border.step-badge TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource SurfaceBrush}" />
+  </Style>
+  <Style Selector="Button.setup-step.done Border.step-badge">
+    <Setter Property="BorderBrush" Value="{DynamicResource SuccessBrush}" />
+  </Style>
+  <Style Selector="Button.setup-step.done Border.step-badge TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+  </Style>
 <Style Selector="Rectangle.chip-outline">
   <Setter Property="Stroke" Value="{DynamicResource MutedBrush}" />
   <Setter Property="StrokeThickness" Value="1" />

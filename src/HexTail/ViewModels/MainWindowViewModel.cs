@@ -71,7 +71,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         _startupPaths = startupPaths?.ToArray() ?? [];
         _scheduler = scheduler ?? RxSchedulers.MainThreadScheduler;
         _startPolling = startPolling;
-        Settings = new SettingsViewModel(this, _scheduler);
+        Settings = new SettingsViewModel(this);
+        ElasticSetup = new ElasticSetupViewModel(this);
         FilterBar = new FilterBarViewModel(this);
         Inspector = new InspectorViewModel(this);
         PickFiles = new Interaction<Unit, IReadOnlyList<string>>(_scheduler);
@@ -94,11 +95,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             _scheduler
         );
         SetUpElasticCommand = ReactiveCommand.Create(
-            () =>
-            {
-                Settings.SectionIndex = 1;
-                SettingsOpen = true;
-            },
+            () => ElasticSetup.Run(ElasticSetup.StartNew),
+            ElasticSetup.WhenAnyValue(setup => setup.IsBusy).Select(busy => !busy),
             _scheduler
         );
         ToggleSidebarCommand = ReactiveCommand.Create(
@@ -176,6 +174,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public bool HasElasticWarning => _state.HasElasticWarning;
     public string ElasticSourceIcon => HasElasticWarning ? "mdi-cloud-alert" : "mdi-cloud-check";
     public SettingsViewModel Settings { get; }
+    public ElasticSetupViewModel ElasticSetup { get; }
     public FilterBarViewModel FilterBar { get; }
     public InspectorViewModel Inspector { get; }
     public Interaction<Unit, IReadOnlyList<string>> PickFiles { get; }
@@ -407,19 +406,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public bool SettingsOpen
     {
         get => _settingsOpen;
-        set
-        {
-            if (!value && _settingsOpen && !Settings.TryClose())
-            {
-                this.RaisePropertyChanged(nameof(SettingsOpen));
-                return;
-            }
-            this.RaiseAndSetIfChanged(ref _settingsOpen, value);
-        }
+        set => this.RaiseAndSetIfChanged(ref _settingsOpen, value);
     }
-
-    internal void CloseSettingsAfterDraftChoice() =>
-        this.RaiseAndSetIfChanged(ref _settingsOpen, false, nameof(SettingsOpen));
 
     public int SelectedViewIndex
     {
@@ -544,6 +532,11 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             return;
 
         _closed = true;
+        // The setup flow's debounce timer must not fire a connection test into a closed window.
+        if (Dispatcher.UIThread.CheckAccess())
+            ElasticSetup.CancelAutoTest();
+        else
+            Dispatcher.UIThread.Post(ElasticSetup.CancelAutoTest);
         try
         {
             _subscriptions.Dispose();
@@ -721,6 +714,18 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         SetFileError(null);
     }
 
+    // The connection of the open Elastic tab, else the first configured one.
+    private string? AddSourceConnectionId()
+    {
+        var sourceId = SelectedFile?.Model.Source.ElasticSourceId;
+        var current = sourceId is null
+            ? null
+            : ElasticSources.FirstOrDefault(option => option.SourceId == sourceId)?.ConnectionId;
+        return !string.IsNullOrEmpty(current)
+            ? current
+            : _state.Settings.ElasticConnections.FirstOrDefault()?.Id;
+    }
+
     internal IEnumerable<PaletteItem> BuildPaletteItems()
     {
         yield return new("Open files…", "File", "Ctrl+O", async () => await OpenCommand.Execute());
@@ -730,6 +735,17 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             null,
             async () => await SetUpElasticCommand.Execute()
         );
+        if (AddSourceConnectionId() is { } connectionId)
+            yield return new(
+                "Add Elastic source",
+                "Elastic",
+                null,
+                () =>
+                {
+                    ElasticSetup.Run(() => ElasticSetup.AddSource(connectionId));
+                    return Task.CompletedTask;
+                }
+            );
         yield return new(
             "Settings",
             "App",
@@ -920,6 +936,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                     view.Sources.Select(source =>
                         (
                             ConnectionId: connection.Id,
+                            ViewId: view.Id,
                             Descriptor: LogSourceDescriptor.Elastic(connection, view, source),
                             ShortName: $"{(string.IsNullOrWhiteSpace(view.Name) ? view.DataViewTitle : view.Name)} · {source.ServerValue}"
                         )
@@ -945,7 +962,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         {
             var item = configured.First(source => source.Descriptor.Id == option.SourceId);
             option.SyncIdentity(item.Descriptor);
-            option.SyncConnection(item.ConnectionId, item.ShortName);
+            option.SyncConnection(item.ConnectionId, item.ShortName, item.ViewId);
             option.SyncSelection(option.SourceId == selectedSourceId);
             var status =
                 _state.ElasticSourceStatuses.GetValueOrDefault(option.SourceId)?.Status.ToString()
@@ -1032,7 +1049,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             var group = ElasticConnectionGroups.FirstOrDefault(item => item.Id == connection.Id);
             if (group is null)
             {
-                group = new ElasticConnectionGroupViewModel(connection.Id);
+                group = new ElasticConnectionGroupViewModel(this, connection.Id);
                 ElasticConnectionGroups.Insert(index, group);
             }
             else if (ElasticConnectionGroups.IndexOf(group) is var current && current != index)

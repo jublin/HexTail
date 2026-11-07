@@ -31,6 +31,33 @@ public sealed class SidebarViewModelTests
     }
 
     [AvaloniaFact]
+    public async Task AConnectionWithoutSourcesSaysSoInsteadOfCheckingForever()
+    {
+        await using var viewModel = ElasticFixtures.Workspace(
+            new HexTail.Persistence.ElasticConnectionSettings
+            {
+                Id = "c-empty",
+                Name = "Abandoned",
+                KibanaUrl = "https://kibana/",
+                ElasticsearchUrl = "https://elastic/",
+            },
+            ElasticFixtures.Connection("c-1", "prod", "checkout")
+        );
+        await viewModel.InitializeAsync();
+        Dispatcher.UIThread.RunJobs();
+
+        var empty = viewModel.ElasticConnectionGroups.Single(group => group.Id == "c-empty");
+
+        Assert.Empty(empty.Sources);
+        Assert.Equal("no sources", empty.StatusText);
+        Assert.False(empty.IsConnected);
+        Assert.False(empty.IsFailed);
+        Assert.Equal(string.Empty, empty.StatusMessage);
+        var withSources = viewModel.ElasticConnectionGroups.Single(group => group.Id == "c-1");
+        Assert.NotEqual("no sources", withSources.StatusText);
+    }
+
+    [AvaloniaFact]
     public async Task ActivatingASourceOpensAndSelectsItAndCloseRemovesIt()
     {
         await using var viewModel = ElasticFixtures.Workspace(

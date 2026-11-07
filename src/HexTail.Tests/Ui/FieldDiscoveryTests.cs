@@ -66,9 +66,9 @@ public sealed class FieldDiscoveryTests
             scheduler: ImmediateScheduler.Instance,
             startPolling: false
         );
-        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
-        editor.AddViewCommand.Execute().Subscribe();
+        editor.AddNewView();
         var view = Assert.Single(editor.Views);
         view.Sync(
             new ElasticViewSettings

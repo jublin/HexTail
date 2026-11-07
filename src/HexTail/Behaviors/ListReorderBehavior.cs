@@ -45,6 +45,8 @@ internal sealed class ListReorderBehavior : Behavior<ItemsControl>
             return;
         if (items is ObservableCollection<FileTabViewModel> files)
             files.Move(from, to);
+        else if (items is ObservableCollection<string> names)
+            names.Move(from, to);
         else
         {
             var item = items[from];

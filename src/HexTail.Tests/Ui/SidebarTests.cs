@@ -1,5 +1,6 @@
 using System.Reactive.Linq;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -260,6 +261,51 @@ public sealed class SidebarTests
     }
 
     [AvaloniaFact]
+    public async Task ElasticRowsOfferEditAddSourceAndEditSourceThatOpenTheSetupFlow()
+    {
+        var viewModel = ElasticFixtures.Workspace(
+            ElasticFixtures.Connection("c-1", "Ops", "checkout")
+        );
+        var window = new MainWindow(viewModel, registerNativePicker: false) { Width = 1280 };
+        try
+        {
+            window.Show();
+            await UiWait.Until(() => viewModel.ElasticConnectionGroups.Count == 1);
+            Dispatcher.UIThread.RunJobs();
+            var group = viewModel.ElasticConnectionGroups[0];
+            var source = group.Sources[0];
+            var setup = viewModel.ElasticSetup;
+
+            var editConnection = NamedButton(window, "Edit Ops");
+            editConnection.Command!.Execute(null);
+            Assert.True(setup.IsOpen);
+            Assert.Equal(ElasticSetupStep.Connection, setup.Step);
+            Assert.Equal("c-1", setup.Connection!.Id);
+            setup.Close();
+
+            var addSource = NamedButton(window, "Add source to Ops");
+            addSource.Command!.Execute(null);
+            Assert.True(setup.IsOpen);
+            Assert.Equal(ElasticSetupStep.DataView, setup.Step);
+            Assert.Equal("c-1", setup.Connection!.Id);
+            Assert.NotNull(setup.View);
+            setup.Close();
+
+            var editSource = NamedButton(window, $"Edit {source.DisplayName}");
+            editSource.Command!.Execute(null);
+            Assert.True(setup.IsOpen);
+            Assert.Equal(ElasticSetupStep.Filter, setup.Step);
+            Assert.Equal("c-1-view", setup.View!.Id);
+            Assert.Equal("c-1-view", source.ViewId);
+        }
+        finally
+        {
+            window.Close();
+            await viewModel.DisposeAsync();
+        }
+    }
+
+    [AvaloniaFact]
     public void ElasticSectionOffersSetupWhenNothingIsConfigured()
     {
         var window = TestWindow.Create(out var viewModel);
@@ -271,8 +317,7 @@ public sealed class SidebarTests
         Assert.True(sidebar.FindControl<TextBlock>("ElasticEmptyHint")!.IsVisible);
         var setup = sidebar.FindControl<Button>("SidebarElasticSetupButton")!;
         setup.Command!.Execute(null);
-        Assert.True(viewModel.SettingsOpen);
-        Assert.Equal(1, viewModel.Settings.SectionIndex);
+        Assert.True(viewModel.ElasticSetup.IsOpen);
         window.Close();
     }
 
@@ -383,6 +428,12 @@ public sealed class SidebarTests
     private static SourceSidebar Sidebar(Window window) =>
         window.GetVisualDescendants().OfType<SourceSidebar>().Single();
 
+    private static Button NamedButton(Window window, string name) =>
+        Sidebar(window)
+            .GetVisualDescendants()
+            .OfType<Button>()
+            .Single(button => AutomationProperties.GetName(button) == name);
+
     private static Border[] Rows(Window window) =>
         Sidebar(window)
             .GetVisualDescendants()
@@ -407,6 +458,10 @@ public sealed class SidebarTests
             .GetVisualDescendants()
             .OfType<Button>()
             .Single(button =>
-                ReferenceEquals(button.DataContext, item) && button.Classes.Contains("tab-close")
+                ReferenceEquals(button.DataContext, item)
+                && button.Classes.Contains("tab-close")
+                && AutomationProperties
+                    .GetName(button)
+                    ?.StartsWith("Edit", StringComparison.Ordinal) != true
             );
 }

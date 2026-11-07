@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Reactive;
 using Avalonia.Threading;
 using HexTail.Elastic;
@@ -17,11 +18,28 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     private string _outputFieldQuery = string.Empty;
     private readonly DispatcherTimer _fieldFilterTimer;
     private readonly List<ElasticFieldOptionViewModel> _fieldSnapshot = [];
-    private readonly List<string> _outputFieldOrder = [];
+    private static readonly string[] SuggestionPriority =
+    [
+        "@timestamp",
+        "timestamp",
+        "message",
+        "log.level",
+        "level",
+        "service.name",
+        "service",
+        "host.name",
+        "host",
+    ];
+    private const int MaxSuggestions = 12;
+    private const int MaxPreviewRows = 5;
     private int _fieldFilterVersion;
     private int _metadataVersion;
+    private int _previewVersion;
+    private bool _syncing;
+    private string? _previewMessage;
     private bool _isLoading;
     private bool _isSelectionResolved;
+    private bool _isMetadataLoaded;
     private string? _timeFieldName;
     private string? _serverField;
     private string? _namespaceField;
@@ -38,12 +56,20 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             if (args.NewItems is not null)
                 foreach (ElasticSourceSettingViewModel source in args.NewItems)
                     source.PropertyChanged += SourceChanged;
+            // The preview filters on the first value, so adding or removing one can change it.
+            InvalidatePreview();
             NotifyPrerequisitesChanged();
         };
+        SelectedOutputFields.CollectionChanged += OnSelectedOutputFieldsChanged;
         AddSource();
         _fieldFilterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
         _fieldFilterTimer.Tick += (_, _) => ApplyQueuedFieldFilter();
         RefreshFieldsCommand = ReactiveCommand.CreateFromTask(RefreshFieldsAsync);
+        RefreshCountsCommand = ReactiveCommand.CreateFromTask(RefreshCountsAsync, owner.Scheduler);
+        RefreshPreviewCommand = ReactiveCommand.CreateFromTask(
+            RefreshPreviewAsync,
+            owner.Scheduler
+        );
     }
 
     public string Id { get; }
@@ -67,6 +93,8 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             this.RaiseAndSetIfChanged(ref _selectedDataViewId, value);
             this.RaisePropertyChanged(nameof(SelectedDataView));
             var version = ++_metadataVersion;
+            InvalidateResults();
+            SetMetadataLoaded(false);
             IsSelectionResolved = false;
             Error = null;
             if (value is null)
@@ -103,8 +131,15 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         get => _serverField;
         set
         {
+            var changed = !string.Equals(_serverField, value, StringComparison.Ordinal);
             this.RaiseAndSetIfChanged(ref _serverField, value);
             NotifyPrerequisitesChanged();
+            if (changed && !_syncing)
+            {
+                // The preview filters on this field too, so what is on its way is out of date.
+                InvalidatePreview();
+                _ = StartAllCountsAsync();
+            }
         }
     }
     public string? NamespaceField
@@ -116,21 +151,69 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             NotifyPrerequisitesChanged();
         }
     }
-    internal IReadOnlyList<string> OutputFieldNames => _outputFieldOrder;
+    internal IReadOnlyList<string> OutputFieldNames => SelectedOutputFields;
+
+    /// <summary>The output columns in display order.</summary>
+    public ObservableCollection<string> SelectedOutputFields { get; } = [];
     public ObservableCollection<ElasticDataViewChoiceViewModel> DataViews => _owner.DataViews;
     public ObservableCollection<ElasticFieldOptionViewModel> Fields { get; } = [];
     public ObservableCollection<ElasticSourceSettingViewModel> Sources { get; } = [];
     public IEnumerable<string> FieldNames => Fields.Select(option => option.Name);
     public ObservableCollection<ElasticFieldOptionViewModel> VisibleFields { get; } = [];
     public ReactiveCommand<Unit, Unit> RefreshFieldsCommand { get; }
-    public int SelectedFieldCount => _outputFieldOrder.Count;
+    public ReactiveCommand<Unit, Unit> RefreshCountsCommand { get; }
+    public ReactiveCommand<Unit, Unit> RefreshPreviewCommand { get; }
+
+    /// <summary>Raised when the output fields, filter field or filter values changed the preview.</summary>
+    internal event EventHandler? PreviewInputsChanged;
+    public ObservableCollection<ElasticPreviewRowViewModel> PreviewRows { get; } = [];
+    public string? PreviewMessage
+    {
+        get => _previewMessage;
+        private set => this.RaiseAndSetIfChanged(ref _previewMessage, value);
+    }
+    public IEnumerable<ElasticFieldOptionViewModel> SearchableFields =>
+        Fields.Where(option => option.Searchable != false);
+    public IReadOnlyList<ElasticFieldOptionViewModel> SuggestedFields => BuildSuggestions();
+
+    /// <summary>
+    /// The fields that can still be added as columns: the suggestions first, then the other
+    /// matches of the field search. Fields already chosen are not offered again.
+    /// </summary>
+    public IReadOnlyList<ElasticFieldOptionViewModel> AvailableFields
+    {
+        get
+        {
+            var candidates = VisibleFields.Where(option => !option.IsOutput).ToArray();
+            if (!string.IsNullOrWhiteSpace(OutputFieldQuery))
+                return
+                [
+                    .. candidates.OrderBy(option =>
+                        SuggestionRank.GetValueOrDefault(option.Name, int.MaxValue)
+                    ),
+                ];
+            var suggested = BuildSuggestions();
+            var known = suggested.ToHashSet();
+            return [.. suggested, .. candidates.Where(option => !known.Contains(option))];
+        }
+    }
+    public string SuggestedName
+    {
+        get
+        {
+            var title = DataViewTitle ?? string.Empty;
+            var first = Sources
+                .Select(source => source.ServerValue.Trim())
+                .FirstOrDefault(value => value.Length > 0);
+            return first is null ? title : $"{title} · {first}";
+        }
+    }
+    public int SelectedFieldCount => SelectedOutputFields.Count;
     public string SelectedFieldsSummary =>
         SelectedFieldCount == 0
             ? "No output fields selected."
-            : string.Join(" → ", _outputFieldOrder);
-    public string RowPreview => string.Join(' ', _outputFieldOrder.Select(name => $"<{name}>"));
-    public string FieldDiscoveryStatus =>
-        "Showing up to 50 matching candidates plus selected fields. Search by field name to find more.";
+            : string.Join(" → ", SelectedOutputFields);
+    public string RowPreview => string.Join(' ', SelectedOutputFields.Select(name => $"<{name}>"));
     public string FilterFieldStatus => DescribeField(ServerField);
     public string OutputFieldQuery
     {
@@ -172,6 +255,13 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             NotifyPrerequisitesChanged();
         }
     }
+
+    /// <summary>
+    /// True once the data view's fields were fetched for the current selection. A view restored
+    /// from saved settings is resolved but holds only its output fields until this is true.
+    /// </summary>
+    public bool IsMetadataLoaded => _isMetadataLoaded;
+
     public bool IsSelectionResolved
     {
         get => _isSelectionResolved;
@@ -186,7 +276,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         IsLoading ? "Loading data-view metadata…"
         : string.IsNullOrWhiteSpace(SelectedDataViewId)
             ? "Test connection, then choose a data view."
-        : !IsSelectionResolved ? "Metadata is unavailable. Test connection to retry."
+        : !IsSelectionResolved ? "Metadata could not be loaded. Choose Retry."
         : Fields.Count == 0 ? "No fields returned. Check the data view in Kibana."
         : "Data-view metadata loaded.";
     public string TimestampStatus =>
@@ -227,10 +317,38 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         && FilterValueError is null
         && OutputFieldsError is null;
 
-    private void SourceChanged(
+    private void SourceChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        // Count results never change what can be saved.
+        if (
+            args.PropertyName
+            is nameof(ElasticSourceSettingViewModel.CountText)
+                or nameof(ElasticSourceSettingViewModel.IsZeroCount)
+        )
+            return;
+        // A count belongs to the value it was taken for; editing the value makes it stale.
+        if (
+            args.PropertyName == nameof(ElasticSourceSettingViewModel.ServerValue)
+            && sender is ElasticSourceSettingViewModel source
+        )
+        {
+            source.InvalidateCount();
+            InvalidatePreview();
+        }
+        NotifyPrerequisitesChanged();
+    }
+
+    private void OnSelectedOutputFieldsChanged(
         object? sender,
-        System.ComponentModel.PropertyChangedEventArgs args
-    ) => NotifyPrerequisitesChanged();
+        NotifyCollectionChangedEventArgs args
+    )
+    {
+        // The preview shows the output fields, so what is on its way no longer matches.
+        InvalidatePreview();
+        NotifyPrerequisitesChanged();
+        this.RaisePropertyChanged(nameof(SuggestedFields));
+        this.RaisePropertyChanged(nameof(AvailableFields));
+    }
 
     private void NotifyPrerequisitesChanged()
     {
@@ -248,6 +366,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
                 nameof(SelectedFieldsSummary),
                 nameof(RowPreview),
                 nameof(FilterFieldStatus),
+                nameof(SuggestedName),
                 nameof(CanSave),
             }
         )
@@ -262,6 +381,8 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         if (summary is null)
         {
             ++_metadataVersion;
+            InvalidateResults();
+            SetMetadataLoaded(false);
             IsLoading = false;
             IsSelectionResolved = false;
             Error = "The selected data view is no longer available. Choose another data view.";
@@ -284,9 +405,18 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         if (IsLoading || string.IsNullOrWhiteSpace(SelectedDataViewId))
             return Task.CompletedTask;
         Error = null;
+        SetMetadataLoaded(false);
         IsSelectionResolved = false;
         IsLoading = true;
         return LoadDataViewAsync(SelectedDataViewId, ++_metadataVersion);
+    }
+
+    private void SetMetadataLoaded(bool value)
+    {
+        if (_isMetadataLoaded == value)
+            return;
+        _isMetadataLoaded = value;
+        this.RaisePropertyChanged(nameof(IsMetadataLoaded));
     }
 
     private string DescribeField(string? name) =>
@@ -299,7 +429,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         _fieldFilterTimer.Stop();
         Fields.Clear();
         _fieldSnapshot.Clear();
-        _outputFieldOrder.Clear();
+        SelectedOutputFields.Clear();
     }
 
     internal void NotifyDataViewSelectionChanged()
@@ -310,7 +440,22 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
 
     internal void Sync(ElasticViewSettings settings)
     {
+        _syncing = true;
+        try
+        {
+            SyncCore(settings);
+        }
+        finally
+        {
+            _syncing = false;
+        }
+    }
+
+    private void SyncCore(ElasticViewSettings settings)
+    {
         ++_metadataVersion;
+        InvalidateResults();
+        SetMetadataLoaded(false);
         IsLoading = false;
         IsSelectionResolved = true;
         Error = null;
@@ -325,6 +470,8 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         foreach (var field in settings.OutputFields.Distinct(StringComparer.Ordinal))
             AddField(new ElasticFieldOptionViewModel(field) { IsOutput = true });
         this.RaisePropertyChanged(nameof(FieldNames));
+        this.RaisePropertyChanged(nameof(SearchableFields));
+        this.RaisePropertyChanged(nameof(SuggestedFields));
         RefreshVisibleFields();
         Sources.Clear();
         foreach (var source in settings.Sources)
@@ -362,19 +509,21 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             TimeFieldName = TimeFieldName,
             ServerField = ServerField,
             NamespaceField = NamespaceField,
-            OutputFields = _outputFieldOrder.ToList(),
+            OutputFields = SelectedOutputFields.ToList(),
             Sources = Sources.Select(source => source.ToSettings()).ToList(),
         };
     }
 
     private async Task LoadDataViewAsync(string id, int version)
     {
+        // Counts and previews taken against the metadata being replaced must not land afterwards.
+        InvalidateResults();
         try
         {
             var view = await _owner.GetDataViewAsync(id);
             if (version != _metadataVersion)
                 return;
-            var selectedOutputFields = _outputFieldOrder.ToArray();
+            var selectedOutputFields = SelectedOutputFields.ToArray();
             var selectedNames = selectedOutputFields.ToHashSet(StringComparer.Ordinal);
             DataViewId = view.Id;
             DataViewTitle = view.Title;
@@ -392,10 +541,14 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
                 .ToHashSet(StringComparer.Ordinal);
             foreach (var name in selectedOutputFields.Where(name => !availableNames.Contains(name)))
                 AddField(new ElasticFieldOptionViewModel(name) { IsOutput = true });
-            _outputFieldOrder.Clear();
-            _outputFieldOrder.AddRange(selectedOutputFields);
+            SelectedOutputFields.Clear();
+            foreach (var name in selectedOutputFields)
+                SelectedOutputFields.Add(name);
             this.RaisePropertyChanged(nameof(FieldNames));
+            this.RaisePropertyChanged(nameof(SearchableFields));
+            this.RaisePropertyChanged(nameof(SuggestedFields));
             RefreshVisibleFields();
+            SetMetadataLoaded(true);
             IsSelectionResolved = true;
             Error = null;
         }
@@ -414,11 +567,201 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
     private void AddSource() =>
         Sources.Add(new ElasticSourceSettingViewModel(Guid.NewGuid().ToString("N")));
 
+    /// <summary>Moves a selected output column; out-of-range or no-op moves are ignored.</summary>
+    public void MoveOutputField(int from, int to)
+    {
+        var count = SelectedOutputFields.Count;
+        if (from < 0 || from >= count || to < 0 || to >= count || from == to)
+            return;
+        SelectedOutputFields.Move(from, to);
+    }
+
+    /// <summary>Adds a filter value as a new source and starts counting its documents.</summary>
+    public bool AddFilterValue(string value)
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+            return false;
+        if (
+            Sources.Any(source =>
+                string.Equals(source.ServerValue.Trim(), trimmed, StringComparison.Ordinal)
+            )
+        )
+            return false;
+        ElasticSourceSettingViewModel target;
+        if (Sources is [{ } placeholder] && string.IsNullOrWhiteSpace(placeholder.ServerValue))
+        {
+            // Fill the lone blank placeholder instead of leaving an invalid empty source behind.
+            target = placeholder;
+            target.ServerValue = trimmed;
+        }
+        else
+        {
+            target = new ElasticSourceSettingViewModel(Guid.NewGuid().ToString("N"))
+            {
+                ServerValue = trimmed,
+            };
+            Sources.Add(target);
+        }
+        this.RaisePropertyChanged(nameof(FilterValue));
+        _ = StartCountAsync(target);
+        return true;
+    }
+
+    public void RemoveFilterValue(ElasticSourceSettingViewModel source)
+    {
+        if (!Sources.Remove(source))
+            return;
+        source.InvalidateCount();
+        if (Sources.Count == 0)
+            AddSource();
+        this.RaisePropertyChanged(nameof(FilterValue));
+    }
+
+    private bool TryGetQueryTarget(out string title, out string timeField)
+    {
+        title = DataViewTitle ?? string.Empty;
+        timeField = TimeFieldName ?? string.Empty;
+        return IsSelectionResolved
+            && !IsLoading
+            && string.Equals(SelectedDataViewId, DataViewId, StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(title)
+            && !string.IsNullOrWhiteSpace(timeField);
+    }
+
+    private void InvalidateResults()
+    {
+        foreach (var source in Sources)
+            source.InvalidateCount();
+        DropPreview();
+    }
+
+    private void DropPreview()
+    {
+        ++_previewVersion;
+        PreviewRows.Clear();
+        PreviewMessage = null;
+    }
+
+    /// <summary>
+    /// Drops the preview (and anything still on its way) because its inputs changed, and tells
+    /// whoever shows it that it has to be fetched again.
+    /// </summary>
+    private void InvalidatePreview()
+    {
+        DropPreview();
+        if (!_syncing)
+            PreviewInputsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private Task StartAllCountsAsync() => Task.WhenAll(Sources.ToArray().Select(StartCountAsync));
+
+    private Task RefreshCountsAsync() => StartAllCountsAsync();
+
+    private Task StartCountAsync(ElasticSourceSettingViewModel source)
+    {
+        var field = ServerField?.Trim();
+        var value = source.ServerValue.Trim();
+        if (
+            !TryGetQueryTarget(out var title, out var timeField)
+            || string.IsNullOrEmpty(field)
+            || value.Length == 0
+        )
+        {
+            source.InvalidateCount();
+            return Task.CompletedTask;
+        }
+        var version = source.BeginCount();
+        return CountSourceAsync(source, version, title, timeField, field, value);
+    }
+
+    private async Task CountSourceAsync(
+        ElasticSourceSettingViewModel source,
+        int version,
+        string title,
+        string timeField,
+        string field,
+        string value
+    )
+    {
+        try
+        {
+            var count = await _owner.CountAsync(title, timeField, field, value);
+            if (Sources.Contains(source))
+                source.CompleteCount(version, count);
+        }
+        catch (Exception)
+        {
+            // A timeout surfaces as a cancellation too, so it is a failure like any other; results
+            // that were superseded are dropped by the version check inside FailCount.
+            source.FailCount(version);
+        }
+    }
+
+    private async Task RefreshPreviewAsync()
+    {
+        var version = ++_previewVersion;
+        if (!TryGetQueryTarget(out var title, out var timeField))
+        {
+            PreviewRows.Clear();
+            PreviewMessage = "Choose a data view to preview.";
+            return;
+        }
+        PreviewMessage = "Loading preview…";
+        try
+        {
+            var filterValue = Sources
+                .Select(source => source.ServerValue.Trim())
+                .FirstOrDefault(text => text.Length > 0);
+            var filterField = string.IsNullOrWhiteSpace(ServerField) ? null : ServerField.Trim();
+            var useFilter = filterField is not null && filterValue is not null;
+            var hits = await _owner.PreviewAsync(
+                title,
+                timeField,
+                useFilter ? filterField : null,
+                useFilter ? filterValue : null,
+                SelectedOutputFields.ToList()
+            );
+            var rows = hits.Take(MaxPreviewRows)
+                .Select(hit => new ElasticPreviewRowViewModel(hit))
+                .ToList();
+            if (version != _previewVersion)
+                return;
+            PreviewRows.Clear();
+            foreach (var row in rows)
+                PreviewRows.Add(row);
+            PreviewMessage = rows.Count == 0 ? "No documents returned." : null;
+        }
+        catch (Exception exception)
+        {
+            // A timeout surfaces as a cancellation, so it is an error here rather than a blank.
+            if (version != _previewVersion)
+                return;
+            PreviewRows.Clear();
+            PreviewMessage =
+                exception is OperationCanceledException ? "Preview timed out or was cancelled."
+                : string.IsNullOrWhiteSpace(exception.Message) ? "Preview failed."
+                : exception.Message;
+        }
+    }
+
+    private static readonly Dictionary<string, int> SuggestionRank = SuggestionPriority
+        .Select((name, index) => (name, index))
+        .ToDictionary(item => item.name, item => item.index, StringComparer.OrdinalIgnoreCase);
+
+    private IReadOnlyList<ElasticFieldOptionViewModel> BuildSuggestions() =>
+        Fields
+            .Where(field => !field.IsOutput)
+            .OrderBy(field => SuggestionRank.GetValueOrDefault(field.Name, int.MaxValue))
+            .ThenBy(field => field.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxSuggestions)
+            .ToArray();
+
     private void AddField(ElasticFieldOptionViewModel field)
     {
         _fieldSnapshot.Add(field);
         if (field.IsOutput)
-            _outputFieldOrder.Add(field.Name);
+            SelectedOutputFields.Add(field.Name);
         field.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(ElasticFieldOptionViewModel.IsOutput))
@@ -426,9 +769,9 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
                 if (!Fields.Contains(field))
                     return;
                 if (field.IsOutput)
-                    _outputFieldOrder.Add(field.Name);
+                    SelectedOutputFields.Add(field.Name);
                 else
-                    _outputFieldOrder.Remove(field.Name);
+                    SelectedOutputFields.Remove(field.Name);
                 _fieldFilterVersion++;
                 _fieldFilterTimer.Stop();
                 RefreshVisibleFields();
@@ -468,6 +811,7 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
             VisibleFields.Clear();
             foreach (var field in visible)
                 VisibleFields.Add(field);
+            this.RaisePropertyChanged(nameof(AvailableFields));
         });
     }
 
@@ -508,5 +852,6 @@ internal sealed class ElasticViewEditorViewModel : ReactiveObject
         VisibleFields.Clear();
         foreach (var field in fields)
             VisibleFields.Add(field);
+        this.RaisePropertyChanged(nameof(AvailableFields));
     }
 }

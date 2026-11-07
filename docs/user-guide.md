@@ -2,17 +2,17 @@
 
 ## Start tailing
 
-Choose **Open file** (or press `Ctrl+O`) to tail a local log, or drop files onto the window. Open sources appear in the **sidebar**: local files under **Files** and Elastic servers with their sources under **Elastic**. The **+** next to each heading opens a file or **Settings → Elastic**. Select a source to show it; each source has an **All** view plus one view per search.
+Choose **Open file** (or press `Ctrl+O`) to tail a local log, or drop files onto the window. Open sources appear in the **sidebar**: local files under **Files** and Elastic servers with their sources under **Elastic**. The **+** next to each heading opens a file or the Elastic setup. Select a source to show it; each source has an **All** view plus one view per search.
 
 With nothing open, the workspace shows:
 
-- **Open file…**, **Connect to Elastic** (opens **Settings → Elastic**), and **Try a sample log**.
+- **Open file…**, **Connect to Elastic** (opens the Elastic setup), and **Try a sample log**.
 - **Recent files** and **Recent Elastic sources**, up to 10 each. A recent file that no longer exists is listed but disabled. Recents are remembered across restarts.
 - A reminder that `Ctrl+K` opens the command palette.
 
 **Try a sample log** starts a generated log that grows about twice a second, so you can try Follow, Pause, and search without a real log. It lives in a per-process temporary directory, is removed when you close it or quit, and is never saved with the session or added to recents.
 
-The sidebar can be hidden with its toolbar button or `Ctrl+B`, and a wide window remembers that choice. Drag its right edge to resize it (the width is saved). Below 1000 px wide the sidebar is an overlay instead: it opens on top of the workspace and closes after you select a source. Each file row shows a status dot, its line count, and a close button; hovering shows the full path. The toolbar also has the command palette button, **Pause**, and **Settings**.
+The sidebar can be hidden with its toolbar button or `Ctrl+B`, and a wide window remembers that choice. Drag its right edge to resize it (the width is saved). Below 1000 px wide the sidebar is an overlay instead: it opens on top of the workspace and closes after you select a source. Each file row shows a status dot, its line count, and a close button; hovering shows the full path. Under **Elastic**, each connection has **+** (**Add source to** it) and a pencil (**Edit** it), and each source has its own pencil. The toolbar also has the command palette button, **Pause**, and **Settings**.
 
 The **command palette** (`Ctrl+K` or `Ctrl+Shift+P`) lists commands, the views of the selected source, open sources, and Elastic sources that are not open yet. Type to filter, use Up and Down to move, press Enter to run the highlighted item, and press `Esc` (or click outside) to close it; focus returns to where it was. Pressing `Ctrl+K` again does not close it. When an Elastic source is selected the palette also offers quick time ranges.
 
@@ -20,7 +20,7 @@ The status bar at the bottom shows how many sources are open, the selected view'
 
 ## Settings
 
-**Settings** (toolbar button or command palette) is a compact modal with a section list on the left: **Appearance**, **Elastic** and **Limits**. **Appearance** holds display density, log font size and theme. **Elastic** is described below. **Limits** holds:
+**Settings** (toolbar button or command palette) is a compact modal with a section list on the left: **Appearance** and **Limits**. **Appearance** holds display density, log font size and theme. Elastic connections are set up from the sidebar, not here (see below). **Limits** holds:
 
 - **Maximum lines per source** (1,000 to 1,000,000; default 100,000): the buffer cap for each source. It applies to sources opened afterwards.
 - **Context lines before** and **after** (0 to 50; defaults 3 and 10): how many neighbouring rows the inspector's **Show context** lists.
@@ -28,18 +28,24 @@ The status bar at the bottom shows how many sources are open, the selected view'
 
 ## Set up Elastic
 
-1. Select **Add server**, give it a name, and enter separate **Kibana URL** and **Elasticsearch URL** values. Kibana supplies data-view metadata; Elasticsearch supplies log documents.
-2. Choose **Login method**: Anonymous, Basic, or API key. Basic needs a username and password; API key needs its key. Enter a replacement secret only when changing the saved credential.
-3. Select **Test connection** to check both endpoints and refresh available data views. Testing does not save edits. Fix any error before continuing.
-4. Select **Add view**, name it, and choose a **Data view**. Wait for metadata to load. The timestamp field is supplied by that data view and is shown beneath the selectors; missing timestamp metadata prevents saving.
-5. Choose a searchable **Filter field** and enter each **Source filter value**. The field/value pair filters the remote query using Elasticsearch phrase matching. Saved namespace fields and values are shown for reference and preserved; they are not additional query constraints.
-6. Search and check **output fields**. The initial list shows up to 50 matching candidates plus selected fields. Field details show type and searchability; **Refresh fields** loads the current catalog when opening an older saved configuration. Output fields need not be searchable, but a known unsearchable filter field cannot be saved.
-7. Check the selected-field order and row preview. Values are joined with spaces in selection order; blank or missing values are omitted. Unchecking and checking a field again moves it to the end. Filtering the choices does not remove checked fields.
-8. Select **Save** on the server card. The card shows **Unsaved**, **Saving…**, **Saved**, or **Save failed**. Save is unavailable while prerequisites are missing. Then open its source from the sidebar's **Elastic** section, which groups each server's sources and shows their connection status, or from the command palette.
+Elastic setup is a page in the workspace area; the sidebar and status bar stay in place. Open it from:
 
-Changing an open source's saved configuration reloads its logs with the new settings while preserving its searches, follow state, and applied interval. Source and tab names include filter values so sources under the same view can be distinguished.
+- the **+** next to **Elastic** in the sidebar (**Set up Elastic**), or **Connect to Elastic** on the empty state, or **Set up Elastic** in the command palette: all start at **Connection**;
+- a connection's pencil (**Edit** *connection*): starts at **Connection**;
+- a connection's **+** (**Add source to** *connection*), or **Add Elastic source** in the command palette: starts at **Data view** for that connection;
+- a source's pencil (**Edit** *source*): starts at **Filter**.
 
-Closing Settings with Elastic drafts offers **Save changes**, **Discard changes**, or **Keep editing**, including when closing with Escape or the backdrop. Failed saves keep the draft available. Deleting a saved server asks for confirmation and lists affected sources; confirming removes the configuration and closes its open source tabs.
+The **Close** button or `Esc` closes the page without asking anything (while the delete question is showing, `Esc` only takes the question back). Focus then returns to the open log list, or to the **+** next to **Elastic** when no source is open. Use **Back** and **Next** to move between the five steps.
+
+1. **Connection.** Paste an Elastic Cloud ID (optional) to fill both URLs, or enter the **Kibana URL** and **Elasticsearch URL** yourself; Kibana supplies data-view metadata and Elasticsearch supplies log documents. Choose the **Login method**: Anonymous, Username and password, or API key. The **connection name** box is prefilled from the Cloud ID name or the host once the test passes; change it if you like. HexTail tests the connection by itself about 0.7 seconds after you stop editing, and **Test connection** runs it again. Three result rows show what worked: **Kibana** (data-view metadata), **Elasticsearch** (log queries) and **Credentials**. Fix any failed row before pressing **Next**. An optional **Paste a Kibana Discover URL to prefill** box takes a link copied from Discover; press **Apply** to use it (see below). On a saved connection, **Delete connection** removes it after an inline confirmation that lists the affected sources, and closes their open tabs.
+2. **Data view.** Search the list and choose a data view. The timestamp field comes from the data view and is shown once its metadata has loaded; **Next** stays disabled until then. If loading fails, press **Retry**.
+3. **Filter.** Only searchable fields are offered. Pick the filter field, then type each value as a chip: `Enter` or a comma adds it. A comma always separates values, so a value that itself contains a comma cannot be entered. Each chip shows a live count such as `~3.2k docs · 15 min` (documents in the last 15 minutes), and a value with **0 docs** is flagged. Several values make several sources, one per value, all sharing the same columns. A saved legacy namespace field and its values appear under **Advanced**; they are preserved but are not additional query constraints.
+4. **Columns.** Tick the fields to show; suggested fields are listed first. Reorder the chosen fields with the **Up** and **Down** buttons or `Alt+Up` and `Alt+Down` (there is no dragging). Values are joined with spaces in column order; blank or missing values are omitted. A preview shows up to five recent real documents as rows, or **No documents returned.** when there are none.
+5. **Name & open.** The view name is prefilled from the data view title (plus the first value). **Open the sources now** is checked by default; the button reads **Save & open**, or **Save** when it is cleared.
+
+**What is saved when.** There is no separate Save step for the connection. It is saved, with its password or API key in the operating-system credential vault, when you press **Next** on step 1, even if you never finish a source. Steps 2 to 4 only change the page; step 5 saves the source and, if **Open the sources now** is checked, opens it. Closing earlier keeps the connection from step 1 and silently drops the unfinished source and any unsaved edits to saved items. Changing a saved source that is open reloads its logs with the new settings while preserving its searches, follow state and applied interval. Source and tab names include filter values so sources under the same view can be told apart.
+
+**Prefill from Kibana Discover.** Paste a Discover URL into the box on step 1 and choose **Apply**. HexTail reads its `_g` and `_a` state and prefills only the Kibana URL (when that is still blank), the data view, the columns, and a query that is a single `field : value` clause as the filter. Everything else is listed as ignored: sort, filters, the time range, complex or Lucene queries, ES|QL and saved searches. It never overwrites a choice you have already made, and each part is applied once, as you reach its step.
 
 Passwords and API keys are stored in the operating-system credential vault, never in `session.json`. Authenticated configuration fails closed when the vault is unavailable. Linux needs an active Secret Service session and `libsecret`. See [native build and platform setup](native-build.md).
 

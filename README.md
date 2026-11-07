@@ -7,9 +7,11 @@ files. It opens plaintext, `.logfmt`, and `.jsonl` files, keeps multiple files a
 searches in separate tabs, and renders a bounded, virtualized log view without
 a browser, WebView, JavaScript runtime, or local HTTP server.
 
-Elastic sources use separate Kibana and Elasticsearch URLs, generic
-server/namespace mappings, ordered output fields, a five-minute initial
-lookback, and native OS credential storage for authenticated connections.
+Elastic sources use separate Kibana and Elasticsearch URLs, a stepped setup
+flow (connection, data view, filter, columns, name) with an automatic
+connection test and live document counts, ordered output fields, a five-minute
+initial lookback, and native OS credential storage for authenticated
+connections.
 
 ![HexTail desktop UI: source sidebar, search bar, and a live log view](assets/hextail-ui.png)
 
@@ -111,9 +113,10 @@ dotnet run --project src/HexTail.LogGenerator -- --format jsonl --output /tmp/he
    (**Local** or **Utc**). For an Elastic source, the clock pill in the top
    toolbar (for example **Last 5 min · live**) opens the time range: quick
    presets, or typed **From** and **To** times.
-6. Press `Ctrl+K` for the command palette. **Settings** manages Elastic
-   servers and display preferences; filter rules live in each source's filter
-   bar.
+6. Press `Ctrl+K` for the command palette. **Set up Elastic** (the sidebar's
+   Elastic **+**, **Connect to Elastic**, or the palette) walks through the
+   connection, data view, filter, columns and name; **Settings** holds display
+   preferences and limits, and filter rules live in each source's filter bar.
 
 ### Keyboard shortcuts
 
@@ -134,7 +137,7 @@ dotnet run --project src/HexTail.LogGenerator -- --format jsonl --output /tmp/he
 | `Alt+Up` / `Alt+Down` | Move the focused file up or down in the sidebar |
 | `Alt+Left` / `Alt+Right` | Move the focused view tab left or right |
 | `Ctrl+S` / `Cmd+S` | Save the session now (it also saves automatically) |
-| `Esc` | Close Settings or the command palette |
+| `Esc` | Close Settings, the command palette or the Elastic setup page (with a delete question showing, it takes the question back first) |
 
 The single-key shortcuts (`/`, `F`, `Space`, `g`, `Shift+G`, `j`, `k`, `n`, `N`) do not fire while a
 text box has focus. While the palette or Settings is open, the other shortcuts

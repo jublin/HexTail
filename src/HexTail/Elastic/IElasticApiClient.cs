@@ -52,4 +52,28 @@ public interface IElasticApiClient
         ElasticSearchRequest request,
         CancellationToken cancellationToken = default
     );
+
+    Task<long> CountAsync(
+        ElasticConnectionSettings connection,
+        string? secret,
+        string dataViewTitle,
+        string timeFieldName,
+        string filterField,
+        string filterValue,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken = default
+    );
+
+    Task<IReadOnlyList<ElasticHit>> PreviewAsync(
+        ElasticConnectionSettings connection,
+        string? secret,
+        string dataViewTitle,
+        string timeFieldName,
+        string? filterField,
+        string? filterValue,
+        IReadOnlyList<string> outputFields,
+        int size,
+        CancellationToken cancellationToken = default
+    );
 }

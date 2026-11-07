@@ -166,15 +166,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnSettingsDialogClosing(object? sender, DialogClosingEventArgs args)
-    {
-        if (!ViewModel.SettingsOpen)
-            return;
-        ViewModel.SettingsOpen = false;
-        if (ViewModel.SettingsOpen && args.CanBeCancelled)
-            args.Cancel();
-    }
-
     private async Task HandlePickFilesAsync(
         IInteractionContext<System.Reactive.Unit, IReadOnlyList<string>> context
     )
@@ -313,6 +304,22 @@ public partial class MainWindow : Window
         if (e.Key == Key.Escape && ViewModel.SettingsOpen)
         {
             ViewModel.SettingsOpen = false;
+            e.Handled = true;
+            return;
+        }
+        // A popup or completion list that used the key has marked it handled, so only a bare
+        // Escape on the page itself gets here.
+        if (
+            e.Key == Key.Escape
+            && !e.Handled
+            && !ViewModel.SettingsOpen
+            && !ViewModel.Palette.IsOpen
+            && ViewModel.ElasticSetup.IsOpen
+        )
+        {
+            // A failure while closing lands in the page's error line instead of escaping from here.
+            var setup = ViewModel.ElasticSetup;
+            setup.Run(() => setup.HandleEscape());
             e.Handled = true;
             return;
         }

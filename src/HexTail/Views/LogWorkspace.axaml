@@ -15,7 +15,18 @@
     ColumnDefinitions="*,Auto"
   >
     <Grid Grid.Column="0">
-      <ScrollViewer IsVisible="{Binding ShowEmpty}" HorizontalScrollBarVisibility="Disabled">
+      <views:ElasticSetupPage
+        x:Name="ElasticSetupPage"
+        DataContext="{Binding ElasticSetup}"
+        IsVisible="{Binding IsOpen}"
+      />
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer.IsVisible>
+          <MultiBinding Converter="{x:Static BoolConverters.And}">
+            <Binding Path="ShowEmpty" />
+            <Binding Path="!ElasticSetup.IsOpen" />
+          </MultiBinding>
+        </ScrollViewer.IsVisible>
         <StackPanel
           HorizontalAlignment="Center"
           VerticalAlignment="Center"
@@ -99,11 +110,13 @@
           </Grid>
         </StackPanel>
       </ScrollViewer>
-      <ContentControl
-        IsVisible="{Binding HasFile}"
-        Content="{Binding SelectedFile}"
-        HorizontalContentAlignment="Stretch"
-      >
+      <ContentControl Content="{Binding SelectedFile}" HorizontalContentAlignment="Stretch">
+        <ContentControl.IsVisible>
+          <MultiBinding Converter="{x:Static BoolConverters.And}">
+            <Binding Path="HasFile" />
+            <Binding Path="!ElasticSetup.IsOpen" />
+          </MultiBinding>
+        </ContentControl.IsVisible>
         <ContentControl.ContentTemplate>
           <DataTemplate x:DataType="vm:FileTabViewModel">
             <TabControl
@@ -228,7 +241,13 @@
         </ContentControl.ContentTemplate>
       </ContentControl>
     </Grid>
-    <Grid Grid.Column="1" ColumnDefinitions="4,Auto" IsVisible="{Binding Inspector.IsShown}">
+    <Grid Grid.Column="1" ColumnDefinitions="4,Auto">
+      <Grid.IsVisible>
+        <MultiBinding Converter="{x:Static BoolConverters.And}">
+          <Binding Path="Inspector.IsShown" />
+          <Binding Path="!ElasticSetup.IsOpen" />
+        </MultiBinding>
+      </Grid.IsVisible>
       <Thumb
         x:Name="InspectorResizeThumb"
         Cursor="SizeWestEast"

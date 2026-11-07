@@ -100,8 +100,13 @@ public sealed class AppState : IAsyncDisposable
             item.Id == connection.Id
         );
         var previousSecret = previous is null ? null : _credentials.Get(connection.Id);
-        secret = string.IsNullOrWhiteSpace(secret) ? previousSecret : secret;
         connection = NormalizeElasticConnections([connection]).Single();
+        // A blank secret keeps the stored one only for the same login method on the same servers;
+        // otherwise it stays blank and the validation below asks for a new one.
+        secret =
+            !string.IsNullOrWhiteSpace(secret) ? secret
+            : StoredSecretApplies(previous, connection) ? previousSecret
+            : null;
         ValidateElasticConnection(connection, secret);
         var authenticated = connection.AuthMode is ElasticAuthMode.Basic or ElasticAuthMode.ApiKey;
         if (authenticated)
@@ -298,6 +303,52 @@ public sealed class AppState : IAsyncDisposable
             connection,
             string.IsNullOrWhiteSpace(secret) ? SecretFor(connection) : secret,
             dataViewId,
+            cancellationToken
+        );
+
+    public Task<long> CountAsync(
+        ElasticConnectionSettings connection,
+        string dataViewTitle,
+        string timeFieldName,
+        string filterField,
+        string filterValue,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        string? secret = null,
+        CancellationToken cancellationToken = default
+    ) =>
+        _elastic.CountAsync(
+            connection,
+            string.IsNullOrWhiteSpace(secret) ? SecretFor(connection) : secret,
+            dataViewTitle,
+            timeFieldName,
+            filterField,
+            filterValue,
+            from,
+            to,
+            cancellationToken
+        );
+
+    public Task<IReadOnlyList<ElasticHit>> PreviewAsync(
+        ElasticConnectionSettings connection,
+        string dataViewTitle,
+        string timeFieldName,
+        string? filterField,
+        string? filterValue,
+        IReadOnlyList<string> outputFields,
+        int size,
+        string? secret = null,
+        CancellationToken cancellationToken = default
+    ) =>
+        _elastic.PreviewAsync(
+            connection,
+            string.IsNullOrWhiteSpace(secret) ? SecretFor(connection) : secret,
+            dataViewTitle,
+            timeFieldName,
+            filterField,
+            filterValue,
+            outputFields,
+            size,
             cancellationToken
         );
 
@@ -1337,6 +1388,16 @@ public sealed class AppState : IAsyncDisposable
             })
             .ToList();
 
+    // A connection saved by the setup flow before any view exists legitimately has no views.
+    private static bool HasLegacyViewFields(ElasticConnectionSettings connection) =>
+        !string.IsNullOrWhiteSpace(connection.DataViewId)
+        || !string.IsNullOrWhiteSpace(connection.DataViewTitle)
+        || !string.IsNullOrWhiteSpace(connection.TimeFieldName)
+        || !string.IsNullOrWhiteSpace(connection.ServerField)
+        || !string.IsNullOrWhiteSpace(connection.NamespaceField)
+        || connection.OutputFields is { Count: > 0 }
+        || connection.Sources is { Count: > 0 };
+
     private static List<ElasticViewSettings> NormalizeElasticViews(
         ElasticConnectionSettings connection
     )
@@ -1346,7 +1407,7 @@ public sealed class AppState : IAsyncDisposable
             .GroupBy(view => view.Id.Trim(), StringComparer.Ordinal)
             .Select(group => NormalizeElasticView(group.First()))
             .ToList();
-        if (views.Count > 0)
+        if (views.Count > 0 || !HasLegacyViewFields(connection))
             return views;
 
         return
@@ -1409,10 +1470,24 @@ public sealed class AppState : IAsyncDisposable
             ? color
             : "#f59e0b";
 
-    private string? SecretFor(ElasticConnectionSettings connection) =>
-        connection.AuthMode is ElasticAuthMode.Basic or ElasticAuthMode.ApiKey
-            ? _credentials.Get(connection.Id)
-            : null;
+    // The stored secret was typed for one login method on one pair of servers. Sending it with
+    // another method (a password as an API key) or to another host would hand it to the wrong party.
+    private static bool StoredSecretApplies(
+        ElasticConnectionSettings? stored,
+        ElasticConnectionSettings connection
+    ) =>
+        stored is { AuthMode: ElasticAuthMode.Basic or ElasticAuthMode.ApiKey }
+        && stored.AuthMode == connection.AuthMode
+        && ElasticUrls.SameOrigin(stored.KibanaUrl, connection.KibanaUrl)
+        && ElasticUrls.SameOrigin(stored.ElasticsearchUrl, connection.ElasticsearchUrl);
+
+    private string? SecretFor(ElasticConnectionSettings connection)
+    {
+        if (connection.AuthMode is not (ElasticAuthMode.Basic or ElasticAuthMode.ApiKey))
+            return null;
+        var stored = _settings.ElasticConnections.FirstOrDefault(item => item.Id == connection.Id);
+        return StoredSecretApplies(stored, connection) ? _credentials.Get(connection.Id) : null;
+    }
 
     private static void ValidateElasticConnection(
         ElasticConnectionSettings connection,
@@ -1430,12 +1505,22 @@ public sealed class AppState : IAsyncDisposable
                 "Kibana URL must be absolute HTTP or HTTPS.",
                 nameof(connection)
             );
+        if (kibana.UserInfo.Length > 0)
+            throw new ArgumentException(
+                "Kibana URL must be absolute HTTP or HTTPS without a user name or password.",
+                nameof(connection)
+            );
         if (
             !Uri.TryCreate(connection.ElasticsearchUrl, UriKind.Absolute, out var elastic)
             || elastic.Scheme is not ("http" or "https")
         )
             throw new ArgumentException(
                 "Elasticsearch URL must be absolute HTTP or HTTPS.",
+                nameof(connection)
+            );
+        if (elastic.UserInfo.Length > 0)
+            throw new ArgumentException(
+                "Elasticsearch URL must be absolute HTTP or HTTPS without a user name or password.",
                 nameof(connection)
             );
         if (

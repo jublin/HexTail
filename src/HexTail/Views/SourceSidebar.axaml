@@ -109,8 +109,8 @@
           <DataTemplate x:DataType="vm:ElasticConnectionGroupViewModel">
             <StackPanel Spacing="1" Margin="0,2">
               <Grid
-                ColumnDefinitions="Auto,*,Auto"
-                ColumnSpacing="6"
+                ColumnDefinitions="Auto,*,Auto,Auto,Auto"
+                ColumnSpacing="4"
                 Margin="6,4,4,2"
                 ToolTip.Tip="{Binding StatusMessage}"
               >
@@ -126,6 +126,30 @@
                   TextTrimming="CharacterEllipsis"
                 />
                 <TextBlock Grid.Column="2" Text="{Binding StatusText}" Classes="source-count" />
+                <Button
+                  Grid.Column="3"
+                  Classes="icon tab-close"
+                  Width="22"
+                  Height="22"
+                  FontSize="14"
+                  Command="{Binding AddSourceCommand}"
+                  ToolTip.Tip="{Binding Name, StringFormat='Add source to {0}'}"
+                  AutomationProperties.Name="{Binding Name, StringFormat='Add source to {0}'}"
+                >
+                  <ic:Icon Value="mdi-plus" />
+                </Button>
+                <Button
+                  Grid.Column="4"
+                  Classes="icon tab-close"
+                  Width="22"
+                  Height="22"
+                  FontSize="14"
+                  Command="{Binding EditCommand}"
+                  ToolTip.Tip="{Binding Name, StringFormat='Edit {0}'}"
+                  AutomationProperties.Name="{Binding Name, StringFormat='Edit {0}'}"
+                >
+                  <ic:Icon Value="mdi-pencil-outline" />
+                </Button>
               </Grid>
               <ItemsControl ItemsSource="{Binding Sources}">
                 <ItemsControl.ItemTemplate>
@@ -137,7 +161,7 @@
                         Margin="12,0,0,0"
                         ToolTip.Tip="{Binding RowToolTip}"
                       >
-                        <Grid ColumnDefinitions="*,Auto">
+                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="2">
                           <Button
                             Classes="source-select"
                             Command="{Binding ActivateCommand}"
@@ -151,6 +175,18 @@
                           </Button>
                           <Button
                             Grid.Column="1"
+                            Classes="icon tab-close"
+                            Width="22"
+                            Height="22"
+                            FontSize="14"
+                            Command="{Binding EditCommand}"
+                            ToolTip.Tip="{Binding DisplayName, StringFormat='Edit {0}'}"
+                            AutomationProperties.Name="{Binding DisplayName, StringFormat='Edit {0}'}"
+                          >
+                            <ic:Icon Value="mdi-pencil-outline" />
+                          </Button>
+                          <Button
+                            Grid.Column="2"
                             Classes="icon tab-close"
                             Width="22"
                             Height="22"

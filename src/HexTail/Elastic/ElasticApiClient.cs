@@ -192,31 +192,121 @@ public sealed class ElasticApiClient : IElasticApiClient
         var hits = root.GetProperty("hits")
             .GetProperty("hits")
             .EnumerateArray()
-            .Select(hit =>
-            {
-                var source = hit.TryGetProperty("_source", out var sourceElement)
-                    ? sourceElement
-                    : default;
-                var fields = hit.TryGetProperty("fields", out var fieldsElement)
-                    ? fieldsElement
-                    : default;
-                var timestamp = source.GetProperty(request.TimeFieldName).GetDateTimeOffset();
-                var sort = hit.GetProperty("sort")
-                    .EnumerateArray()
-                    .Select(value => value.Clone())
-                    .ToArray();
-                return new ElasticHit(
-                    hit.GetProperty("_id").GetString()!,
-                    timestamp,
-                    ElasticDocumentMapper.Map(source, fields, request.OutputFields),
-                    sort
-                );
-            })
+            .Select(hit => MapHit(hit, request.TimeFieldName, request.OutputFields))
             .ToArray();
         var pit = root.TryGetProperty("pit_id", out var pitElement)
             ? pitElement.GetString() ?? pitId
             : pitId;
         return new ElasticSearchPage(pit, hits);
+    }
+
+    public async Task<long> CountAsync(
+        ElasticConnectionSettings connection,
+        string? secret,
+        string dataViewTitle,
+        string timeFieldName,
+        string filterField,
+        string filterValue,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var body = new
+        {
+            query = new
+            {
+                @bool = new
+                {
+                    filter = new object[]
+                    {
+                        MatchPhrase(filterField, filterValue),
+                        new
+                        {
+                            range = new Dictionary<string, object>
+                            {
+                                [timeFieldName] = new { gte = from, lte = to },
+                            },
+                        },
+                    },
+                },
+            },
+        };
+        using var document = await SendAsync(
+            connection.ElasticsearchUrl,
+            connection,
+            secret,
+            HttpMethod.Post,
+            $"{Uri.EscapeDataString(dataViewTitle)}/_count",
+            body,
+            cancellationToken
+        );
+        return document.RootElement.GetProperty("count").GetInt64();
+    }
+
+    public async Task<IReadOnlyList<ElasticHit>> PreviewAsync(
+        ElasticConnectionSettings connection,
+        string? secret,
+        string dataViewTitle,
+        string timeFieldName,
+        string? filterField,
+        string? filterValue,
+        IReadOnlyList<string> outputFields,
+        int size,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var filters = new List<object>();
+        if (!string.IsNullOrWhiteSpace(filterField) && !string.IsNullOrWhiteSpace(filterValue))
+            filters.Add(MatchPhrase(filterField, filterValue));
+        var body = new Dictionary<string, object?>
+        {
+            ["size"] = size,
+            ["track_total_hits"] = false,
+            ["query"] = new { @bool = new { filter = filters } },
+            ["sort"] = new object[] { new Dictionary<string, string> { [timeFieldName] = "desc" } },
+            ["_source"] = true,
+            ["fields"] = outputFields,
+        };
+        using var document = await SendAsync(
+            connection.ElasticsearchUrl,
+            connection,
+            secret,
+            HttpMethod.Post,
+            $"{Uri.EscapeDataString(dataViewTitle)}/_search",
+            body,
+            cancellationToken
+        );
+        return document
+            .RootElement.GetProperty("hits")
+            .GetProperty("hits")
+            .EnumerateArray()
+            .Select(hit => MapHit(hit, timeFieldName, outputFields))
+            .ToArray();
+    }
+
+    private static object MatchPhrase(string field, string value) =>
+        new { match_phrase = new Dictionary<string, string> { [field] = value } };
+
+    private static ElasticHit MapHit(
+        JsonElement hit,
+        string timeFieldName,
+        IReadOnlyList<string> outputFields
+    )
+    {
+        var source = hit.TryGetProperty("_source", out var sourceElement) ? sourceElement : default;
+        var fields = hit.TryGetProperty("fields", out var fieldsElement) ? fieldsElement : default;
+        var timestamp = source.GetProperty(timeFieldName).GetDateTimeOffset();
+        var sort = hit.GetProperty("sort")
+            .EnumerateArray()
+            .Select(value => value.Clone())
+            .ToArray();
+        return new ElasticHit(
+            hit.GetProperty("_id").GetString()!,
+            timestamp,
+            ElasticDocumentMapper.Map(source, fields, outputFields),
+            sort
+        );
     }
 
     public async Task ClosePitAsync(

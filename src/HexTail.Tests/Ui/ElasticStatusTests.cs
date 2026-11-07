@@ -29,7 +29,7 @@ public sealed class ElasticStatusTests
             ),
             startPolling: false
         );
-        owner.Settings.AddElasticConnectionCommand.Execute().Subscribe();
+        owner.Settings.AddElasticConnection();
         var editor = Assert.Single(owner.Settings.ElasticConnections);
         editor.Name = "Ops";
         editor.KibanaUrl = "https://old-kibana.example/";
