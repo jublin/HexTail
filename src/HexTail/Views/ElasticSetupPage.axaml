@@ -64,642 +64,678 @@
 
     <Grid Grid.Column="1" RowDefinitions="*,Auto">
       <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <Panel Margin="24" MaxWidth="560" HorizontalAlignment="Left">
-          <!-- Step 1: Connection -->
-          <StackPanel x:Name="SetupConnectionPanel" IsVisible="{Binding IsConnectionStep}">
-            <StackPanel DataContext="{Binding Connection}" Spacing="12">
-              <TextBlock Text="Connect to Elastic" Classes="setup-title" />
-              <TextBlock
-                Classes="hint"
-                Text="Paste an Elastic Cloud ID, or enter the Kibana and Elasticsearch addresses. The connection is tested automatically once you stop typing."
-              />
-              <StackPanel Spacing="4">
-                <TextBlock Text="Connection name" Classes="elastic-form-label" />
-                <TextBox
-                  x:Name="ConnectionNameBox"
-                  Text="{Binding Name, Mode=TwoWay}"
-                  PlaceholderText="Name this server"
-                  AutomationProperties.Name="Connection name"
-                  AutomationProperties.HelpText="{Binding NameError}"
-                />
+        <StackPanel Margin="24" MaxWidth="560" HorizontalAlignment="Left" Spacing="16">
+          <Panel>
+            <!-- Step 1: Connection -->
+            <StackPanel x:Name="SetupConnectionPanel" IsVisible="{Binding IsConnectionStep}">
+              <StackPanel DataContext="{Binding Connection}" Spacing="12">
+                <TextBlock Text="Connect to Elastic" Classes="setup-title" />
                 <TextBlock
-                  x:Name="ConnectionNameError"
-                  Text="{Binding NameError}"
-                  IsVisible="{Binding NameError, Converter={x:Static ObjectConverters.IsNotNull}}"
-                  Classes="error"
-                  TextWrapping="Wrap"
+                  Classes="hint"
+                  Text="Paste an Elastic Cloud ID, or enter the Kibana and Elasticsearch addresses. The connection is tested automatically once you stop typing."
                 />
-              </StackPanel>
-              <StackPanel Spacing="4">
-                <TextBlock Text="Cloud ID" Classes="elastic-form-label" />
-                <TextBox
-                  x:Name="CloudIdBox"
-                  Text="{Binding CloudId, Mode=TwoWay}"
-                  PlaceholderText="Elastic Cloud ID (optional)"
-                  AutomationProperties.Name="Cloud ID"
-                />
-                <TextBlock
-                  x:Name="CloudIdError"
-                  Text="{Binding CloudIdError}"
-                  IsVisible="{Binding CloudIdError, Converter={x:Static ObjectConverters.IsNotNull}}"
-                  Classes="error"
-                  TextWrapping="Wrap"
-                />
-              </StackPanel>
-              <StackPanel Spacing="4">
-                <TextBlock Text="Kibana URL" Classes="elastic-form-label" />
-                <TextBox
-                  x:Name="KibanaUrlBox"
-                  Text="{Binding KibanaUrl, Mode=TwoWay}"
-                  PlaceholderText="https://kibana.example.com"
-                  AutomationProperties.Name="Kibana URL"
-                  AutomationProperties.HelpText="{Binding KibanaUrlError}"
-                />
-                <TextBlock Text="{Binding KibanaUrlError}" Classes="error" TextWrapping="Wrap">
-                  <TextBlock.IsVisible>
-                    <MultiBinding Converter="{x:Static BoolConverters.And}">
-                      <Binding
-                        Path="KibanaUrlError"
-                        Converter="{x:Static ObjectConverters.IsNotNull}"
-                      />
-                      <Binding
-                        Path="KibanaUrl"
-                        Converter="{x:Static StringConverters.IsNotNullOrEmpty}"
-                      />
-                    </MultiBinding>
-                  </TextBlock.IsVisible>
-                </TextBlock>
-              </StackPanel>
-              <StackPanel Spacing="4">
-                <TextBlock Text="Elasticsearch URL" Classes="elastic-form-label" />
-                <TextBox
-                  x:Name="ElasticsearchUrlBox"
-                  Text="{Binding ElasticsearchUrl, Mode=TwoWay}"
-                  PlaceholderText="https://elastic.example.com"
-                  AutomationProperties.Name="Elasticsearch URL"
-                  AutomationProperties.HelpText="{Binding ElasticsearchUrlError}"
-                />
-                <TextBlock
-                  Text="{Binding ElasticsearchUrlError}"
-                  Classes="error"
-                  TextWrapping="Wrap"
-                >
-                  <TextBlock.IsVisible>
-                    <MultiBinding Converter="{x:Static BoolConverters.And}">
-                      <Binding
-                        Path="ElasticsearchUrlError"
-                        Converter="{x:Static ObjectConverters.IsNotNull}"
-                      />
-                      <Binding
-                        Path="ElasticsearchUrl"
-                        Converter="{x:Static StringConverters.IsNotNullOrEmpty}"
-                      />
-                    </MultiBinding>
-                  </TextBlock.IsVisible>
-                </TextBlock>
-              </StackPanel>
-              <StackPanel Spacing="4">
-                <TextBlock Text="Login method" Classes="elastic-form-label" />
-                <ComboBox
-                  x:Name="AuthModeBox"
-                  ItemsSource="{Binding AuthModeChoices}"
-                  SelectedValueBinding="{Binding Mode}"
-                  SelectedValue="{Binding AuthMode, Mode=TwoWay}"
-                  HorizontalContentAlignment="Left"
-                  AutomationProperties.Name="Login method"
-                >
-                  <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:ElasticAuthModeChoice">
-                      <TextBlock Text="{Binding DisplayName}" />
+                <StackPanel Spacing="4">
+                  <TextBlock Text="Connection name" Classes="elastic-form-label" />
+                  <TextBox
+                    x:Name="ConnectionNameBox"
+                    Text="{Binding Name, Mode=TwoWay}"
+                    PlaceholderText="Name this server"
+                    AutomationProperties.Name="Connection name"
+                    AutomationProperties.HelpText="{Binding NameError}"
+                  />
+                  <TextBlock
+                    x:Name="ConnectionNameError"
+                    Text="{Binding NameError}"
+                    IsVisible="{Binding NameError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                    Classes="error"
+                    TextWrapping="Wrap"
+                  />
+                </StackPanel>
+                <StackPanel Spacing="4">
+                  <TextBlock Text="Cloud ID" Classes="elastic-form-label" />
+                  <TextBox
+                    x:Name="CloudIdBox"
+                    Text="{Binding CloudId, Mode=TwoWay}"
+                    PlaceholderText="Elastic Cloud ID (optional)"
+                    AutomationProperties.Name="Cloud ID"
+                  />
+                  <TextBlock
+                    x:Name="CloudIdError"
+                    Text="{Binding CloudIdError}"
+                    IsVisible="{Binding CloudIdError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                    Classes="error"
+                    TextWrapping="Wrap"
+                  />
+                </StackPanel>
+                <StackPanel Spacing="4">
+                  <TextBlock Text="Kibana URL" Classes="elastic-form-label" />
+                  <TextBox
+                    x:Name="KibanaUrlBox"
+                    Text="{Binding KibanaUrl, Mode=TwoWay}"
+                    PlaceholderText="https://kibana.example.com"
+                    AutomationProperties.Name="Kibana URL"
+                    AutomationProperties.HelpText="{Binding KibanaUrlError}"
+                  />
+                  <TextBlock Text="{Binding KibanaUrlError}" Classes="error" TextWrapping="Wrap">
+                    <TextBlock.IsVisible>
+                      <MultiBinding Converter="{x:Static BoolConverters.And}">
+                        <Binding
+                          Path="KibanaUrlError"
+                          Converter="{x:Static ObjectConverters.IsNotNull}"
+                        />
+                        <Binding
+                          Path="KibanaUrl"
+                          Converter="{x:Static StringConverters.IsNotNullOrEmpty}"
+                        />
+                      </MultiBinding>
+                    </TextBlock.IsVisible>
+                  </TextBlock>
+                </StackPanel>
+                <StackPanel Spacing="4">
+                  <TextBlock Text="Elasticsearch URL" Classes="elastic-form-label" />
+                  <TextBox
+                    x:Name="ElasticsearchUrlBox"
+                    Text="{Binding ElasticsearchUrl, Mode=TwoWay}"
+                    PlaceholderText="https://elastic.example.com"
+                    AutomationProperties.Name="Elasticsearch URL"
+                    AutomationProperties.HelpText="{Binding ElasticsearchUrlError}"
+                  />
+                  <TextBlock
+                    Text="{Binding ElasticsearchUrlError}"
+                    Classes="error"
+                    TextWrapping="Wrap"
+                  >
+                    <TextBlock.IsVisible>
+                      <MultiBinding Converter="{x:Static BoolConverters.And}">
+                        <Binding
+                          Path="ElasticsearchUrlError"
+                          Converter="{x:Static ObjectConverters.IsNotNull}"
+                        />
+                        <Binding
+                          Path="ElasticsearchUrl"
+                          Converter="{x:Static StringConverters.IsNotNullOrEmpty}"
+                        />
+                      </MultiBinding>
+                    </TextBlock.IsVisible>
+                  </TextBlock>
+                </StackPanel>
+                <StackPanel Spacing="4">
+                  <TextBlock Text="Login method" Classes="elastic-form-label" />
+                  <ComboBox
+                    x:Name="AuthModeBox"
+                    ItemsSource="{Binding AuthModeChoices}"
+                    SelectedValueBinding="{Binding Mode}"
+                    SelectedValue="{Binding AuthMode, Mode=TwoWay}"
+                    HorizontalContentAlignment="Left"
+                    AutomationProperties.Name="Login method"
+                  >
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:ElasticAuthModeChoice">
+                        <TextBlock Text="{Binding DisplayName}" />
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                </StackPanel>
+                <StackPanel Spacing="4" IsVisible="{Binding IsBasic}">
+                  <TextBlock Text="Username" Classes="elastic-form-label" />
+                  <TextBox
+                    x:Name="UsernameBox"
+                    Text="{Binding Username, Mode=TwoWay}"
+                    PlaceholderText="Username"
+                    AutomationProperties.Name="Username"
+                  />
+                </StackPanel>
+                <StackPanel Spacing="4" IsVisible="{Binding IsAuthenticated}">
+                  <TextBlock Text="Password or API key" Classes="elastic-form-label" />
+                  <TextBox
+                    x:Name="SecretBox"
+                    Text="{Binding Secret, Mode=TwoWay}"
+                    PasswordChar="●"
+                    PlaceholderText="Password or API key"
+                    AutomationProperties.Name="Password or API key"
+                  />
+                </StackPanel>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                  <Button
+                    x:Name="TestConnectionButton"
+                    Content="Test connection"
+                    Command="{Binding TestConnectionCommand}"
+                    IsEnabled="{Binding CanTestConnection}"
+                    Classes="primary"
+                    AutomationProperties.Name="Test connection"
+                  />
+                  <TextBlock
+                    Grid.Column="1"
+                    Text="{Binding Status}"
+                    Classes="status"
+                    TextWrapping="Wrap"
+                    AutomationProperties.LiveSetting="Polite"
+                  />
+                </Grid>
+                <ItemsControl x:Name="EndpointResultsList" ItemsSource="{Binding EndpointResults}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ElasticEndpointResultViewModel">
+                      <Grid ColumnDefinitions="120,*" Margin="0,2">
+                        <TextBlock Text="{Binding Label}" Classes="muted" />
+                        <TextBlock
+                          Grid.Column="1"
+                          Text="{Binding Message}"
+                          Classes.status-live="{Binding IsOk}"
+                          Classes.error="{Binding IsFailed}"
+                          TextWrapping="Wrap"
+                          AutomationProperties.LiveSetting="Polite"
+                        />
+                      </Grid>
                     </DataTemplate>
-                  </ComboBox.ItemTemplate>
-                </ComboBox>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
               </StackPanel>
-              <StackPanel Spacing="4" IsVisible="{Binding IsBasic}">
-                <TextBlock Text="Username" Classes="elastic-form-label" />
-                <TextBox
-                  x:Name="UsernameBox"
-                  Text="{Binding Username, Mode=TwoWay}"
-                  PlaceholderText="Username"
-                  AutomationProperties.Name="Username"
-                />
-              </StackPanel>
-              <StackPanel Spacing="4" IsVisible="{Binding IsAuthenticated}">
-                <TextBlock Text="Password or API key" Classes="elastic-form-label" />
-                <TextBox
-                  x:Name="SecretBox"
-                  Text="{Binding Secret, Mode=TwoWay}"
-                  PasswordChar="●"
-                  PlaceholderText="Password or API key"
-                  AutomationProperties.Name="Password or API key"
-                />
-              </StackPanel>
-              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                <Button
-                  x:Name="TestConnectionButton"
-                  Content="Test connection"
-                  Command="{Binding TestConnectionCommand}"
-                  IsEnabled="{Binding CanTestConnection}"
-                  Classes="primary"
-                  AutomationProperties.Name="Test connection"
-                />
+              <StackPanel x:Name="DiscoverImportPanel" Spacing="6" Margin="0,20,0,0">
+                <TextBlock Text="Optional" Classes="muted" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <TextBox
+                    x:Name="DiscoverUrlBox"
+                    Text="{Binding DiscoverUrl, Mode=TwoWay}"
+                    PlaceholderText="Paste a Kibana Discover URL to prefill (optional)"
+                    AutomationProperties.Name="Kibana Discover URL"
+                  />
+                  <Button
+                    x:Name="ApplyDiscoverUrlButton"
+                    Grid.Column="1"
+                    Content="Apply"
+                    Command="{Binding ApplyDiscoverUrlCommand}"
+                    AutomationProperties.Name="Apply Discover URL"
+                  />
+                </Grid>
                 <TextBlock
-                  Grid.Column="1"
-                  Text="{Binding Status}"
-                  Classes="status"
+                  x:Name="DiscoverMessageText"
+                  Text="{Binding DiscoverMessage}"
+                  IsVisible="{Binding DiscoverMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
+                  Classes="hint"
                   TextWrapping="Wrap"
                   AutomationProperties.LiveSetting="Polite"
                 />
-              </Grid>
-              <ItemsControl x:Name="EndpointResultsList" ItemsSource="{Binding EndpointResults}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:ElasticEndpointResultViewModel">
-                    <Grid ColumnDefinitions="120,*" Margin="0,2">
-                      <TextBlock Text="{Binding Label}" Classes="muted" />
+              </StackPanel>
+              <StackPanel
+                x:Name="SetupDeletePanel"
+                Spacing="8"
+                Margin="0,24,0,0"
+                IsVisible="{Binding CanDeleteConnection}"
+              >
+                <Button
+                  x:Name="SetupDeleteConnectionButton"
+                  Content="Delete connection"
+                  Command="{Binding DeleteConnectionCommand}"
+                  IsVisible="{Binding !DeleteConfirmationVisible}"
+                  HorizontalAlignment="Left"
+                  Classes="destructive"
+                  AutomationProperties.Name="Delete connection"
+                />
+                <StackPanel Spacing="8" IsVisible="{Binding DeleteConfirmationVisible}">
+                  <TextBlock
+                    x:Name="SetupDeleteMessage"
+                    Text="{Binding DeleteConfirmationMessage}"
+                    TextWrapping="Wrap"
+                    AutomationProperties.LiveSetting="Assertive"
+                  />
+                  <WrapPanel>
+                    <Button
+                      x:Name="SetupConfirmDeleteButton"
+                      Content="Delete"
+                      Command="{Binding ConfirmDeleteConnectionCommand}"
+                      Classes="destructive"
+                      AutomationProperties.Name="Confirm delete connection"
+                    />
+                    <Button
+                      x:Name="SetupCancelDeleteButton"
+                      Content="Cancel"
+                      Command="{Binding CancelDeleteConnectionCommand}"
+                      AutomationProperties.Name="Cancel deleting connection"
+                    />
+                  </WrapPanel>
+                </StackPanel>
+              </StackPanel>
+            </StackPanel>
+
+            <!-- Step 2: Data view -->
+            <StackPanel x:Name="SetupDataViewPanel" IsVisible="{Binding IsDataViewStep}" Spacing="12">
+              <TextBlock Text="Choose a data view" Classes="setup-title" />
+              <TextBlock
+                Classes="hint"
+                Text="A data view tells Kibana which indices hold your logs. Pick the one to read from."
+              />
+              <TextBox
+                x:Name="DataViewSearchBox"
+                Text="{Binding DataViewSearch, Mode=TwoWay}"
+                PlaceholderText="Search data views"
+                AutomationProperties.Name="Search data views"
+              />
+              <ListBox
+                x:Name="DataViewList"
+                ItemsSource="{Binding FilteredDataViews}"
+                SelectedItem="{Binding View.SelectedDataView, Mode=TwoWay}"
+                MaxHeight="320"
+                AutomationProperties.Name="Data views"
+              >
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ElasticDataViewChoiceViewModel">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                      <TextBlock
+                        Text="{Binding Title}"
+                        VerticalAlignment="Center"
+                        TextTrimming="CharacterEllipsis"
+                      />
                       <TextBlock
                         Grid.Column="1"
-                        Text="{Binding Message}"
-                        Classes.status-live="{Binding IsOk}"
-                        Classes.error="{Binding IsFailed}"
-                        TextWrapping="Wrap"
-                        AutomationProperties.LiveSetting="Polite"
+                        Text="{Binding $parent[ListBox].DataContext.View.TimestampStatus}"
+                        IsVisible="{Binding $parent[ListBoxItem].IsSelected}"
+                        FontSize="12"
+                        Opacity="0.85"
+                        VerticalAlignment="Center"
+                        TextWrapping="NoWrap"
+                      />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+              <TextBlock
+                Text="{Binding View.MetadataStatus}"
+                IsVisible="{Binding View.SelectedDataViewId, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                Classes="hint"
+                AutomationProperties.LiveSetting="Polite"
+              />
+              <TextBlock
+                Text="{Binding View.Error}"
+                IsVisible="{Binding View.Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                Classes="error"
+                TextWrapping="Wrap"
+                AutomationProperties.LiveSetting="Assertive"
+              />
+              <Button
+                x:Name="DataViewRetryButton"
+                Content="Retry"
+                Command="{Binding View.RefreshFieldsCommand}"
+                IsVisible="{Binding View.Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                HorizontalAlignment="Left"
+                AutomationProperties.Name="Retry loading data view"
+              />
+            </StackPanel>
+
+            <!-- Step 3: Filter -->
+            <StackPanel x:Name="SetupFilterPanel" IsVisible="{Binding IsFilterStep}" Spacing="12">
+              <TextBlock Text="Filter the logs" Classes="setup-title" />
+              <TextBlock
+                Classes="hint"
+                Text="Pick the field that tells your sources apart, such as the service name, then add the values to follow. Each value becomes its own source."
+              />
+              <StackPanel Spacing="4">
+                <TextBlock Text="Filter field" Classes="elastic-form-label" />
+                <ComboBox
+                  x:Name="FilterFieldBox"
+                  ItemsSource="{Binding View.SearchableFields}"
+                  SelectedItem="{Binding SelectedSearchableField, Mode=TwoWay}"
+                  PlaceholderText="Choose a field"
+                  HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Left"
+                  AutomationProperties.Name="Filter field"
+                  AutomationProperties.HelpText="{Binding View.FilterFieldError}"
+                >
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ElasticFieldOptionViewModel">
+                      <TextBlock TextTrimming="CharacterEllipsis">
+                        <TextBlock.Text>
+                          <MultiBinding StringFormat="{}{0} · {1}">
+                            <Binding Path="Name" />
+                            <Binding Path="Type" />
+                          </MultiBinding>
+                        </TextBlock.Text>
+                      </TextBlock>
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock Text="Only fields that can be searched are listed." Classes="hint" />
+              </StackPanel>
+              <StackPanel Spacing="4">
+                <TextBlock Text="Values" Classes="elastic-form-label" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <TextBox
+                    x:Name="FilterValueInput"
+                    Text="{Binding NewFilterValue, Mode=TwoWay}"
+                    PlaceholderText="Type a value, then press Enter or a comma"
+                    AutomationProperties.Name="Filter value"
+                    AutomationProperties.HelpText="Press Enter or type a comma to add the value"
+                  >
+                    <TextBox.KeyBindings>
+                      <KeyBinding Gesture="Enter" Command="{Binding AddFilterValueCommand}" />
+                    </TextBox.KeyBindings>
+                  </TextBox>
+                  <Button
+                    x:Name="AddFilterValueButton"
+                    Grid.Column="1"
+                    Content="Add"
+                    Command="{Binding AddFilterValueCommand}"
+                    AutomationProperties.Name="Add filter value"
+                  />
+                </Grid>
+                <TextBlock
+                  x:Name="FilterMessage"
+                  Text="{Binding FilterMessage}"
+                  IsVisible="{Binding FilterMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
+                  Classes="hint"
+                  AutomationProperties.LiveSetting="Polite"
+                />
+              </StackPanel>
+              <ItemsControl
+                x:Name="FilterChips"
+                ItemsSource="{Binding View.Sources}"
+                AutomationProperties.Name="Filter values"
+              >
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ElasticSourceSettingViewModel">
+                    <Border
+                      Classes="filter-chip"
+                      Classes.zero-count="{Binding IsZeroCount}"
+                      IsVisible="{Binding ServerValue, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                    >
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock
+                          Text="{Binding ServerValue}"
+                          VerticalAlignment="Center"
+                          MaxWidth="220"
+                          TextTrimming="CharacterEllipsis"
+                          ToolTip.Tip="{Binding ServerValue}"
+                        />
+                        <TextBlock
+                          Text="{Binding CountText}"
+                          Classes="chip-count"
+                          IsVisible="{Binding CountText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                          AutomationProperties.LiveSetting="Polite"
+                        />
+                        <Button
+                          Classes="icon tab-close"
+                          Width="24"
+                          Height="24"
+                          FontSize="14"
+                          Command="{Binding $parent[UserControl].DataContext.RemoveFilterValueCommand}"
+                          CommandParameter="{Binding}"
+                          ToolTip.Tip="Remove value"
+                          AutomationProperties.Name="{Binding ServerValue, StringFormat='Remove value {0}'}"
+                        >
+                          <ic:Icon Value="mdi-close" />
+                        </Button>
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock
+                Text="{Binding View.FilterValueError}"
+                IsVisible="{Binding View.FilterValueError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                Classes="hint"
+              />
+              <TextBlock
+                Text="{Binding View.Error}"
+                IsVisible="{Binding View.Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                Classes="error"
+                TextWrapping="Wrap"
+                AutomationProperties.LiveSetting="Assertive"
+              />
+              <Button
+                x:Name="FilterRetryButton"
+                Content="Retry"
+                Command="{Binding View.RefreshFieldsCommand}"
+                IsVisible="{Binding View.Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                HorizontalAlignment="Left"
+                AutomationProperties.Name="Retry loading data view"
+              />
+              <Expander
+                x:Name="AdvancedExpander"
+                Header="Advanced"
+                HorizontalAlignment="Stretch"
+                IsExpanded="{Binding AdvancedOpen, Mode=TwoWay}"
+                AutomationProperties.Name="Advanced"
+              >
+                <StackPanel Spacing="8" Margin="0,8,0,0">
+                  <TextBlock
+                    Classes="hint"
+                    Text="Optional namespace details saved with the view. They do not change what is searched."
+                  />
+                  <TextBlock Text="Namespace field" Classes="elastic-form-label" />
+                  <TextBox
+                    x:Name="NamespaceFieldBox"
+                    Text="{Binding View.NamespaceField, Mode=TwoWay}"
+                    PlaceholderText="Namespace field"
+                    AutomationProperties.Name="Namespace field"
+                  />
+                  <ItemsControl ItemsSource="{Binding View.Sources}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:ElasticSourceSettingViewModel">
+                        <StackPanel
+                          Spacing="4"
+                          Margin="0,4"
+                          IsVisible="{Binding ServerValue, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                        >
+                          <TextBlock
+                            Text="{Binding ServerValue, StringFormat='Namespace value for {0}'}"
+                            Classes="elastic-form-label"
+                          />
+                          <TextBox
+                            Text="{Binding NamespaceValue, Mode=TwoWay}"
+                            PlaceholderText="Namespace value"
+                            AutomationProperties.Name="{Binding ServerValue, StringFormat='Namespace value for {0}'}"
+                          />
+                        </StackPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Expander>
+            </StackPanel>
+
+            <!-- Step 4: Columns -->
+            <StackPanel x:Name="SetupColumnsPanel" IsVisible="{Binding IsColumnsStep}" Spacing="12">
+              <TextBlock Text="Choose the columns" Classes="setup-title" />
+              <TextBlock
+                Classes="hint"
+                Text="Tick the fields to show in each row. Reorder with the Up/Down buttons or Alt+Up/Down. Delete removes the selected column."
+              />
+              <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="Available fields" Classes="elastic-form-label" />
+                  <TextBox
+                    x:Name="FieldSearchBox"
+                    Text="{Binding View.OutputFieldQuery, Mode=TwoWay}"
+                    PlaceholderText="Search fields"
+                    AutomationProperties.Name="Search fields"
+                  />
+                  <ScrollViewer MaxHeight="220" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl
+                      x:Name="AvailableFieldsList"
+                      ItemsSource="{Binding View.AvailableFields}"
+                      AutomationProperties.Name="Available fields"
+                    >
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ElasticFieldOptionViewModel">
+                          <CheckBox
+                            IsChecked="{Binding IsOutput, Mode=TwoWay}"
+                            ToolTip.Tip="{Binding Name}"
+                            AutomationProperties.Name="{Binding Name, StringFormat='Display field {0}'}"
+                          >
+                            <StackPanel>
+                              <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                              <TextBlock
+                                Text="{Binding Type}"
+                                Classes="elastic-form-label"
+                                FontSize="11"
+                              />
+                            </StackPanel>
+                          </CheckBox>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </ScrollViewer>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="6">
+                  <TextBlock Text="Chosen columns, in order" Classes="elastic-form-label" />
+                  <ListBox
+                    x:Name="SelectedFieldsList"
+                    ItemsSource="{Binding View.SelectedOutputFields}"
+                    SelectedItem="{Binding SelectedColumn, Mode=TwoWay}"
+                    MinHeight="60"
+                    MaxHeight="190"
+                    AutomationProperties.Name="Chosen columns"
+                  >
+                    <i:Interaction.Behaviors>
+                      <behaviors:ListReorderBehavior />
+                    </i:Interaction.Behaviors>
+                    <ListBox.KeyBindings>
+                      <KeyBinding
+                        Gesture="Delete"
+                        Command="{Binding RemoveColumnCommand}"
+                        CommandParameter="{Binding SelectedColumn}"
+                      />
+                    </ListBox.KeyBindings>
+                    <ListBox.ItemTemplate>
+                      <DataTemplate>
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                          <TextBlock
+                            Text="{Binding}"
+                            VerticalAlignment="Center"
+                            TextTrimming="CharacterEllipsis"
+                          />
+                          <Button
+                            Grid.Column="1"
+                            Classes="icon tab-close"
+                            Width="24"
+                            Height="24"
+                            FontSize="14"
+                            Focusable="False"
+                            Command="{Binding $parent[ListBox].DataContext.RemoveColumnCommand}"
+                            CommandParameter="{Binding}"
+                            ToolTip.Tip="Remove column"
+                            AutomationProperties.Name="{Binding StringFormat='Remove column {0}'}"
+                          >
+                            <ic:Icon Value="mdi-close" />
+                          </Button>
+                        </Grid>
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button
+                      x:Name="MoveFieldUpButton"
+                      Content="Up"
+                      Command="{Binding MoveColumnUpCommand}"
+                      AutomationProperties.Name="Move column up"
+                    />
+                    <Button
+                      x:Name="MoveFieldDownButton"
+                      Content="Down"
+                      Command="{Binding MoveColumnDownCommand}"
+                      AutomationProperties.Name="Move column down"
+                    />
+                  </StackPanel>
+                  <TextBlock
+                    Text="{Binding View.OutputFieldsError}"
+                    IsVisible="{Binding View.OutputFieldsError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                    Classes="hint"
+                  />
+                </StackPanel>
+              </Grid>
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBlock
+                  Text="Preview of the latest documents"
+                  Classes="elastic-form-label"
+                  VerticalAlignment="Center"
+                />
+                <Button
+                  x:Name="RefreshPreviewButton"
+                  Grid.Column="1"
+                  Content="Refresh preview"
+                  Command="{Binding View.RefreshPreviewCommand}"
+                  AutomationProperties.Name="Refresh preview"
+                />
+              </Grid>
+              <ItemsControl
+                x:Name="PreviewList"
+                ItemsSource="{Binding View.PreviewRows}"
+                AutomationProperties.Name="Preview rows"
+              >
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ElasticPreviewRowViewModel">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" Margin="0,2">
+                      <TextBlock Text="{Binding Time}" Classes="preview-row muted" />
+                      <TextBlock
+                        Grid.Column="1"
+                        Text="{Binding Text}"
+                        Classes="preview-row"
+                        TextTrimming="CharacterEllipsis"
+                        ToolTip.Tip="{Binding Text}"
                       />
                     </Grid>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-            </StackPanel>
-            <StackPanel
-              x:Name="SetupDeletePanel"
-              Spacing="8"
-              Margin="0,24,0,0"
-              IsVisible="{Binding CanDeleteConnection}"
-            >
-              <Button
-                x:Name="SetupDeleteConnectionButton"
-                Content="Delete connection"
-                Command="{Binding DeleteConnectionCommand}"
-                IsVisible="{Binding !DeleteConfirmationVisible}"
-                HorizontalAlignment="Left"
-                Classes="destructive"
-                AutomationProperties.Name="Delete connection"
-              />
-              <StackPanel Spacing="8" IsVisible="{Binding DeleteConfirmationVisible}">
-                <TextBlock
-                  x:Name="SetupDeleteMessage"
-                  Text="{Binding DeleteConfirmationMessage}"
-                  TextWrapping="Wrap"
-                  AutomationProperties.LiveSetting="Assertive"
-                />
-                <WrapPanel>
-                  <Button
-                    x:Name="SetupConfirmDeleteButton"
-                    Content="Delete"
-                    Command="{Binding ConfirmDeleteConnectionCommand}"
-                    Classes="destructive"
-                    AutomationProperties.Name="Confirm delete connection"
-                  />
-                  <Button
-                    x:Name="SetupCancelDeleteButton"
-                    Content="Cancel"
-                    Command="{Binding CancelDeleteConnectionCommand}"
-                    AutomationProperties.Name="Cancel deleting connection"
-                  />
-                </WrapPanel>
-              </StackPanel>
-            </StackPanel>
-          </StackPanel>
-
-          <!-- Step 2: Data view -->
-          <StackPanel x:Name="SetupDataViewPanel" IsVisible="{Binding IsDataViewStep}" Spacing="12">
-            <TextBlock Text="Choose a data view" Classes="setup-title" />
-            <TextBlock
-              Classes="hint"
-              Text="A data view tells Kibana which indices hold your logs. Pick the one to read from."
-            />
-            <TextBox
-              x:Name="DataViewSearchBox"
-              Text="{Binding DataViewSearch, Mode=TwoWay}"
-              PlaceholderText="Search data views"
-              AutomationProperties.Name="Search data views"
-            />
-            <ListBox
-              x:Name="DataViewList"
-              ItemsSource="{Binding FilteredDataViews}"
-              SelectedItem="{Binding View.SelectedDataView, Mode=TwoWay}"
-              MaxHeight="320"
-              AutomationProperties.Name="Data views"
-            >
-              <ListBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:ElasticDataViewChoiceViewModel">
-                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                    <TextBlock
-                      Text="{Binding Title}"
-                      VerticalAlignment="Center"
-                      TextTrimming="CharacterEllipsis"
-                    />
-                    <TextBlock
-                      Grid.Column="1"
-                      Text="{Binding $parent[ListBox].DataContext.View.TimestampStatus}"
-                      IsVisible="{Binding $parent[ListBoxItem].IsSelected}"
-                      FontSize="12"
-                      Opacity="0.85"
-                      VerticalAlignment="Center"
-                      TextWrapping="NoWrap"
-                    />
-                  </Grid>
-                </DataTemplate>
-              </ListBox.ItemTemplate>
-            </ListBox>
-            <TextBlock
-              Text="{Binding View.MetadataStatus}"
-              IsVisible="{Binding View.SelectedDataViewId, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-              Classes="hint"
-              AutomationProperties.LiveSetting="Polite"
-            />
-            <TextBlock
-              Text="{Binding View.Error}"
-              IsVisible="{Binding View.Error, Converter={x:Static ObjectConverters.IsNotNull}}"
-              Classes="error"
-              TextWrapping="Wrap"
-              AutomationProperties.LiveSetting="Assertive"
-            />
-            <Button
-              x:Name="DataViewRetryButton"
-              Content="Retry"
-              Command="{Binding View.RefreshFieldsCommand}"
-              IsVisible="{Binding View.Error, Converter={x:Static ObjectConverters.IsNotNull}}"
-              HorizontalAlignment="Left"
-              AutomationProperties.Name="Retry loading data view"
-            />
-          </StackPanel>
-
-          <!-- Step 3: Filter -->
-          <StackPanel x:Name="SetupFilterPanel" IsVisible="{Binding IsFilterStep}" Spacing="12">
-            <TextBlock Text="Filter the logs" Classes="setup-title" />
-            <TextBlock
-              Classes="hint"
-              Text="Pick the field that tells your sources apart, such as the service name, then add the values to follow. Each value becomes its own source."
-            />
-            <StackPanel Spacing="4">
-              <TextBlock Text="Filter field" Classes="elastic-form-label" />
-              <ComboBox
-                x:Name="FilterFieldBox"
-                ItemsSource="{Binding View.SearchableFields}"
-                SelectedItem="{Binding SelectedSearchableField, Mode=TwoWay}"
-                PlaceholderText="Choose a field"
-                HorizontalAlignment="Stretch"
-                HorizontalContentAlignment="Left"
-                AutomationProperties.Name="Filter field"
-                AutomationProperties.HelpText="{Binding View.FilterFieldError}"
-              >
-                <ComboBox.ItemTemplate>
-                  <DataTemplate x:DataType="vm:ElasticFieldOptionViewModel">
-                    <TextBlock TextTrimming="CharacterEllipsis">
-                      <TextBlock.Text>
-                        <MultiBinding StringFormat="{}{0} · {1}">
-                          <Binding Path="Name" />
-                          <Binding Path="Type" />
-                        </MultiBinding>
-                      </TextBlock.Text>
-                    </TextBlock>
-                  </DataTemplate>
-                </ComboBox.ItemTemplate>
-              </ComboBox>
-              <TextBlock Text="Only fields that can be searched are listed." Classes="hint" />
-            </StackPanel>
-            <StackPanel Spacing="4">
-              <TextBlock Text="Values" Classes="elastic-form-label" />
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <TextBox
-                  x:Name="FilterValueInput"
-                  Text="{Binding NewFilterValue, Mode=TwoWay}"
-                  PlaceholderText="Type a value, then press Enter or a comma"
-                  AutomationProperties.Name="Filter value"
-                  AutomationProperties.HelpText="Press Enter or type a comma to add the value"
-                >
-                  <TextBox.KeyBindings>
-                    <KeyBinding Gesture="Enter" Command="{Binding AddFilterValueCommand}" />
-                  </TextBox.KeyBindings>
-                </TextBox>
-                <Button
-                  x:Name="AddFilterValueButton"
-                  Grid.Column="1"
-                  Content="Add"
-                  Command="{Binding AddFilterValueCommand}"
-                  AutomationProperties.Name="Add filter value"
-                />
-              </Grid>
               <TextBlock
-                x:Name="FilterMessage"
-                Text="{Binding FilterMessage}"
-                IsVisible="{Binding FilterMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
+                x:Name="PreviewMessageText"
+                Text="{Binding View.PreviewMessage}"
+                IsVisible="{Binding View.PreviewMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
                 Classes="hint"
                 AutomationProperties.LiveSetting="Polite"
               />
             </StackPanel>
-            <ItemsControl
-              x:Name="FilterChips"
-              ItemsSource="{Binding View.Sources}"
-              AutomationProperties.Name="Filter values"
-            >
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <WrapPanel />
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:ElasticSourceSettingViewModel">
-                  <Border
-                    Classes="filter-chip"
-                    Classes.zero-count="{Binding IsZeroCount}"
-                    IsVisible="{Binding ServerValue, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                  >
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                      <TextBlock
-                        Text="{Binding ServerValue}"
-                        VerticalAlignment="Center"
-                        MaxWidth="220"
-                        TextTrimming="CharacterEllipsis"
-                        ToolTip.Tip="{Binding ServerValue}"
-                      />
-                      <TextBlock
-                        Text="{Binding CountText}"
-                        Classes="chip-count"
-                        IsVisible="{Binding CountText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                        AutomationProperties.LiveSetting="Polite"
-                      />
-                      <Button
-                        Classes="icon tab-close"
-                        Width="24"
-                        Height="24"
-                        FontSize="14"
-                        Command="{Binding $parent[UserControl].DataContext.RemoveFilterValueCommand}"
-                        CommandParameter="{Binding}"
-                        ToolTip.Tip="Remove value"
-                        AutomationProperties.Name="{Binding ServerValue, StringFormat='Remove value {0}'}"
-                      >
-                        <ic:Icon Value="mdi-close" />
-                      </Button>
-                    </StackPanel>
-                  </Border>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <TextBlock
-              Text="{Binding View.FilterValueError}"
-              IsVisible="{Binding View.FilterValueError, Converter={x:Static ObjectConverters.IsNotNull}}"
-              Classes="hint"
-            />
-            <TextBlock
-              Text="{Binding View.Error}"
-              IsVisible="{Binding View.Error, Converter={x:Static ObjectConverters.IsNotNull}}"
-              Classes="error"
-              TextWrapping="Wrap"
-              AutomationProperties.LiveSetting="Assertive"
-            />
-            <Button
-              x:Name="FilterRetryButton"
-              Content="Retry"
-              Command="{Binding View.RefreshFieldsCommand}"
-              IsVisible="{Binding View.Error, Converter={x:Static ObjectConverters.IsNotNull}}"
-              HorizontalAlignment="Left"
-              AutomationProperties.Name="Retry loading data view"
-            />
-            <Expander
-              x:Name="AdvancedExpander"
-              Header="Advanced"
-              HorizontalAlignment="Stretch"
-              IsExpanded="{Binding AdvancedOpen, Mode=TwoWay}"
-              AutomationProperties.Name="Advanced"
-            >
-              <StackPanel Spacing="8" Margin="0,8,0,0">
-                <TextBlock
-                  Classes="hint"
-                  Text="Optional namespace details saved with the view. They do not change what is searched."
-                />
-                <TextBlock Text="Namespace field" Classes="elastic-form-label" />
-                <TextBox
-                  x:Name="NamespaceFieldBox"
-                  Text="{Binding View.NamespaceField, Mode=TwoWay}"
-                  PlaceholderText="Namespace field"
-                  AutomationProperties.Name="Namespace field"
-                />
-                <ItemsControl ItemsSource="{Binding View.Sources}">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:ElasticSourceSettingViewModel">
-                      <StackPanel
-                        Spacing="4"
-                        Margin="0,4"
-                        IsVisible="{Binding ServerValue, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                      >
-                        <TextBlock
-                          Text="{Binding ServerValue, StringFormat='Namespace value for {0}'}"
-                          Classes="elastic-form-label"
-                        />
-                        <TextBox
-                          Text="{Binding NamespaceValue, Mode=TwoWay}"
-                          PlaceholderText="Namespace value"
-                          AutomationProperties.Name="{Binding ServerValue, StringFormat='Namespace value for {0}'}"
-                        />
-                      </StackPanel>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </StackPanel>
-            </Expander>
-          </StackPanel>
 
-          <!-- Step 4: Columns -->
-          <StackPanel x:Name="SetupColumnsPanel" IsVisible="{Binding IsColumnsStep}" Spacing="12">
-            <TextBlock Text="Choose the columns" Classes="setup-title" />
-            <TextBlock
-              Classes="hint"
-              Text="Tick the fields to show in each row. Reorder with the Up/Down buttons or Alt+Up/Down. Delete removes the selected column."
-            />
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-              <StackPanel Spacing="6">
-                <TextBlock Text="Available fields" Classes="elastic-form-label" />
-                <TextBox
-                  x:Name="FieldSearchBox"
-                  Text="{Binding View.OutputFieldQuery, Mode=TwoWay}"
-                  PlaceholderText="Search fields"
-                  AutomationProperties.Name="Search fields"
-                />
-                <ScrollViewer MaxHeight="220" HorizontalScrollBarVisibility="Disabled">
-                  <ItemsControl
-                    x:Name="AvailableFieldsList"
-                    ItemsSource="{Binding View.AvailableFields}"
-                    AutomationProperties.Name="Available fields"
-                  >
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="vm:ElasticFieldOptionViewModel">
-                        <CheckBox
-                          IsChecked="{Binding IsOutput, Mode=TwoWay}"
-                          ToolTip.Tip="{Binding Name}"
-                          AutomationProperties.Name="{Binding Name, StringFormat='Display field {0}'}"
-                        >
-                          <StackPanel>
-                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock
-                              Text="{Binding Type}"
-                              Classes="elastic-form-label"
-                              FontSize="11"
-                            />
-                          </StackPanel>
-                        </CheckBox>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
-                </ScrollViewer>
-              </StackPanel>
-              <StackPanel Grid.Column="1" Spacing="6">
-                <TextBlock Text="Chosen columns, in order" Classes="elastic-form-label" />
-                <ListBox
-                  x:Name="SelectedFieldsList"
-                  ItemsSource="{Binding View.SelectedOutputFields}"
-                  SelectedItem="{Binding SelectedColumn, Mode=TwoWay}"
-                  MinHeight="60"
-                  MaxHeight="190"
-                  AutomationProperties.Name="Chosen columns"
-                >
-                  <i:Interaction.Behaviors>
-                    <behaviors:ListReorderBehavior />
-                  </i:Interaction.Behaviors>
-                  <ListBox.KeyBindings>
-                    <KeyBinding
-                      Gesture="Delete"
-                      Command="{Binding RemoveColumnCommand}"
-                      CommandParameter="{Binding SelectedColumn}"
-                    />
-                  </ListBox.KeyBindings>
-                  <ListBox.ItemTemplate>
-                    <DataTemplate>
-                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                        <TextBlock
-                          Text="{Binding}"
-                          VerticalAlignment="Center"
-                          TextTrimming="CharacterEllipsis"
-                        />
-                        <Button
-                          Grid.Column="1"
-                          Classes="icon tab-close"
-                          Width="24"
-                          Height="24"
-                          FontSize="14"
-                          Focusable="False"
-                          Command="{Binding $parent[ListBox].DataContext.RemoveColumnCommand}"
-                          CommandParameter="{Binding}"
-                          ToolTip.Tip="Remove column"
-                          AutomationProperties.Name="{Binding StringFormat='Remove column {0}'}"
-                        >
-                          <ic:Icon Value="mdi-close" />
-                        </Button>
-                      </Grid>
-                    </DataTemplate>
-                  </ListBox.ItemTemplate>
-                </ListBox>
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button
-                    x:Name="MoveFieldUpButton"
-                    Content="Up"
-                    Command="{Binding MoveColumnUpCommand}"
-                    AutomationProperties.Name="Move column up"
-                  />
-                  <Button
-                    x:Name="MoveFieldDownButton"
-                    Content="Down"
-                    Command="{Binding MoveColumnDownCommand}"
-                    AutomationProperties.Name="Move column down"
-                  />
-                </StackPanel>
-                <TextBlock
-                  Text="{Binding View.OutputFieldsError}"
-                  IsVisible="{Binding View.OutputFieldsError, Converter={x:Static ObjectConverters.IsNotNull}}"
-                  Classes="hint"
-                />
-              </StackPanel>
-            </Grid>
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <!-- Step 5: Name and open -->
+            <StackPanel x:Name="SetupFinishPanel" IsVisible="{Binding IsFinishStep}" Spacing="12">
+              <TextBlock Text="Name and open" Classes="setup-title" />
               <TextBlock
-                Text="Preview of the latest documents"
-                Classes="elastic-form-label"
-                VerticalAlignment="Center"
+                Classes="hint"
+                Text="Give the view a name. It is saved together with the connection, and each value becomes a source in the sidebar."
               />
-              <Button
-                x:Name="RefreshPreviewButton"
-                Grid.Column="1"
-                Content="Refresh preview"
-                Command="{Binding View.RefreshPreviewCommand}"
-                AutomationProperties.Name="Refresh preview"
-              />
-            </Grid>
-            <ItemsControl
-              x:Name="PreviewList"
-              ItemsSource="{Binding View.PreviewRows}"
-              AutomationProperties.Name="Preview rows"
-            >
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:ElasticPreviewRowViewModel">
-                  <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" Margin="0,2">
-                    <TextBlock Text="{Binding Time}" Classes="preview-row muted" />
-                    <TextBlock
-                      Grid.Column="1"
-                      Text="{Binding Text}"
-                      Classes="preview-row"
-                      TextTrimming="CharacterEllipsis"
-                      ToolTip.Tip="{Binding Text}"
-                    />
-                  </Grid>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <TextBlock
-              x:Name="PreviewMessageText"
-              Text="{Binding View.PreviewMessage}"
-              IsVisible="{Binding View.PreviewMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
-              Classes="hint"
-              AutomationProperties.LiveSetting="Polite"
-            />
-          </StackPanel>
-
-          <!-- Step 5: Name and open -->
-          <StackPanel x:Name="SetupFinishPanel" IsVisible="{Binding IsFinishStep}" Spacing="12">
-            <TextBlock Text="Name and open" Classes="setup-title" />
-            <TextBlock
-              Classes="hint"
-              Text="Give the view a name. It is saved together with the connection, and each value becomes a source in the sidebar."
-            />
-            <StackPanel Spacing="4">
-              <TextBlock Text="View name" Classes="elastic-form-label" />
-              <TextBox
-                x:Name="ViewNameBox"
-                Text="{Binding View.Name, Mode=TwoWay}"
-                PlaceholderText="View name"
-                AutomationProperties.Name="View name"
-                AutomationProperties.HelpText="{Binding View.NameError}"
+              <StackPanel Spacing="4">
+                <TextBlock Text="View name" Classes="elastic-form-label" />
+                <TextBox
+                  x:Name="ViewNameBox"
+                  Text="{Binding View.Name, Mode=TwoWay}"
+                  PlaceholderText="View name"
+                  AutomationProperties.Name="View name"
+                  AutomationProperties.HelpText="{Binding View.NameError}"
+                />
+                <TextBlock
+                  Text="{Binding View.NameError}"
+                  IsVisible="{Binding View.NameError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                  Classes="error"
+                  TextWrapping="Wrap"
+                />
+              </StackPanel>
+              <CheckBox
+                x:Name="OpenNowCheck"
+                Content="Open the sources now"
+                IsChecked="{Binding OpenNow, Mode=TwoWay}"
+                AutomationProperties.Name="Open the sources now"
               />
               <TextBlock
-                Text="{Binding View.NameError}"
-                IsVisible="{Binding View.NameError, Converter={x:Static ObjectConverters.IsNotNull}}"
-                Classes="error"
+                x:Name="SetupSummary"
+                Text="{Binding Summary}"
+                Classes="hint"
                 TextWrapping="Wrap"
               />
             </StackPanel>
-            <CheckBox
-              x:Name="OpenNowCheck"
-              Content="Open the sources now"
-              IsChecked="{Binding OpenNow, Mode=TwoWay}"
-              AutomationProperties.Name="Open the sources now"
-            />
-            <TextBlock
-              x:Name="SetupSummary"
-              Text="{Binding Summary}"
-              Classes="hint"
-              TextWrapping="Wrap"
-            />
-          </StackPanel>
-        </Panel>
+          </Panel>
+          <TextBlock
+            x:Name="DiscoverStepNote"
+            Text="{Binding DiscoverNote}"
+            IsVisible="{Binding DiscoverNoteVisible}"
+            Classes="hint"
+            TextWrapping="Wrap"
+            AutomationProperties.LiveSetting="Polite"
+          />
+        </StackPanel>
       </ScrollViewer>
 
       <Border

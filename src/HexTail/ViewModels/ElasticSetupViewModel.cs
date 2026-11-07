@@ -5,6 +5,7 @@ using System.Reactive;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using Avalonia.Threading;
+using HexTail.Elastic;
 using ReactiveUI;
 using ReactiveUI.Reactive;
 
@@ -39,6 +40,18 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
     private readonly BehaviorSubject<bool> _canMoveDown = new(false);
     private readonly BehaviorSubject<bool> _canDelete = new(false);
     private bool _deleteConfirmationVisible;
+    private readonly BehaviorSubject<bool> _canApplyDiscover = new(false);
+    private string _discoverUrl = string.Empty;
+    private string? _discoverSummary;
+    private readonly List<string> _discoverNotes = [];
+
+    // What a pasted Discover link still has to contribute. Each part is applied when its step is
+    // reached, only if the person has not chosen something there, and then forgotten.
+    private string? _importDataViewId;
+    private bool _pendingDataView;
+    private IReadOnlyList<string>? _pendingColumns;
+    private (string Field, string Value)? _pendingFilter;
+    private bool _applyingImport;
 
     // The automatic connection test runs once the edits have stopped coming in. A DispatcherTimer
     // rather than Rx's Throttle on the owner scheduler: tests hand the owner an immediate
@@ -139,6 +152,15 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         ConfirmDeleteConnectionCommand = ReactiveCommand.CreateFromTask(
             ConfirmDeleteAsync,
             _canDelete,
+            owner.Scheduler
+        );
+        ApplyDiscoverUrlCommand = ReactiveCommand.CreateFromTask(
+            () =>
+            {
+                Run(ApplyDiscoverUrl);
+                return Task.CompletedTask;
+            },
+            _canApplyDiscover,
             owner.Scheduler
         );
         Reevaluate();
@@ -440,6 +462,233 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
     public ReactiveCommand<ElasticSetupStepViewModel, Unit> GoToStepCommand { get; }
 
+    /// <summary>The Kibana Discover link pasted into the optional prefill box.</summary>
+    public string DiscoverUrl
+    {
+        get => _discoverUrl;
+        set
+        {
+            value ??= string.Empty;
+            if (_discoverUrl == value)
+                return;
+            this.RaiseAndSetIfChanged(ref _discoverUrl, value);
+            // Emptying the box withdraws the link and everything that was still waiting on it.
+            if (string.IsNullOrWhiteSpace(value))
+                ClearDiscoverImport();
+        }
+    }
+
+    /// <summary>What the pasted link did, what it could not do and anything noticed later.</summary>
+    public string? DiscoverMessage =>
+        _discoverSummary is null
+            ? null
+            : string.Join(' ', _discoverNotes.Prepend(_discoverSummary));
+
+    /// <summary>Problems met while applying the link on the later steps; null when there are none.</summary>
+    public string? DiscoverNote =>
+        _discoverNotes.Count == 0 ? null : string.Join(' ', _discoverNotes);
+
+    /// <summary>The note line below the steps; the connection step shows the full message instead.</summary>
+    public bool DiscoverNoteVisible => !IsConnectionStep && DiscoverNote is not null;
+
+    public ReactiveCommand<Unit, Unit> ApplyDiscoverUrlCommand { get; }
+
+    /// <summary>True while some part of the pasted link is still waiting for its step.</summary>
+    public bool HasPendingDiscoverImport =>
+        _pendingDataView || _pendingColumns is not null || _pendingFilter is not null;
+
+    private void SetDiscoverMessage(string? summary)
+    {
+        _discoverSummary = summary;
+        _discoverNotes.Clear();
+        RaiseDiscoverMessageChanged();
+    }
+
+    private void AddDiscoverNote(string note)
+    {
+        _discoverNotes.Add(note);
+        RaiseDiscoverMessageChanged();
+    }
+
+    private void RaiseDiscoverMessageChanged()
+    {
+        this.RaisePropertyChanged(nameof(DiscoverMessage));
+        this.RaisePropertyChanged(nameof(DiscoverNote));
+        this.RaisePropertyChanged(nameof(DiscoverNoteVisible));
+    }
+
+    private void ClearPendingDiscoverImport()
+    {
+        _importDataViewId = null;
+        _pendingDataView = false;
+        _pendingColumns = null;
+        _pendingFilter = null;
+        this.RaisePropertyChanged(nameof(HasPendingDiscoverImport));
+    }
+
+    private void ClearDiscoverImport()
+    {
+        ClearPendingDiscoverImport();
+        SetDiscoverMessage(null);
+    }
+
+    private static string Shorten(string text) => text.Length <= 60 ? text : text[..60] + "…";
+
+    private void ApplyDiscoverUrl()
+    {
+        if (!IsOpen || IsBusy || Connection is not { } connection)
+            return;
+        ClearPendingDiscoverImport();
+        if (!DiscoverUrlImport.TryParse(_discoverUrl, out var import) || import is null)
+        {
+            SetDiscoverMessage("That does not look like a Kibana Discover link.");
+            return;
+        }
+
+        // The origin has passed the parser's checks (http/https, no credentials). A Kibana URL
+        // that is already there is the person's own choice and stays.
+        var applied = new List<string>();
+        var keptUrl = false;
+        if (!string.IsNullOrWhiteSpace(import.KibanaOrigin))
+        {
+            if (string.IsNullOrWhiteSpace(connection.KibanaUrl))
+            {
+                connection.KibanaUrl = import.KibanaOrigin;
+                applied.Add("Kibana URL");
+            }
+            else
+                keptUrl = true;
+        }
+        var originApplied = applied.Count > 0;
+        if (!string.IsNullOrWhiteSpace(import.DataViewId))
+        {
+            _importDataViewId = import.DataViewId;
+            _pendingDataView = true;
+            applied.Add("data view");
+        }
+        if (import.Columns.Count > 0)
+        {
+            _pendingColumns = import.Columns;
+            applied.Add(import.Columns.Count == 1 ? "1 column" : $"{import.Columns.Count} columns");
+        }
+        if (
+            !string.IsNullOrWhiteSpace(import.FilterField)
+            && !string.IsNullOrWhiteSpace(import.FilterValue)
+        )
+        {
+            _pendingFilter = (import.FilterField, import.FilterValue);
+            applied.Add($"filter {Shorten(import.FilterField)} = {Shorten(import.FilterValue)}");
+        }
+        this.RaisePropertyChanged(nameof(HasPendingDiscoverImport));
+
+        var parts = new List<string>
+        {
+            applied.Count == 0
+                ? "Nothing to prefill from this link."
+                : $"Prefilled: {string.Join(", ", applied)}.",
+        };
+        if (keptUrl)
+            parts.Add("The Kibana URL you entered was kept.");
+        if (originApplied && !HasPendingDiscoverImport)
+            parts.Add("The link has no data view, columns or filter to import.");
+        if (import.Ignored.Count > 0)
+            parts.Add($"Ignored: {string.Join(", ", import.Ignored)}.");
+        SetDiscoverMessage(string.Join(' ', parts));
+    }
+
+    /// <summary>Selects the data view from the link on the data view step, if nothing is chosen yet.</summary>
+    private void ApplyPendingDataView()
+    {
+        if (!_pendingDataView)
+            return;
+        _pendingDataView = false;
+        this.RaisePropertyChanged(nameof(HasPendingDiscoverImport));
+        if (View is not { } view || Connection is not { } connection)
+            return;
+        // A choice the person already made is never replaced; the filter and columns that go with
+        // another data view are dropped (the check on their own steps covers later changes).
+        if (!string.IsNullOrWhiteSpace(view.SelectedDataViewId))
+        {
+            if (!ImportMatchesDataView(view))
+            {
+                _pendingColumns = null;
+                _pendingFilter = null;
+                this.RaisePropertyChanged(nameof(HasPendingDiscoverImport));
+            }
+            return;
+        }
+        if (connection.DataViews.Any(choice => choice.Id == _importDataViewId))
+            view.SelectedDataViewId = _importDataViewId;
+        else
+        {
+            AddDiscoverNote("The data view from the URL was not found in this Kibana.");
+            _pendingColumns = null;
+            _pendingFilter = null;
+            this.RaisePropertyChanged(nameof(HasPendingDiscoverImport));
+        }
+    }
+
+    // The filter and columns of a link belong to its data view; with another one selected they
+    // are not applied.
+    private bool ImportMatchesDataView(ElasticViewEditorViewModel view) =>
+        _importDataViewId is null || view.SelectedDataViewId == _importDataViewId;
+
+    /// <summary>Returns true when it set the filter (which also starts the counts).</summary>
+    private bool ApplyPendingFilter(ElasticViewEditorViewModel view)
+    {
+        if (_pendingFilter is not { } filter)
+            return false;
+        _pendingFilter = null;
+        this.RaisePropertyChanged(nameof(HasPendingDiscoverImport));
+        if (
+            !ImportMatchesDataView(view)
+            || !string.IsNullOrWhiteSpace(view.ServerField)
+            || view.Sources.Any(source => !string.IsNullOrWhiteSpace(source.ServerValue))
+            || string.IsNullOrWhiteSpace(filter.Value)
+        )
+            return false;
+        if (!view.SearchableFields.Any(field => field.Name == filter.Field))
+        {
+            AddDiscoverNote(
+                $"The filter from the URL was not applied: {Shorten(filter.Field)} is not searchable in this data view."
+            );
+            return false;
+        }
+        view.ServerField = filter.Field;
+        return view.AddFilterValue(filter.Value);
+    }
+
+    private void ApplyPendingColumns(ElasticViewEditorViewModel view)
+    {
+        if (_pendingColumns is not { } columns)
+            return;
+        _pendingColumns = null;
+        this.RaisePropertyChanged(nameof(HasPendingDiscoverImport));
+        if (!ImportMatchesDataView(view) || view.SelectedOutputFields.Count > 0)
+            return;
+        var missing = 0;
+        // The preview is fetched once for the step, not once per column.
+        _applyingImport = true;
+        try
+        {
+            foreach (var name in columns.Distinct(StringComparer.Ordinal))
+                if (view.Fields.FirstOrDefault(field => field.Name == name) is { } option)
+                    option.IsOutput = true;
+                else
+                    missing++;
+        }
+        finally
+        {
+            _applyingImport = false;
+        }
+        if (missing > 0)
+            AddDiscoverNote(
+                missing == 1
+                    ? "1 column from the URL is not in this data view and was skipped."
+                    : $"{missing} columns from the URL are not in this data view and were skipped."
+            );
+    }
+
     /// <summary>
     /// Runs a flow entry point from a command or the palette so that a failure lands in
     /// <see cref="Error"/> instead of escaping into the command's unobserved exception stream.
@@ -527,6 +776,7 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
                 _owner.Settings.RevertElasticConnection(connection);
         }
         _createdConnection = false;
+        ResetDiscover();
         Connection = null;
         View = null;
         Error = null;
@@ -534,6 +784,13 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(IsBusy));
         IsOpen = false;
         Reevaluate();
+    }
+
+    private void ResetDiscover()
+    {
+        // Setting the text to empty also drops the pending import; this covers an already empty box.
+        DiscoverUrl = string.Empty;
+        ClearDiscoverImport();
     }
 
     private void Begin()
@@ -547,6 +804,7 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         _editStamp = 0;
         _testStartedStamp = 0;
         _createdConnection = false;
+        ResetDiscover();
         DeleteConfirmationVisible = false;
         DataViewSearch = string.Empty;
         AdvancedOpen = false;
@@ -573,12 +831,15 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
             view.Name = view.SuggestedName;
         this.RaisePropertyChanged(nameof(Step));
         this.RaisePropertyChanged(nameof(IsConnectionStep));
+        this.RaisePropertyChanged(nameof(DiscoverNoteVisible));
         this.RaisePropertyChanged(nameof(IsDataViewStep));
         this.RaisePropertyChanged(nameof(IsFilterStep));
         this.RaisePropertyChanged(nameof(IsColumnsStep));
         this.RaisePropertyChanged(nameof(IsFinishStep));
         this.RaisePropertyChanged(nameof(Summary));
         Reevaluate();
+        if (step == ElasticSetupStep.DataView)
+            ApplyPendingDataView();
         if (step != ElasticSetupStep.Connection)
             EnsureMetadataLoaded();
         if (step == ElasticSetupStep.Filter && View is { } filterView)
@@ -606,17 +867,24 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
             return;
         if (Step == ElasticSetupStep.Filter)
         {
+            // Applying the filter already counted its value.
+            if (ApplyPendingFilter(view))
+                return;
             if (view.Sources.Any(source => !string.IsNullOrWhiteSpace(source.ServerValue)))
                 view.RefreshCountsCommand.Execute().Subscribe(_ => { }, ReportBackgroundFailure);
         }
         else if (Step == ElasticSetupStep.Columns)
+        {
+            ApplyPendingColumns(view);
             view.RefreshPreviewCommand.Execute().Subscribe(_ => { }, ReportBackgroundFailure);
+        }
     }
 
     private void OnPreviewInputsChanged(object? sender, EventArgs args)
     {
         if (
             IsOpen
+            && !_applyingImport
             && Step == ElasticSetupStep.Columns
             && View is { IsLoading: false } view
             && ReferenceEquals(sender, view)
@@ -914,6 +1182,7 @@ internal sealed class ElasticSetupViewModel : ReactiveObject
         _canClose.OnNext(!IsBusy);
         this.RaisePropertyChanged(nameof(CanDeleteConnection));
         _canDelete.OnNext(CanDeleteConnection && !IsBusy);
+        _canApplyDiscover.OnNext(IsOpen && !IsBusy && Connection is not null);
     }
 
     private async Task NextAsync()

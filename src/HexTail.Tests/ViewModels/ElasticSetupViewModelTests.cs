@@ -1722,4 +1722,252 @@ public sealed class ElasticSetupViewModelTests
         await harness.NextAsync();
         Assert.Equal(ElasticSetupStep.Filter, harness.Setup.Step);
     }
+
+    private static string Discover(
+        string columns = "service,message",
+        string dataViewId = "logs",
+        string? query = "service:checkout"
+    ) =>
+        "https://kibana.example/app/discover#/?_g=(filters:!(),time:(from:now-15m,to:now))"
+        + $"&_a=(columns:!({columns}),dataSource:(dataViewId:{dataViewId},type:dataView),"
+        + (query is null ? "" : $"query:(language:kuery,query:'{query}'),")
+        + "sort:!(!('@timestamp',desc)))";
+
+    private static async Task ApplyDiscoverAsync(Harness harness, string url)
+    {
+        harness.Setup.DiscoverUrl = url;
+        await harness.Setup.ApplyDiscoverUrlCommand.Execute();
+    }
+
+    [AvaloniaFact]
+    public async Task DiscoverUrl_FillsABlankKibanaUrlAndKeepsTheRestPendingWithoutTouchingElasticsearch()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+
+        await ApplyDiscoverAsync(harness, Discover());
+
+        Assert.Equal("https://kibana.example", harness.Setup.Connection!.KibanaUrl);
+        Assert.Equal(string.Empty, harness.Setup.Connection.ElasticsearchUrl);
+        Assert.Equal(
+            "Prefilled: Kibana URL, data view, 2 columns, filter service = checkout. Ignored: time range, sort.",
+            harness.Setup.DiscoverMessage
+        );
+        Assert.True(harness.Setup.HasPendingDiscoverImport);
+        Assert.Null(harness.Setup.View?.SelectedDataViewId);
+    }
+
+    [AvaloniaFact]
+    public async Task DiscoverUrl_AKibanaUrlThatIsAlreadyThereIsKeptAndSaidSo()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+        harness.Setup.Connection!.KibanaUrl = "https://mine.example/";
+
+        await ApplyDiscoverAsync(harness, Discover());
+
+        Assert.Equal("https://mine.example/", harness.Setup.Connection.KibanaUrl);
+        Assert.Contains("kept", harness.Setup.DiscoverMessage);
+        Assert.DoesNotContain("Prefilled: Kibana URL", harness.Setup.DiscoverMessage);
+        Assert.True(harness.Setup.HasPendingDiscoverImport);
+    }
+
+    [AvaloniaFact]
+    public async Task DiscoverUrl_ALinkWithOnlyAnOriginSaysThereIsNothingElseToImport()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+
+        await ApplyDiscoverAsync(harness, "https://kibana.example/app/discover#/?_a=(sort:!())");
+
+        Assert.Equal("https://kibana.example", harness.Setup.Connection!.KibanaUrl);
+        Assert.Contains("Kibana URL", harness.Setup.DiscoverMessage);
+        Assert.Contains("no data view", harness.Setup.DiscoverMessage);
+        Assert.False(harness.Setup.HasPendingDiscoverImport);
+    }
+
+    [AvaloniaFact]
+    public async Task DiscoverUrl_AnInvalidLinkChangesNothingAndDropsAPendingImport()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+        await ApplyDiscoverAsync(harness, Discover());
+        Assert.True(harness.Setup.HasPendingDiscoverImport);
+        harness.Setup.Connection!.KibanaUrl = "https://mine.example/";
+
+        await ApplyDiscoverAsync(harness, "https://secret.example/not-discover?token=abc");
+
+        Assert.Equal(
+            "That does not look like a Kibana Discover link.",
+            harness.Setup.DiscoverMessage
+        );
+        Assert.DoesNotContain("secret", harness.Setup.DiscoverMessage);
+        Assert.Equal("https://mine.example/", harness.Setup.Connection.KibanaUrl);
+        Assert.False(harness.Setup.HasPendingDiscoverImport);
+    }
+
+    [AvaloniaFact]
+    public async Task DiscoverUrl_ClearingTheBoxDropsThePendingImportAndTheMessage()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+        await ApplyDiscoverAsync(harness, Discover());
+        Assert.True(harness.Setup.HasPendingDiscoverImport);
+
+        harness.Setup.DiscoverUrl = "  ";
+
+        Assert.False(harness.Setup.HasPendingDiscoverImport);
+        Assert.Null(harness.Setup.DiscoverMessage);
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        Assert.Null(harness.Setup.View!.SelectedDataViewId);
+    }
+
+    [AvaloniaFact]
+    public async Task DiscoverUrl_SelectsTheDataViewFiltersAndColumnsAsTheStepsAreReached()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+        await ApplyDiscoverAsync(harness, Discover(columns: "service,ghost,message"));
+        await harness.ConnectAsync();
+
+        await harness.NextAsync();
+
+        Assert.Equal(ElasticSetupStep.DataView, harness.Setup.Step);
+        Assert.Equal("logs", harness.Setup.View!.SelectedDataViewId);
+        await WaitForAsync(() => harness.Setup.View.IsSelectionResolved);
+        Assert.True(harness.Setup.HasPendingDiscoverImport);
+        Assert.Empty(harness.Setup.View.SelectedOutputFields);
+        Assert.True(string.IsNullOrEmpty(harness.Setup.View.ServerField));
+
+        await harness.NextAsync();
+
+        Assert.Equal(ElasticSetupStep.Filter, harness.Setup.Step);
+        Assert.Equal("service", harness.Setup.View.ServerField);
+        Assert.Equal(
+            new[] { "checkout" },
+            harness.Setup.View.Sources.Select(source => source.ServerValue)
+        );
+        Assert.Empty(harness.Setup.View.SelectedOutputFields);
+
+        await harness.NextAsync();
+
+        Assert.Equal(ElasticSetupStep.Columns, harness.Setup.Step);
+        Assert.Equal(new[] { "service", "message" }, harness.Setup.View.SelectedOutputFields);
+        Assert.False(harness.Setup.HasPendingDiscoverImport);
+        Assert.Contains("1 column", harness.Setup.DiscoverMessage);
+        Assert.Contains("not in this data view", harness.Setup.DiscoverMessage);
+    }
+
+    [AvaloniaFact]
+    public async Task DiscoverUrl_ADataViewThatIsNotInThisKibanaSelectsNothingAndDropsTheRest()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+        await ApplyDiscoverAsync(harness, Discover(dataViewId: "nope"));
+        await harness.ConnectAsync();
+
+        await harness.NextAsync();
+
+        Assert.Null(harness.Setup.View!.SelectedDataViewId);
+        Assert.Contains(
+            "The data view from the URL was not found in this Kibana.",
+            harness.Setup.DiscoverMessage
+        );
+        Assert.False(harness.Setup.HasPendingDiscoverImport);
+    }
+
+    [AvaloniaFact]
+    public async Task DiscoverUrl_AFilterFieldThatIsNotSearchableIsLeftOutWithANote()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+        await ApplyDiscoverAsync(harness, Discover(query: "bytes:5"));
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        await WaitForAsync(() => harness.Setup.View!.IsSelectionResolved);
+
+        await harness.NextAsync();
+
+        Assert.Equal(ElasticSetupStep.Filter, harness.Setup.Step);
+        Assert.True(string.IsNullOrEmpty(harness.Setup.View!.ServerField));
+        Assert.All(harness.Setup.View.Sources, source => Assert.Equal("", source.ServerValue));
+        Assert.Contains("bytes", harness.Setup.DiscoverMessage);
+        Assert.Contains("not applied", harness.Setup.DiscoverMessage);
+    }
+
+    [AvaloniaFact]
+    public async Task DiscoverUrl_NeverOverwritesWhatTheUserAlreadyChose()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        await harness.ResolveDataViewAsync();
+        await harness.NextAsync();
+        harness.Setup.View!.ServerField = "message";
+        harness.Setup.View.AddFilterValue("typed");
+        await harness.NextAsync();
+        harness.Setup.View.Fields.Single(field => field.Name == "@timestamp").IsOutput = true;
+        await harness.Setup.BackCommand.Execute();
+        await harness.Setup.BackCommand.Execute();
+        await harness.Setup.BackCommand.Execute();
+        Assert.Equal(ElasticSetupStep.Connection, harness.Setup.Step);
+
+        await ApplyDiscoverAsync(harness, Discover(columns: "service"));
+        await harness.NextAsync();
+        Assert.Equal("logs", harness.Setup.View.SelectedDataViewId);
+        await harness.NextAsync();
+
+        Assert.Equal("message", harness.Setup.View.ServerField);
+        Assert.Equal(new[] { "typed" }, harness.Setup.View.Sources.Select(s => s.ServerValue));
+        await harness.NextAsync();
+        Assert.Equal(new[] { "@timestamp" }, harness.Setup.View.SelectedOutputFields);
+    }
+
+    [AvaloniaFact]
+    public async Task DiscoverUrl_DoesNotReplaceADataViewTheUserPickedAndSkipsItsFilterAndColumns()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+        await harness.ConnectAsync();
+        await harness.NextAsync();
+        harness.Setup.View!.SelectedDataViewId = "metrics";
+        await WaitForAsync(() => harness.Setup.View.IsSelectionResolved);
+        await harness.Setup.BackCommand.Execute();
+
+        await ApplyDiscoverAsync(harness, Discover());
+        await harness.NextAsync();
+        Assert.Equal("metrics", harness.Setup.View.SelectedDataViewId);
+        await harness.NextAsync();
+
+        Assert.True(string.IsNullOrEmpty(harness.Setup.View.ServerField));
+        Assert.False(
+            harness.Setup.HasPendingDiscoverImport
+                || harness.Setup.View.Sources.Any(s => s.ServerValue.Length > 0)
+        );
+    }
+
+    [AvaloniaFact]
+    public async Task DiscoverUrl_StartingOrClosingAFlowForgetsTheBoxAndThePendingImport()
+    {
+        await using var harness = await CreateAsync();
+        harness.Setup.StartNew();
+        await ApplyDiscoverAsync(harness, Discover());
+        Assert.True(harness.Setup.HasPendingDiscoverImport);
+
+        harness.Setup.Close();
+
+        Assert.False(harness.Setup.HasPendingDiscoverImport);
+        Assert.Equal(string.Empty, harness.Setup.DiscoverUrl);
+        Assert.Null(harness.Setup.DiscoverMessage);
+
+        harness.Setup.StartNew();
+        await ApplyDiscoverAsync(harness, Discover());
+        harness.Setup.StartNew();
+
+        Assert.False(harness.Setup.HasPendingDiscoverImport);
+        Assert.Equal(string.Empty, harness.Setup.DiscoverUrl);
+        Assert.Null(harness.Setup.DiscoverMessage);
+    }
 }

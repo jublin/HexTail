@@ -1281,4 +1281,42 @@ public sealed class ElasticSetupPageTests
         Assert.Empty(fixture.Owner.State.Settings.ElasticConnections);
         Assert.Empty(fixture.Persistence.Config!.Settings.ElasticConnections);
     }
+
+    [AvaloniaFact]
+    public async Task TheConnectionStepHasAnOptionalDiscoverUrlBoxThatPrefillsTheKibanaUrl()
+    {
+        await using var fixture = await CreateAsync();
+        fixture.Setup.StartNew();
+        fixture.Pump();
+
+        var box = fixture.Find<TextBox>("DiscoverUrlBox");
+        var apply = fixture.Find<Button>("ApplyDiscoverUrlButton");
+        var message = fixture.Find<TextBlock>("DiscoverMessageText");
+        Assert.Equal("Paste a Kibana Discover URL to prefill (optional)", box.PlaceholderText);
+        Assert.Equal("Kibana Discover URL", AutomationProperties.GetName(box));
+        Assert.Equal("Apply", apply.Content);
+        Assert.Equal("Apply Discover URL", AutomationProperties.GetName(apply));
+        Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(message));
+        Assert.False(message.IsVisible);
+        Assert.False(box.IsFocused);
+
+        box.Text =
+            "https://kibana.example/app/discover#/?_a=(columns:!(service,message),dataSource:(dataViewId:logs,type:dataView),query:(language:kuery,query:'service:checkout'))";
+        fixture.Pump();
+        apply.Command!.Execute(null);
+        fixture.Pump();
+
+        Assert.Equal("https://kibana.example", fixture.Find<TextBox>("KibanaUrlBox").Text);
+        Assert.True(message.IsVisible);
+        Assert.Equal(
+            "Prefilled: Kibana URL, data view, 2 columns, filter service = checkout.",
+            message.Text
+        );
+
+        box.Text = "https://kibana.example/nothing";
+        fixture.Pump();
+        apply.Command!.Execute(null);
+        fixture.Pump();
+        Assert.Equal("That does not look like a Kibana Discover link.", message.Text);
+    }
 }
