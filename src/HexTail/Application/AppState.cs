@@ -503,7 +503,10 @@ public sealed class AppState : IAsyncDisposable
             {
                 var id = $"file-{++_nextFileId}";
                 var buffer = new FileBuffer(_settings.MaxLines);
-                var parser = LogParserSelector.ForPath(fullPath);
+                ILogParser parser = new TimestampingParser(
+                    LogParserSelector.ForPath(fullPath),
+                    () => NaiveZone(_settings.TimeZoneMode)
+                );
                 var tailer = _tailers.StartFile(id, fullPath, parser);
                 tab = new FileTabState(id, fullPath, buffer, parser, tailer)
                 {
@@ -1562,6 +1565,9 @@ public sealed class AppState : IAsyncDisposable
                 );
         }
     }
+
+    private static TimeZoneInfo NaiveZone(AppTimeZoneMode mode) =>
+        mode == AppTimeZoneMode.Local ? TimeZoneInfo.Local : TimeZoneInfo.Utc;
 
     private DateTimeOffset Now() =>
         _settings.TimeZoneMode == AppTimeZoneMode.Local

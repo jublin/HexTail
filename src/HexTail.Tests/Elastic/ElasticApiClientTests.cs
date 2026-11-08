@@ -420,6 +420,41 @@ public sealed class ElasticApiClientTests
         Assert.Equal("warn hello", hit.Line.Raw);
         Assert.Equal("api", hit.Line.ParsedFields!["service.name"]);
         Assert.Equal("hello", hit.Line.ParsedFields["message"]);
+        Assert.Equal(hit.Timestamp, hit.Line.Timestamp);
+        Assert.False(hit.Line.TimestampInherited);
+    }
+
+    [Fact]
+    public async Task SearchAsync_StampsEachLineWithItsHitTimestamp()
+    {
+        var handler = new RecordingHttpMessageHandler(_ => new HttpResponseMessage(
+            HttpStatusCode.OK
+        )
+        {
+            Content = new StringContent(PreviewResponse, Encoding.UTF8, "application/json"),
+        });
+        var client = new ElasticApiClient(new HttpClient(handler));
+        var request = new ElasticSearchRequest(
+            "logs-*",
+            "@timestamp",
+            DateTimeOffset.Parse("2026-08-25T12:00:00Z"),
+            DateTimeOffset.Parse("2026-08-25T12:05:00Z"),
+            "service.name",
+            "api",
+            ["message"]
+        );
+
+        var page = await client.SearchAsync(
+            CountPreviewConnection(),
+            null,
+            "pit-1",
+            request,
+            TestContext.Current.CancellationToken
+        );
+
+        var hit = Assert.Single(page.Hits);
+        Assert.Equal(DateTimeOffset.Parse("2026-08-25T12:00:00Z"), hit.Line.Timestamp);
+        Assert.Equal(hit.Timestamp, hit.Line.Timestamp);
     }
 
     [Theory]

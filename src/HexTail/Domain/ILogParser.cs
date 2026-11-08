@@ -33,8 +33,9 @@ public sealed class JsonlParser : ILogParser
             Flatten(document.RootElement, null, fields);
             return new Line(rawText, fields);
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is JsonException or ArgumentException)
         {
+            // ArgumentException: text that is not valid UTF-16 (lone surrogates) cannot be encoded.
             return new Line(rawText);
         }
     }
