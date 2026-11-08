@@ -37,7 +37,11 @@ internal sealed class LogViewViewModel : ReactiveObject
         Search = search;
         SelectLineCommand = ReactiveCommand.Create<Line>(line => _file.SelectLine(line));
         JumpToLatestCommand = ReactiveCommand.Create(JumpToLatest, owner.Scheduler);
+        ColumnHeader = new ColumnHeaderViewModel(this);
     }
+
+    /// <summary>The header above the rows: column titles, resize thumbs and the Columns menu.</summary>
+    public ColumnHeaderViewModel ColumnHeader { get; }
 
     public Search? Search { get; }
     public MainWindowViewModel Workspace => _owner;
@@ -71,8 +75,31 @@ internal sealed class LogViewViewModel : ReactiveObject
     /// <summary>The column layout the rows render with; refreshed by <see cref="Sync"/>.</summary>
     internal ColumnLayout Layout => _layout ??= ComputeLayout();
 
-    private ColumnLayout ComputeLayout() =>
-        File.EffectiveColumns(ElasticOutputFields(Settings, File.Source));
+    internal ColumnLayout ComputeLayout() =>
+        File.EffectiveColumns(ElasticOutputFields(Settings, File.Source), LogFontSize);
+
+    /// <summary>The columns a source starts with (and "Reset columns" returns to), at the current font size.</summary>
+    internal ColumnLayout DefaultLayout() =>
+        ColumnLayout.DefaultFor(
+            File.Source,
+            ElasticOutputFields(Settings, File.Source),
+            LogFontSize
+        );
+
+    /// <summary>The row text size in pixels; the default column widths scale with it.</summary>
+    internal double LogFontSize => LogLineViewModel.FontSizeFor(Settings.LogFontSize);
+
+    /// <summary>
+    /// Re-reads the layout and re-renders the realized rows, without touching the row list. A column
+    /// drag calls this at most once per frame.
+    /// </summary>
+    internal void RefreshLayout()
+    {
+        _lastColumnsVersion = File.ColumnsVersion;
+        _layout = ComputeLayout();
+        InvalidateRows(Lines);
+        ColumnHeader.Sync();
+    }
 
     private static IReadOnlyList<string>? ElasticOutputFields(
         AppSettings settings,
@@ -253,6 +280,7 @@ internal sealed class LogViewViewModel : ReactiveObject
         {
             InvalidateRows(Lines);
         }
+        ColumnHeader.Sync();
         var lines = LinesFor();
         var frozen = _owner.IsPaused && Lines.Count > 0;
         if (!frozen)

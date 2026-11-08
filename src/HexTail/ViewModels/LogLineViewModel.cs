@@ -63,18 +63,22 @@ internal sealed class LogLineViewModel : ReactiveObject
     private DateTimeOffset? _previousTimestamp;
     private const int LongCellText = 80;
 
+    /// <summary>The log text size in pixels for a font-size setting.</summary>
+    internal static double FontSizeFor(LogFontSize size) =>
+        size switch
+        {
+            LogFontSize.Small => 11,
+            LogFontSize.Large => 14,
+            LogFontSize.ExtraLarge => 17,
+            _ => ColumnLayout.DefaultFontSize,
+        };
+
     internal void Refresh() => Refresh(notify: true);
 
     private void Refresh(bool notify)
     {
         var settings = _owner.Settings;
-        FontSize = settings.LogFontSize switch
-        {
-            LogFontSize.Small => 11,
-            LogFontSize.Large => 14,
-            LogFontSize.ExtraLarge => 17,
-            _ => 13,
-        };
+        FontSize = FontSizeFor(settings.LogFontSize);
         RowPadding = settings.Density switch
         {
             UiDensity.Compact => new Thickness(12, 0.6),
@@ -181,7 +185,9 @@ internal sealed class LogLineViewModel : ReactiveObject
         var columns = layout.Columns;
         var searches = _file.Model.Searches;
         var zone =
-            settings.TimeZoneMode == AppTimeZoneMode.Utc ? TimeZoneInfo.Utc : TimeZoneInfo.Local;
+            settings.TimeZoneMode == AppTimeZoneMode.Utc
+                ? TimeZoneInfo.Utc
+                : _owner.Workspace.LocalZone;
         var cells = new LogCellViewModel[columns.Count];
         // MessageField.Pick scans the candidate names per field, so run it at most once per render.
         string? message = null;

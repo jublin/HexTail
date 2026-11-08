@@ -140,8 +140,10 @@ public sealed class FileTabState : IAsyncDisposable
     public int ColumnsVersion { get; private set; }
 
     /// <summary>The layout to render: the user's, or the defaults (Elastic sources add the view's output fields).</summary>
-    public ColumnLayout EffectiveColumns(IReadOnlyList<string>? elasticOutputFields) =>
-        Columns ?? ColumnLayout.DefaultFor(Source, elasticOutputFields);
+    public ColumnLayout EffectiveColumns(
+        IReadOnlyList<string>? elasticOutputFields,
+        double fontSize = ColumnLayout.DefaultFontSize
+    ) => Columns ?? ColumnLayout.DefaultFor(Source, elasticOutputFields, fontSize);
 
     /// <summary>True when lines carry parsed fields: JSONL and logfmt files, and every Elastic source.</summary>
     public bool IsStructured =>

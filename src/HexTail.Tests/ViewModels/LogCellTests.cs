@@ -470,12 +470,18 @@ public sealed class LogCellTests
         var (workspace, state, file, path) = await OpenAsync(".jsonl");
         try
         {
+            // An explicit +05:00 "local" zone makes the two modes differ whatever the machine's own zone is.
+            workspace.LocalZone = TimeZoneInfo.CreateCustomTimeZone(
+                "t+5",
+                TimeSpan.FromHours(5),
+                "t+5",
+                "t+5"
+            );
             var stamp = new DateTimeOffset(2020, 6, 1, 12, 0, 0, TimeSpan.Zero);
             file.Model.Buffer.Append([Json("{\"msg\":\"a\"}", stamp)]);
             var row = Row(file);
             Assert.Equal("06-01 12:00:00.000", row.Cells[0].Text);
 
-            var local = TimeZoneInfo.ConvertTime(stamp, TimeZoneInfo.Local);
             await state.UpdateSettingsAsync(
                 state.Settings with
                 {
@@ -484,13 +490,104 @@ public sealed class LogCellTests
                 TestContext.Current.CancellationToken
             );
             file.SyncViews();
-            Assert.Equal(
-                local.ToString(
-                    "MM-dd HH:mm:ss.fff",
-                    System.Globalization.CultureInfo.InvariantCulture
-                ),
-                row.Cells[0].Text
+            Assert.Equal("06-01 17:00:00.000", row.Cells[0].Text);
+
+            await state.UpdateSettingsAsync(
+                state.Settings with
+                {
+                    TimeZoneMode = AppTimeZoneMode.Utc,
+                },
+                TestContext.Current.CancellationToken
             );
+            file.SyncViews();
+            Assert.Equal("06-01 12:00:00.000", row.Cells[0].Text);
+        }
+        finally
+        {
+            await CleanupAsync(workspace, state, path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task RelativeMode_AppendedRowShowsTheDeltaFromTheRowBeforeIt()
+    {
+        var (workspace, state, file, path) = await OpenAsync(".jsonl");
+        try
+        {
+            await state.SetColumnLayoutAsync(
+                file.Model,
+                ColumnLayout.DefaultFor(file.Model.Source, null) with
+                {
+                    TimeDisplay = TimeDisplay.Relative,
+                },
+                TestContext.Current.CancellationToken
+            );
+            var t0 = new DateTimeOffset(2026, 3, 4, 5, 6, 7, 0, TimeSpan.Zero);
+            file.Model.Buffer.Append([
+                Json("{\"msg\":\"a\"}", t0),
+                Json("{\"msg\":\"b\"}", t0.AddMilliseconds(250)),
+            ]);
+            file.SyncViews();
+            var rows = file.Views[0].Lines;
+            Assert.Equal(2, rows.Count);
+
+            file.Model.Buffer.Append([Json("{\"msg\":\"c\"}", t0.AddMilliseconds(250 + 3_400))]);
+            file.SyncViews();
+
+            Assert.Equal(3, rows.Count);
+            rows[2].SetVisible(true);
+            Assert.Equal("+3.400 s", rows[2].Cells[0].Text);
+            Assert.Equal(t0.AddMilliseconds(250), rows[2].PreviousTimestamp);
+        }
+        finally
+        {
+            await CleanupAsync(workspace, state, path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task RelativeMode_AfterAHeadRollover_TheNewFirstRowShowsAbsoluteTime()
+    {
+        var (workspace, state, file, path) = await OpenAsync(
+            ".jsonl",
+            new AppSettings { TimeZoneMode = AppTimeZoneMode.Utc, MaxLines = 1_000 }
+        );
+        try
+        {
+            await state.SetColumnLayoutAsync(
+                file.Model,
+                ColumnLayout.DefaultFor(file.Model.Source, null) with
+                {
+                    TimeDisplay = TimeDisplay.Relative,
+                },
+                TestContext.Current.CancellationToken
+            );
+            var t0 = new DateTimeOffset(2026, 3, 4, 5, 6, 0, 0, TimeSpan.Zero);
+            file.Model.Buffer.Append(
+                Enumerable.Range(0, 1_000).Select(i => Json("{\"msg\":\"x\"}", t0.AddSeconds(i)))
+            );
+            file.SyncViews();
+            var rows = file.Views[0].Lines;
+            Assert.Equal(1_000, rows.Count);
+            rows[1].SetVisible(true);
+            Assert.Equal("+1.000 s", rows[1].Cells[0].Text);
+
+            // Five lines roll out of the head; the old row 5 becomes the first row and loses its predecessor.
+            file.Model.Buffer.Append(
+                Enumerable.Range(1_000, 5).Select(i => Json("{\"msg\":\"y\"}", t0.AddSeconds(i)))
+            );
+            file.SyncViews();
+
+            Assert.Equal(1_000, rows.Count);
+            Assert.Equal(t0.AddSeconds(5), rows[0].Line.Timestamp);
+            Assert.Null(rows[0].PreviousTimestamp);
+            rows[0].SetVisible(true);
+            Assert.Equal("03-04 05:06:05.000", rows[0].Cells[0].Text);
+            rows[1].SetVisible(true);
+            Assert.Equal("+1.000 s", rows[1].Cells[0].Text);
+            rows[^1].SetVisible(true);
+            Assert.Equal("+1.000 s", rows[^1].Cells[0].Text);
+            Assert.Equal(t0.AddSeconds(1_003), rows[^2].Line.Timestamp);
         }
         finally
         {

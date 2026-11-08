@@ -101,6 +101,33 @@ public sealed class ColumnLayoutTests
     public void DefaultWidth_PerKey(string key, double expected) =>
         Assert.Equal(expected, ColumnLayout.DefaultWidth(key));
 
+    [Theory]
+    [InlineData(11, 128)]
+    [InlineData(13, 150)]
+    [InlineData(14, 161)]
+    [InlineData(17, 194)]
+    public void DefaultWidth_OfTheTimeColumn_GrowsWithTheFontSize(double fontSize, double expected)
+    {
+        Assert.Equal(expected, ColumnLayout.DefaultWidth("@time", fontSize));
+        Assert.Equal(
+            expected,
+            ColumnLayout.DefaultFor(FileSource, null, fontSize).Columns[0].Width
+        );
+        Assert.Equal(
+            expected,
+            ColumnLayout
+                .DefaultFor(FileSource, null, fontSize)
+                .WithoutColumn("@time")
+                .WithColumn("@time", fontSize)
+                .Columns[^1]
+                .Width
+        );
+        // 18 glyphs of the widest common monospace fonts (0.605 em) plus the 8 px gutter fit.
+        Assert.True(ColumnLayout.DefaultWidth("@time", fontSize) >= 18 * 0.605 * fontSize + 8);
+        Assert.Equal(48, ColumnLayout.DefaultWidth("@level", fontSize));
+        Assert.Equal(400, ColumnLayout.DefaultWidth("@message", fontSize));
+    }
+
     [Fact]
     public void FromPersisted_DropsBlankAndDuplicateKeysAndClampsWidths()
     {

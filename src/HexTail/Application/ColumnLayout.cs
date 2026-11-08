@@ -22,13 +22,22 @@ public sealed record ColumnLayout(
     public const double MinWidth = 40;
     public const double MaxWidth = 1200;
 
+    /// <summary>The log font size (Medium) the fixed default widths were designed for.</summary>
+    public const double DefaultFontSize = 13;
+
+    // A monospace glyph is about 0.6 em wide; the widest common log fonts reach 0.605 em.
+    private const double MonospaceEm = 0.605;
+    private const int TimeTextChars = 18; // "MM-dd HH:mm:ss.fff"
+    private const double CellGutter = 8;
+
     /// <summary>
     /// Files get time, level and message; Elastic sources get time, level and then the view's output
     /// fields in order (message first when the view lists no fields).
     /// </summary>
     public static ColumnLayout DefaultFor(
         LogSourceDescriptor source,
-        IReadOnlyList<string>? elasticOutputFields
+        IReadOnlyList<string>? elasticOutputFields,
+        double fontSize = DefaultFontSize
     )
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -44,27 +53,34 @@ public sealed record ColumnLayout(
         else
             keys.Add(Message);
         return new ColumnLayout(
-            [.. keys.Select(key => new ColumnSpec(key, DefaultWidth(key)))],
+            [.. keys.Select(key => new ColumnSpec(key, DefaultWidth(key, fontSize)))],
             ComposedRows: false,
             TimeDisplay.Absolute
         );
     }
 
-    public static double DefaultWidth(string key) =>
+    /// <summary>
+    /// The width a column starts with, gutter included. The time column grows with the log font size
+    /// so its <c>MM-dd HH:mm:ss.fff</c> text never gets cut off (150 px at the default size).
+    /// </summary>
+    public static double DefaultWidth(string key, double fontSize = DefaultFontSize) =>
         key switch
         {
-            Time => 150,
+            Time => Math.Ceiling(TimeTextChars * MonospaceEm * Math.Max(1, fontSize)) + CellGutter,
             Level => 48,
             Message => 400,
             _ => 140,
         };
 
     /// <summary>Appends a column with its default width; a key that is already present changes nothing.</summary>
-    public ColumnLayout WithColumn(string key)
+    public ColumnLayout WithColumn(string key, double fontSize = DefaultFontSize)
     {
         if (string.IsNullOrWhiteSpace(key) || Columns.Any(column => column.Key == key))
             return this;
-        return this with { Columns = [.. Columns, new ColumnSpec(key, DefaultWidth(key))] };
+        return this with
+        {
+            Columns = [.. Columns, new ColumnSpec(key, DefaultWidth(key, fontSize))],
+        };
     }
 
     /// <summary>Removes a column, but never the last one.</summary>

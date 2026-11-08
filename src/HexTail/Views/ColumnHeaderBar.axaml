@@ -1,0 +1,149 @@
+<UserControl
+  xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="using:HexTail.ViewModels"
+  xmlns:ic="https://github.com/projektanker/icons.avalonia"
+  x:Class="HexTail.Views.ColumnHeaderBar"
+  x:DataType="vm:ColumnHeaderViewModel"
+  IsVisible="{Binding IsBarVisible}"
+>
+  <UserControl.Styles>
+    <Style Selector="Thumb.column-thumb">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Thumb.column-thumb:pointerover">
+      <Setter Property="Background" Value="{DynamicResource BorderStrongBrush}" />
+    </Style>
+  </UserControl.Styles>
+  <Border
+    Background="{DynamicResource RaisedBrush}"
+    BorderBrush="{DynamicResource BorderBrush}"
+    BorderThickness="0,0,0,1"
+    Padding="16,0,4,0"
+  >
+    <Grid ColumnDefinitions="*,Auto,Auto" MinHeight="26">
+      <!-- Same left offset as a row: the row's padding is 12 px, the list item adds 4 px, and the bookmark slot is 24 px. -->
+      <ItemsControl
+        x:Name="ColumnTitles"
+        Margin="24,0,0,0"
+        VerticalAlignment="Center"
+        ItemsSource="{Binding Columns}"
+        IsVisible="{Binding IsVisible}"
+        FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+      >
+        <ItemsControl.Styles>
+          <Style Selector="ContentPresenter">
+            <Setter Property="DockPanel.Dock" Value="Left" />
+          </Style>
+        </ItemsControl.Styles>
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <DockPanel LastChildFill="True" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:ColumnHeaderItemViewModel">
+            <Grid Width="{Binding RenderWidth}">
+              <TextBlock
+                Classes="column-title sidebar-heading"
+                Text="{Binding Title}"
+                Padding="0,0,8,0"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap"
+              />
+              <!-- Sits in the 8 px gutter on the column's right edge, so it adds no width of its own. -->
+              <Thumb
+                Classes="column-thumb"
+                Width="4"
+                HorizontalAlignment="Right"
+                Cursor="SizeWestEast"
+                IsVisible="{Binding !IsLast}"
+                AutomationProperties.Name="{Binding ResizeName}"
+              />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <TextBlock
+        x:Name="ColumnsError"
+        Grid.Column="1"
+        Classes="error"
+        Margin="8,0"
+        MaxWidth="360"
+        VerticalAlignment="Center"
+        FontSize="12"
+        TextTrimming="CharacterEllipsis"
+        TextWrapping="NoWrap"
+        Text="{Binding Error}"
+        IsVisible="{Binding HasError}"
+        ToolTip.Tip="{Binding Error}"
+        AutomationProperties.Name="{Binding Error, StringFormat='Columns could not be saved: {0}'}"
+      />
+      <Button
+        x:Name="ColumnsMenuButton"
+        Grid.Column="2"
+        Classes="icon"
+        Width="28"
+        Height="26"
+        FontSize="16"
+        VerticalAlignment="Center"
+        ToolTip.Tip="Choose columns, composed rows and the time format"
+        AutomationProperties.Name="Columns"
+      >
+        <ic:Icon Value="mdi-table-column" />
+        <Button.Flyout>
+          <Flyout Placement="BottomEdgeAlignedRight" Opened="OnMenuOpened" Closed="OnMenuClosed">
+            <StackPanel x:Name="ColumnsMenu" Width="240" Spacing="6">
+              <TextBlock Classes="sidebar-heading" Text="COLUMNS" />
+              <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl x:Name="ColumnChoices" ItemsSource="{Binding Choices}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ColumnChoiceViewModel">
+                      <CheckBox
+                        Classes="column-choice"
+                        Content="{Binding Title}"
+                        IsChecked="{Binding IsOn, Mode=TwoWay}"
+                        IsEnabled="{Binding IsEnabled}"
+                        AutomationProperties.Name="{Binding Title}"
+                      />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+              <Separator />
+              <CheckBox
+                x:Name="ComposedRowsToggle"
+                Content="Composed row"
+                IsChecked="{Binding ComposedRows, Mode=TwoWay}"
+                AutomationProperties.Name="Composed row"
+              />
+              <TextBlock Classes="sidebar-heading" Text="TIME" />
+              <RadioButton
+                x:Name="AbsoluteTimeRadio"
+                GroupName="TimeDisplay"
+                Content="Absolute"
+                IsChecked="{Binding IsAbsoluteTime, Mode=TwoWay}"
+                AutomationProperties.Name="Time: Absolute"
+              />
+              <RadioButton
+                x:Name="RelativeTimeRadio"
+                GroupName="TimeDisplay"
+                Content="Relative"
+                IsChecked="{Binding IsRelativeTime, Mode=TwoWay}"
+                AutomationProperties.Name="Time: Relative"
+              />
+              <Separator />
+              <Button
+                x:Name="ResetColumnsButton"
+                Content="Reset columns"
+                HorizontalAlignment="Stretch"
+                Command="{Binding ResetCommand}"
+                AutomationProperties.Name="Reset columns"
+              />
+            </StackPanel>
+          </Flyout>
+        </Button.Flyout>
+      </Button>
+    </Grid>
+  </Border>
+</UserControl>

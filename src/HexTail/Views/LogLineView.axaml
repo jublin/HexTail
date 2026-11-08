@@ -39,12 +39,15 @@
     DoubleTapped="OnDoubleTapped"
   >
     <Grid ColumnDefinitions="Auto,*">
+      <!-- Column rows reserve a fixed 24 px slot, so the cells line up with the column header whether or not the row is bookmarked. -->
+      <Border x:Name="BookmarkSlot" Width="24" IsVisible="{Binding UsesColumns}" />
       <ic:Icon
         x:Name="BookmarkGlyph"
         Value="mdi-bookmark"
         Foreground="{DynamicResource AccentBrush}"
         IsVisible="{Binding IsBookmarked}"
         VerticalAlignment="Center"
+        HorizontalAlignment="Left"
         Margin="0,0,6,0"
       />
       <views:HighlightedTextBlock
