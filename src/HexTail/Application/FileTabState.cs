@@ -123,6 +123,60 @@ public sealed class FileTabState : IAsyncDisposable
         return Buffer.RemoveSearch(search);
     }
 
+    private ColumnLayout? _columns;
+
+    /// <summary>The user's column layout for this source; null means the defaults for its kind.</summary>
+    public ColumnLayout? Columns
+    {
+        get => _columns;
+        set
+        {
+            _columns = value;
+            ColumnsVersion++;
+        }
+    }
+
+    /// <summary>Bumped on every change of <see cref="Columns"/>, so views re-render their rows.</summary>
+    public int ColumnsVersion { get; private set; }
+
+    /// <summary>The layout to render: the user's, or the defaults (Elastic sources add the view's output fields).</summary>
+    public ColumnLayout EffectiveColumns(IReadOnlyList<string>? elasticOutputFields) =>
+        Columns ?? ColumnLayout.DefaultFor(Source, elasticOutputFields);
+
+    /// <summary>True when lines carry parsed fields: JSONL and logfmt files, and every Elastic source.</summary>
+    public bool IsStructured =>
+        Source.Kind == LogSourceKind.Elastic
+        || (Parser is TimestampingParser wrapped ? wrapped.Inner : Parser)
+            is JsonlParser
+                or LogfmtParser;
+
+    /// <summary>
+    /// The parsed-field names seen in the last <paramref name="sample"/> lines, sorted, at most
+    /// <paramref name="cap"/> of them. Feeds the "add column" picker.
+    /// </summary>
+    public IReadOnlyList<string> KnownFields(int sample = 500, int cap = 100)
+    {
+        HashSet<string> keys = new(StringComparer.Ordinal);
+        var lines = Buffer.Lines;
+        var end = lines.Count;
+        for (var index = end - 1; index >= Math.Max(0, end - sample); index--)
+        {
+            Line line;
+            try
+            {
+                line = lines[index];
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                continue; // the buffer shrank under us (e.g. a connection replacement cleared it)
+            }
+            if (line.ParsedFields is { Count: > 0 } fields)
+                foreach (var key in fields.Keys)
+                    keys.Add(key);
+        }
+        return [.. keys.Order(StringComparer.Ordinal).Take(cap)];
+    }
+
     /// <summary>Source-scope rules for this open source.</summary>
     public IReadOnlyList<ViewRule> Rules { get; private set; } = [];
 

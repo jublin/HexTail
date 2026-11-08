@@ -269,7 +269,7 @@ public static class TimestampDetector
     // ---- ISO-8601 -----------------------------------------------------------------------
 
     /// <summary>
-    /// <c>[</c>? yyyy-MM-dd (<c>T</c>|space) HH:mm:ss (<c>.</c>|<c>,</c> fraction)? (space? <c>Z</c>|<c>UTC</c>|±HH[:]?[mm])?
+    /// <c>[</c>? yyyy-MM-dd (<c>T</c>|space) HH:mm:ss (<c>.</c>|<c>,</c> fraction)? (space? <c>Z</c>|<c>UTC</c>|±HH:MM|±HHMM, or ±HH glued to the time)?
     /// </summary>
     private static bool TryParseIso(
         ReadOnlySpan<char> s,
@@ -348,15 +348,21 @@ public static class TimestampDetector
             if (TryDigits(s, ref r, 2, out var offsetHours))
             {
                 var offsetMinutes = 0;
+                var hasMinutes = false;
                 var afterHours = r;
                 if (r < s.Length && s[r] == ':')
                     r++;
                 if (TryDigits(s, ref r, 2, out var parsedMinutes) && parsedMinutes < 60)
+                {
                     offsetMinutes = parsedMinutes;
+                    hasMinutes = true;
+                }
                 else
                     r = afterHours;
+                // After a space a bare "+12" is more likely text ("+12 files changed") than an offset.
                 if (
-                    !(r < s.Length && IsAsciiDigit(s[r]))
+                    (hasMinutes || q == p)
+                    && !(r < s.Length && IsAsciiDigit(s[r]))
                     && (offsetHours < 14 || (offsetHours == 14 && offsetMinutes == 0))
                 )
                 {

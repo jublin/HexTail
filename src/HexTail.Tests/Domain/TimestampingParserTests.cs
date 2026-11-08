@@ -172,6 +172,8 @@ public sealed class TimestampingParserTests
     public async Task ParallelParse_DoesNotCorruptState()
     {
         var parser = Plain();
+        // The strategy is fixed by a first hit; every continuation parsed afterwards must inherit.
+        parser.Parse("2026-11-07T09:00:00Z seed");
         var results = new System.Collections.Concurrent.ConcurrentBag<Line>();
 
         await Task.WhenAll(
@@ -184,7 +186,7 @@ public sealed class TimestampingParserTests
                         {
                             var raw =
                                 i % 3 == 0
-                                    ? $"2026-11-07T10:{i % 60:D2}:00Z w{worker} {i}"
+                                    ? $"2026-11-07T10:{i % 60:D2}:{worker:D2}Z w{worker} {i}"
                                     : $"continuation {worker} {i}";
                             results.Add(parser.Parse(raw));
                         }
@@ -193,15 +195,19 @@ public sealed class TimestampingParserTests
         );
 
         Assert.Equal(8000, results.Count);
-        Assert.All(results, line => Assert.NotNull(line));
         Assert.Equal(TimestampSource.IsoPrefix, parser.Strategy!.Value.Source);
+        var own = results.Where(line => !line.TimestampInherited).ToList();
+        var continuations = results.Where(line => line.TimestampInherited).ToList();
+        Assert.Equal(8000 - own.Count, continuations.Count);
+        Assert.Equal(4 * 667, own.Count);
         Assert.All(
-            results.Where(line => line.Timestamp is not null && !line.TimestampInherited),
+            own,
             line =>
-                Assert.Equal(
-                    DateTimeOffset.Parse("2026-11-07T10:00:00Z").Date,
-                    line.Timestamp!.Value.Date
-                )
+            {
+                Assert.StartsWith("2026-11-07T10:", line.Raw);
+                Assert.Equal(DateTimeOffset.Parse(line.Raw[..20]), line.Timestamp);
+            }
         );
+        Assert.All(continuations, line => Assert.NotNull(line.Timestamp));
     }
 }

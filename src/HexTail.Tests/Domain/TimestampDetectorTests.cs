@@ -154,13 +154,42 @@ public sealed class TimestampDetectorTests
         Assert.Equal(DateTimeOffset.Parse("2026-11-07T05:11:12Z"), ts.ToUniversalTime());
     }
 
+    // US-Eastern-like rules built in code, so the DST tests never depend on the OS zone database.
+    private static TimeZoneInfo EasternLike()
+    {
+        var rule = TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule(
+            DateTime.MinValue.Date,
+            DateTime.MaxValue.Date,
+            TimeSpan.FromHours(1),
+            TimeZoneInfo.TransitionTime.CreateFloatingDateRule(
+                new DateTime(1, 1, 1, 2, 0, 0),
+                month: 3,
+                week: 2,
+                dayOfWeek: DayOfWeek.Sunday
+            ),
+            TimeZoneInfo.TransitionTime.CreateFloatingDateRule(
+                new DateTime(1, 1, 1, 2, 0, 0),
+                month: 11,
+                week: 1,
+                dayOfWeek: DayOfWeek.Sunday
+            )
+        );
+        return TimeZoneInfo.CreateCustomTimeZone(
+            "eastern-like",
+            TimeSpan.FromHours(-5),
+            "eastern-like",
+            "EST",
+            "EDT",
+            [rule]
+        );
+    }
+
     [Fact]
     public void IsoPrefix_NaiveLocalTimeInDstGap_DoesNotThrowAndUsesStandardOffset()
     {
-        // 2026-03-08 02:30 does not exist in US Eastern (clocks jump 02:00 -> 03:00).
-        var zone = FindZone("America/New_York", "Eastern Standard Time");
-        if (zone is null)
-            return;
+        // 2026-03-08 02:30 does not exist (clocks jump 02:00 -> 03:00).
+        var zone = EasternLike();
+        Assert.True(zone.IsInvalidTime(new DateTime(2026, 3, 8, 2, 30, 0)));
 
         Assert.True(Detect(new Line("2026-03-08 02:30:00 x"), out _, out var ts, zone: zone));
 
@@ -170,30 +199,57 @@ public sealed class TimestampDetectorTests
     [Fact]
     public void IsoPrefix_NaiveLocalTimeInDstOverlap_PicksTheStandardInterpretation()
     {
-        var zone = FindZone("America/New_York", "Eastern Standard Time");
-        if (zone is null)
-            return;
+        // 2026-11-01 01:30 happens twice (EDT then EST); the standard offset (EST, 06:30Z) wins.
+        var zone = EasternLike();
+        Assert.True(zone.IsAmbiguousTime(new DateTime(2026, 11, 1, 1, 30, 0)));
 
         Assert.True(Detect(new Line("2026-11-01 01:30:00 x"), out _, out var ts, zone: zone));
 
-        // Ambiguous (EDT 05:30Z or EST 06:30Z); either is acceptable but it must be one of them.
-        var utc = ts.ToUniversalTime();
-        Assert.Contains(
-            utc,
-            new[]
-            {
-                DateTimeOffset.Parse("2026-11-01T05:30:00Z"),
-                DateTimeOffset.Parse("2026-11-01T06:30:00Z"),
-            }
-        );
+        Assert.Equal(DateTimeOffset.Parse("2026-11-01T06:30:00Z"), ts.ToUniversalTime());
+        Assert.Equal(TimeSpan.FromHours(-5), ts.Offset);
     }
 
-    private static TimeZoneInfo? FindZone(params string[] ids)
+    [Theory]
+    [InlineData("2026-11-07 10:11:12 +12 files changed")]
+    [InlineData("2026-11-07 10:11:12 -05 retries")]
+    [InlineData("2026-11-07 10:11:12 +12")]
+    public void IsoPrefix_BareHourOffsetAfterSpace_IsNotAnOffset(string raw)
     {
-        foreach (var id in ids)
-            if (TimeZoneInfo.TryFindSystemTimeZoneById(id, out var zone))
-                return zone;
-        return null;
+        Assert.True(Detect(new Line(raw), out _, out var ts));
+
+        Assert.Equal(Expected, ts);
+        Assert.Equal(TimeSpan.Zero, ts.Offset);
+    }
+
+    [Fact]
+    public void IsoPrefix_BareHourOffsetAfterSpace_UsesTheNaiveZone()
+    {
+        var plusFive = TimeZoneInfo.CreateCustomTimeZone("p5", TimeSpan.FromHours(5), "p5", "p5");
+
+        Assert.True(
+            Detect(
+                new Line("2026-11-07 10:11:12 +12 files changed"),
+                out _,
+                out var ts,
+                zone: plusFive
+            )
+        );
+
+        Assert.Equal(DateTimeOffset.Parse("2026-11-07T05:11:12Z"), ts.ToUniversalTime());
+    }
+
+    [Theory]
+    [InlineData("2026-11-07T22:11:12+12 x", "2026-11-07T10:11:12Z")]
+    [InlineData("2026-11-07 22:11:12+12 x", "2026-11-07T10:11:12Z")]
+    [InlineData("2026-11-07 22:11:12 +12:00 x", "2026-11-07T10:11:12Z")]
+    [InlineData("2026-11-07 22:11:12 +1200 x", "2026-11-07T10:11:12Z")]
+    [InlineData("2026-11-07 05:11:12 -05:00 x", "2026-11-07T10:11:12Z")]
+    public void IsoPrefix_OffsetGluedOrWithMinutes_IsStillAnOffset(string raw, string expected)
+    {
+        Assert.True(Detect(new Line(raw), out _, out var ts));
+
+        Assert.Equal(DateTimeOffset.Parse(expected), ts.ToUniversalTime());
+        Assert.NotEqual(TimeSpan.Zero, ts.Offset);
     }
 
     [Theory]

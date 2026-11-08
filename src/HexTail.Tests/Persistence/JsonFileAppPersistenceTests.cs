@@ -255,6 +255,108 @@ public sealed class JsonFileAppPersistenceTests
         Assert.Null(result);
     }
 
+    [Fact]
+    public void ColumnSettings_RoundTripForFileAndElasticTabs()
+    {
+        PersistedColumn[] columns =
+        [
+            new() { Key = "@time", Width = 120 },
+            new() { Key = "service", Width = 200 },
+        ];
+        var config = new AppConfig
+        {
+            OpenFiles =
+            [
+                new PersistedFileTab
+                {
+                    Path = "/tmp/a.log",
+                    Columns = [.. columns],
+                    ComposedRows = true,
+                    TimeDisplay = TimeDisplay.Relative,
+                },
+            ],
+            OpenElasticTabs =
+            [
+                new PersistedElasticTab
+                {
+                    SourceId = "s1",
+                    Columns = [.. columns],
+                    ComposedRows = true,
+                    TimeDisplay = TimeDisplay.Relative,
+                },
+            ],
+        };
+
+        var restored = AppConfigJson.Deserialize(AppConfigJson.Serialize(config));
+
+        foreach (
+            var (list, composed, display) in new[]
+            {
+                (
+                    restored.OpenFiles[0].Columns,
+                    restored.OpenFiles[0].ComposedRows,
+                    restored.OpenFiles[0].TimeDisplay
+                ),
+                (
+                    restored.OpenElasticTabs[0].Columns,
+                    restored.OpenElasticTabs[0].ComposedRows,
+                    restored.OpenElasticTabs[0].TimeDisplay
+                ),
+            }
+        )
+        {
+            Assert.NotNull(list);
+            Assert.Equal(["@time", "service"], list.Select(c => c.Key));
+            Assert.Equal([120d, 200d], list.Select(c => c.Width));
+            Assert.True(composed);
+            Assert.Equal(TimeDisplay.Relative, display);
+        }
+    }
+
+    [Fact]
+    public void OldSessionWithoutColumnSettings_LoadsWithNullColumns()
+    {
+        var config = AppConfigJson.Deserialize(
+            """
+            { "version": 2,
+              "openFiles": [{ "path": "/tmp/a.log" }],
+              "openElasticTabs": [{ "sourceId": "s1" }] }
+            """
+        );
+
+        Assert.Equal(2, config.Version);
+        var file = Assert.Single(config.OpenFiles);
+        Assert.Null(file.Columns);
+        Assert.False(file.ComposedRows);
+        Assert.Equal(TimeDisplay.Absolute, file.TimeDisplay);
+        var elastic = Assert.Single(config.OpenElasticTabs);
+        Assert.Null(elastic.Columns);
+        Assert.Equal(TimeDisplay.Absolute, elastic.TimeDisplay);
+    }
+
+    [Fact]
+    public void MalformedColumnSettings_DropOnlyTheBadValues()
+    {
+        var config = AppConfigJson.Deserialize(
+            """
+            { "version": 2,
+              "openFiles": [
+                { "path": "/tmp/a.log", "timeDisplay": "Sideways", "composedRows": "yes",
+                  "columns": [{ "key": "@time", "width": 90 }, 5, { "key": "x", "width": "wide" }, null] },
+                { "path": "/tmp/b.log", "columns": "oops", "timeDisplay": "Relative" }
+              ] }
+            """
+        );
+
+        var first = config.OpenFiles[0];
+        Assert.Equal(TimeDisplay.Absolute, first.TimeDisplay);
+        Assert.False(first.ComposedRows);
+        Assert.Equal("@time", Assert.Single(first.Columns!).Key);
+        var second = config.OpenFiles[1];
+        Assert.Null(second.Columns);
+        Assert.Equal(TimeDisplay.Relative, second.TimeDisplay);
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         public TempDirectory() =>

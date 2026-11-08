@@ -221,4 +221,19 @@ public class SearchTests
         );
         Assert.Empty(search.GetHighlights(buffer[1]));
     }
+
+    [Fact]
+    public void GetHighlights_ForTextMatchesTheLineOverload()
+    {
+        var search = new Search(
+            new CompiledQuery("err", MatchMode.Literal, false),
+            "#f00",
+            new FileBuffer()
+        );
+        const string text = "Err and ERR";
+
+        Assert.Equal(search.GetHighlights(new Line(text)), search.GetHighlights(text));
+        Assert.Equal(2, search.GetHighlights(text).Count);
+        Assert.Empty(search.GetHighlights("clean"));
+    }
 }
