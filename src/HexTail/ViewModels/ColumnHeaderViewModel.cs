@@ -199,6 +199,10 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
             _ => key,
         };
 
+    /// <summary>The Time, Level and Message pseudo-columns; any other key, <c>@timestamp</c> too, is a field.</summary>
+    private static bool IsPseudo(string key) =>
+        key is ColumnLayout.Time or ColumnLayout.Level or ColumnLayout.Message;
+
     private ColumnLayout CurrentLayout() => _owner.ComputeLayout();
 
     /// <summary>Re-reads the layout: titles, widths, menu state and visibility. Cheap when nothing changed.</summary>
@@ -245,6 +249,10 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
                 Columns[index].Update(specs[index].Width, index == specs.Count - 1);
             return;
         }
+        // Other columns now: a drag that was in progress belongs to a header that is gone.
+        _dragKey = null;
+        _dragBase = null;
+        _dragTotal = 0;
         Columns.Clear();
         for (var index = 0; index < specs.Count; index++)
             Columns.Add(
@@ -263,10 +271,10 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
             fields.AddRange(_owner.File.KnownFields());
         else
             fields.AddRange(
-                Choices.Select(choice => choice.Key).Where(key => !key.StartsWith('@')).ToList()
+                Choices.Select(choice => choice.Key).Where(key => !IsPseudo(key)).ToList()
             );
         foreach (var column in layout.Columns)
-            if (!column.Key.StartsWith('@') && !fields.Contains(column.Key))
+            if (!IsPseudo(column.Key) && !fields.Contains(column.Key))
                 fields.Add(column.Key);
         var keys = new List<string> { ColumnLayout.Time, ColumnLayout.Level, ColumnLayout.Message };
         keys.AddRange(fields.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
@@ -394,6 +402,16 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
         _dragBase = null;
         if (final is null)
             return;
+        var unchanged =
+            final.Columns.FirstOrDefault(column => column.Key == key)?.Width == _dragOrigin;
+        if (unchanged)
+        {
+            // Dragged back to where it started: nothing to save, only put the rows back in step.
+            _owner.File.Columns = start;
+            _renderPending = false;
+            _owner.RefreshLayout();
+            return;
+        }
         // The live layout was only in memory: restore the saved one, so a failed save rolls back to
         // it (no re-render can happen before SetColumnLayoutAsync has put the new layout in again).
         _owner.File.Columns = start;

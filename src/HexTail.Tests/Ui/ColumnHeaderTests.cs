@@ -607,4 +607,96 @@ public sealed class ColumnHeaderTests
         Assert.DoesNotContain("Toggle composed rows", titles);
         Assert.DoesNotContain("Reset columns", titles);
     }
+
+    private static Line[] AtFieldLines() =>
+        [
+            new(
+                "{\"@timestamp\":\"t\",\"@version\":\"1\",\"msg\":\"hello\"}",
+                new Dictionary<string, string>
+                {
+                    ["@timestamp"] = "t",
+                    ["@version"] = "1",
+                    ["msg"] = "hello",
+                }
+            ),
+        ];
+
+    [AvaloniaFact]
+    public async Task ColumnsMenu_ListsRealFieldsThatStartWithAnAtSign()
+    {
+        await using var h = await OpenAsync(".jsonl", AtFieldLines());
+        var flyout = h.OpenMenu();
+        Assert.Contains("@version", h.ChoiceBoxes(flyout).Select(box => (string)box.Content!));
+
+        // Closing the menu and changing the layout must not drop them from the list.
+        h.Model.SetMenuOpen(false);
+        await h.Workspace.State.SetColumnLayoutAsync(h.File.Model, h.Layout.WithColumn("msg"));
+        h.File.Views[0].RefreshLayout();
+
+        Assert.Contains(h.Model.Choices, choice => choice.Key == "@version");
+        Assert.Contains(h.Model.Choices, choice => choice.Key == "@timestamp");
+    }
+
+    [AvaloniaFact]
+    public async Task ADisplayedAtTimestampColumn_CanBeUnchecked()
+    {
+        // The field is no longer in the sampled lines, only in the saved layout.
+        await using var h = await OpenAsync(
+            ".jsonl",
+            [new Line("{\"msg\":\"x\"}", new Dictionary<string, string> { ["msg"] = "x" })]
+        );
+        await h.Workspace.State.SetColumnLayoutAsync(
+            h.File.Model,
+            h.Layout.WithColumn("@timestamp")
+        );
+        h.File.Views[0].RefreshLayout();
+
+        var flyout = h.OpenMenu();
+        var box = h.ChoiceBoxes(flyout).Single(b => (string)b.Content! == "@timestamp");
+        Assert.True(box.IsChecked);
+
+        box.IsChecked = false;
+
+        await UiWait.Until(() => h.Layout.Columns.All(column => column.Key != "@timestamp"));
+        Assert.Equal(["@time", "@level", "@message"], h.Layout.Columns.Select(c => c.Key));
+    }
+
+    [AvaloniaFact]
+    public async Task ADragThatEndsWhereItStarted_DoesNotSave()
+    {
+        await using var h = await OpenAsync(".jsonl");
+        await UiWait.Until(() => h.RowCells(0).Count == 3);
+        var saves = h.Persistence.SaveCount;
+        var thumb = h.Thumb("Time");
+
+        Drag(thumb, 30);
+        Drag(thumb, -30);
+        EndDrag(thumb, 0);
+
+        Assert.Equal(saves, h.Persistence.SaveCount);
+        Assert.Null(h.File.Model.Columns);
+        Assert.Equal(150, h.Model.Columns[0].Width);
+        await UiWait.Until(() => h.Cell(0, 0)?.Width == 150);
+        Assert.Null(h.Model.Error);
+    }
+
+    [AvaloniaFact]
+    public async Task AColumnChangeDuringADrag_ResetsTheDragState()
+    {
+        await using var h = await OpenAsync(".jsonl");
+        await h.Workspace.State.SetColumnLayoutAsync(h.File.Model, h.Layout.WithColumn("service"));
+        h.File.Views[0].RefreshLayout();
+        Assert.Equal(4, h.Model.Columns.Count);
+        h.Model.Resize("@level", 20);
+        Assert.Equal(68, h.Model.Columns[1].Width);
+
+        // The keys change under the unfinished drag.
+        await h.Model.ResetCommand.Execute();
+        Assert.Equal(3, h.Model.Columns.Count);
+        Assert.Equal(48, h.Model.Columns[1].Width);
+
+        // A new drag on the same column starts from where the column is now.
+        h.Model.Resize("@level", 10);
+        Assert.Equal(58, h.Model.Columns[1].Width);
+    }
 }

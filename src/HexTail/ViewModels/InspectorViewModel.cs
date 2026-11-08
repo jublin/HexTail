@@ -134,6 +134,50 @@ internal sealed class InspectorViewModel : ReactiveObject
         }
     }
 
+    /// <summary>True when the selected source has fields to show as columns (JSONL, logfmt, Elastic).</summary>
+    internal bool IsStructuredSource => _owner.SelectedFile?.Model.IsStructured ?? false;
+
+    /// <summary>True when <paramref name="key"/> is a column of the selected source's effective layout.</summary>
+    internal bool HasColumn(string key) =>
+        _owner.SelectedFile?.SelectedView.Layout.Columns.Any(column => column.Key == key) ?? false;
+
+    private void RefreshColumnStates()
+    {
+        foreach (var field in Fields)
+            field.RefreshColumnState();
+    }
+
+    /// <summary>Appends the field to the source's columns and turns columns on when rows were composed.</summary>
+    internal async Task AddColumnAsync(InspectorFieldViewModel field)
+    {
+        var tab = _owner.SelectedFile;
+        if (tab is null || !tab.Model.IsStructured)
+            return;
+        Error = null;
+        try
+        {
+            var view = tab.SelectedView;
+            var layout = view.ComputeLayout();
+            if (layout.Columns.Any(column => column.Key == field.Key))
+                return;
+            await _owner.State.SetColumnLayoutAsync(
+                tab.Model,
+                layout.WithColumn(field.Key, view.LogFontSize) with
+                {
+                    ComposedRows = false,
+                }
+            );
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Error = ex.Message;
+        }
+        finally
+        {
+            RefreshColumnStates();
+        }
+    }
+
     internal void SelectContextRow(InspectorContextRowViewModel row)
     {
         var file = _owner.SelectedFile?.Model;
@@ -165,6 +209,7 @@ internal sealed class InspectorViewModel : ReactiveObject
     internal void Sync()
     {
         this.RaisePropertyChanged(nameof(IsShown));
+        RefreshColumnStates();
         var file = _owner.SelectedFile?.Model;
         Line? line = null;
         var index = -1;
