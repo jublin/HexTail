@@ -29,6 +29,7 @@ internal static class ThemeManager
         ["SelectedTabBrush"] = "#28D7FE",
         ["SuccessBrush"] = "#39E58C",
         ["ErrorBrush"] = "#FF667A",
+        ["ErrorRowBrush"] = "#26FF667A",
         ["ErrorBackgroundBrush"] = "#2A1118",
         ["ErrorTextBrush"] = "#FFD5DC",
     };
@@ -54,6 +55,7 @@ internal static class ThemeManager
         ["SelectedTabBrush"] = "#CBA6F7",
         ["SuccessBrush"] = "#A6E3A1",
         ["ErrorBrush"] = "#F38BA8",
+        ["ErrorRowBrush"] = "#26F38BA8",
         ["ErrorBackgroundBrush"] = "#33202A",
         ["ErrorTextBrush"] = "#F5C2E7",
     };
@@ -79,6 +81,7 @@ internal static class ThemeManager
         ["SelectedTabBrush"] = "#14D760",
         ["SuccessBrush"] = "#1ED760",
         ["ErrorBrush"] = "#F3727F",
+        ["ErrorRowBrush"] = "#26F3727F",
         ["ErrorBackgroundBrush"] = "#2A171A",
         ["ErrorTextBrush"] = "#FFD7DC",
     };

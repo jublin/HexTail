@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Media;
@@ -34,6 +35,33 @@ internal sealed class LogLineViewModel : ReactiveObject
     public Thickness RowPadding { get; private set; }
     public IBrush Foreground { get; private set; } = Brushes.White;
     public IBrush Background { get; private set; } = Brushes.Transparent;
+
+    /// <summary>True when the row shows one cell per column (a structured source that is not set to composed rows).</summary>
+    public bool UsesColumns { get; private set; }
+    public IReadOnlyList<LogCellViewModel> Cells { get; private set; } = [];
+
+    /// <summary>True when the line's level is Error; the row gets a faint tint in both modes.</summary>
+    public bool IsErrorRow { get; private set; }
+
+    /// <summary>
+    /// Timestamp of the row shown just before this one, used for relative time and the tooltip delta.
+    /// Set by <see cref="LogViewViewModel"/> when it creates or re-links rows.
+    /// </summary>
+    internal DateTimeOffset? PreviousTimestamp
+    {
+        get => _previousTimestamp;
+        set
+        {
+            if (_previousTimestamp == value)
+                return;
+            _previousTimestamp = value;
+            if (UsesColumns)
+                InvalidateRender();
+        }
+    }
+
+    private DateTimeOffset? _previousTimestamp;
+    private const int LongCellText = 80;
 
     internal void Refresh() => Refresh(notify: true);
 
@@ -114,16 +142,156 @@ internal sealed class LogLineViewModel : ReactiveObject
             return;
 
         var settings = _owner.Settings;
+        var rules = _file.Model.EffectiveRules(settings);
+        var layout = _owner.Layout;
+        var usesColumns = _file.Model.IsStructured && !layout.ComposedRows;
         ParsedFieldsText = Line.ParsedFields is { Count: > 0 }
             ? string.Join("  ", Line.ParsedFields.Select(field => $"{field.Key}={field.Value}"))
             : string.Empty;
-        Spans = _file.HighlightSpans.Get(
-            Line,
-            _file.Model.Searches,
-            _file.Model.EffectiveRules(settings)
-        );
+        var level = LevelDetector.Detect(Line);
+        if (usesColumns)
+        {
+            Spans = [];
+            Cells = BuildCells(layout, settings, rules, level);
+        }
+        else
+        {
+            Spans = _file.HighlightSpans.Get(Line, _file.Model.Searches, rules);
+            Cells = [];
+        }
+        UsesColumns = usesColumns;
+        IsErrorRow = level == LogLevels.Error;
+        Background = ThemeManager.Brush(IsErrorRow ? "ErrorRowBrush" : "SurfaceBrush");
         this.RaisePropertyChanged(nameof(Spans));
+        this.RaisePropertyChanged(nameof(Cells));
+        this.RaisePropertyChanged(nameof(UsesColumns));
+        this.RaisePropertyChanged(nameof(IsErrorRow));
+        this.RaisePropertyChanged(nameof(Background));
         this.RaisePropertyChanged(nameof(ParsedFieldsText));
         _renderDirty = false;
+    }
+
+    private LogCellViewModel[] BuildCells(
+        ColumnLayout layout,
+        AppSettings settings,
+        RuleSet rules,
+        LogLevels level
+    )
+    {
+        var columns = layout.Columns;
+        var searches = _file.Model.Searches;
+        var zone =
+            settings.TimeZoneMode == AppTimeZoneMode.Utc ? TimeZoneInfo.Utc : TimeZoneInfo.Local;
+        var cells = new LogCellViewModel[columns.Count];
+        // MessageField.Pick scans the candidate names per field, so run it at most once per render.
+        string? message = null;
+        for (var index = 0; index < columns.Count; index++)
+        {
+            var column = columns[index];
+            string? toolTip = null;
+            var dimmed = false;
+            string? levelClass = null;
+            string text;
+            switch (column.Key)
+            {
+                case ColumnLayout.Time:
+                    dimmed = Line.TimestampInherited;
+                    text = TimeText(layout, zone, out toolTip);
+                    break;
+                case ColumnLayout.Level:
+                    text = LevelText(level, out levelClass);
+                    break;
+                case ColumnLayout.Message:
+                    text = message ??= MessageField.Pick(Line.ParsedFields) ?? Line.Raw;
+                    break;
+                default:
+                    text =
+                        Line.ParsedFields is not null
+                        && Line.ParsedFields.TryGetValue(column.Key, out var value)
+                            ? value
+                            : string.Empty;
+                    break;
+            }
+            if (toolTip is null && text.Length > LongCellText)
+                toolTip = text;
+            var spans =
+                text.Length == 0
+                    ? (IReadOnlyList<HighlightSpan>)[]
+                    : HighlightSpanCache.ComputeForText(text, searches, rules);
+            cells[index] = new LogCellViewModel(
+                column.Key,
+                text,
+                spans,
+                column.Width,
+                index == columns.Count - 1,
+                toolTip,
+                dimmed,
+                levelClass
+            );
+        }
+        return cells;
+    }
+
+    private string TimeText(ColumnLayout layout, TimeZoneInfo zone, out string? toolTip)
+    {
+        toolTip = null;
+        if (Line.Timestamp is not { } timestamp)
+            return string.Empty;
+        var converted = TimeZoneInfo.ConvertTime(timestamp, zone);
+        var iso = converted.ToString("yyyy-MM-dd'T'HH:mm:ss.fff", CultureInfo.InvariantCulture);
+        iso +=
+            converted.Offset == TimeSpan.Zero
+                ? "Z"
+                : converted.ToString("zzz", CultureInfo.InvariantCulture);
+        string? delta = _previousTimestamp is { } previous
+            ? FormatDelta(timestamp - previous)
+            : null;
+        toolTip = delta is null ? iso : $"{iso}\nsince previous row: {delta}";
+        return layout.TimeDisplay == TimeDisplay.Relative && delta is not null
+            ? delta
+            : FormatTime(timestamp, zone, DateTimeOffset.UtcNow);
+    }
+
+    private static string LevelText(LogLevels level, out string? levelClass)
+    {
+        (var text, levelClass) = level switch
+        {
+            LogLevels.Trace => ("TRC", "trc"),
+            LogLevels.Debug => ("DBG", "dbg"),
+            LogLevels.Info => ("INF", "inf"),
+            LogLevels.Warn => ("WRN", "wrn"),
+            LogLevels.Error => ("ERR", "err"),
+            _ => (string.Empty, (string?)null),
+        };
+        return text;
+    }
+
+    /// <summary><c>HH:mm:ss.fff</c> in <paramref name="zone"/>, prefixed <c>MM-dd </c> when the date is not today there.</summary>
+    internal static string FormatTime(DateTimeOffset value, TimeZoneInfo zone, DateTimeOffset now)
+    {
+        var converted = TimeZoneInfo.ConvertTime(value, zone);
+        var today = TimeZoneInfo.ConvertTime(now, zone);
+        var time = converted.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
+        return converted.Date == today.Date
+            ? time
+            : converted.ToString("MM-dd ", CultureInfo.InvariantCulture) + time;
+    }
+
+    /// <summary>A signed duration: <c>+12 ms</c>, <c>+1.204 s</c>, <c>+3 min 4 s</c>, <c>+1 h 2 min</c>; negative for out-of-order lines.</summary>
+    internal static string FormatDelta(TimeSpan delta)
+    {
+        var sign = delta < TimeSpan.Zero ? "-" : "+";
+        var milliseconds = (long)Math.Round(Math.Abs(delta.TotalMilliseconds));
+        if (milliseconds < 1_000)
+            return $"{sign}{milliseconds} ms";
+        if (milliseconds < 60_000)
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"{sign}{milliseconds / 1000d:0.000} s"
+            );
+        var seconds = milliseconds / 1_000;
+        if (seconds < 3_600)
+            return $"{sign}{seconds / 60} min {seconds % 60} s";
+        return $"{sign}{seconds / 3_600} h {seconds % 3_600 / 60} min";
     }
 }

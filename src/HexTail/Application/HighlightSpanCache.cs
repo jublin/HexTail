@@ -68,21 +68,31 @@ internal sealed class HighlightSpanCache
         Line line,
         IReadOnlyList<Search> searches,
         RuleSet rules
+    ) => ComputeForText(line.Raw, searches, rules);
+
+    /// <summary>
+    /// Search and rule highlights for one piece of text (a whole line or one cell), with overlaps
+    /// resolved: earlier start wins, then the longer span, and a span starting inside a kept one is dropped.
+    /// </summary>
+    internal static IReadOnlyList<HighlightSpan> ComputeForText(
+        string text,
+        IReadOnlyList<Search> searches,
+        RuleSet rules
     )
     {
         var candidates = searches
             .SelectMany(search =>
                 search
-                    .GetHighlights(line)
+                    .GetHighlights(text)
                     .Select(range => new HighlightSpan(range.Start, range.Length, search.Color))
             )
             .Concat(
                 rules
-                    .Highlights(line)
+                    .Highlights(text)
                     .Select(range => new HighlightSpan(range.Start, range.Length, range.Color))
             )
             .Where(span =>
-                span.Start >= 0 && span.Length > 0 && span.Length <= line.Raw.Length - span.Start
+                span.Start >= 0 && span.Length > 0 && span.Length <= text.Length - span.Start
             )
             .OrderBy(span => span.Start)
             .ThenByDescending(span => span.Length);

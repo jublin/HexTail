@@ -48,15 +48,57 @@
         Margin="0,0,6,0"
       />
       <views:HighlightedTextBlock
+        x:Name="ComposedText"
         Grid.Column="1"
         Text="{Binding Line.Raw}"
         Spans="{Binding Spans}"
+        IsVisible="{Binding !UsesColumns}"
         FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
         FontSize="{Binding FontSize}"
         Foreground="{Binding Foreground}"
         TextWrapping="NoWrap"
         TextTrimming="CharacterEllipsis"
       />
+      <ItemsControl
+        x:Name="RowCells"
+        Grid.Column="1"
+        ItemsSource="{Binding Cells}"
+        IsVisible="{Binding UsesColumns}"
+        FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+        FontSize="{Binding FontSize}"
+        Foreground="{Binding Foreground}"
+      >
+        <ItemsControl.Styles>
+          <Style Selector="ContentPresenter">
+            <Setter Property="DockPanel.Dock" Value="Left" />
+          </Style>
+        </ItemsControl.Styles>
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <DockPanel LastChildFill="True" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:LogCellViewModel">
+            <views:HighlightedTextBlock
+              Classes="cell"
+              Classes.dimmed="{Binding IsDimmed}"
+              Classes.trc="{Binding IsTraceLevel}"
+              Classes.dbg="{Binding IsDebugLevel}"
+              Classes.inf="{Binding IsInfoLevel}"
+              Classes.wrn="{Binding IsWarnLevel}"
+              Classes.err="{Binding IsErrorLevel}"
+              Text="{Binding Text}"
+              Spans="{Binding Spans}"
+              Width="{Binding RenderWidth}"
+              Padding="0,0,8,0"
+              ToolTip.Tip="{Binding ToolTip}"
+              TextWrapping="NoWrap"
+              TextTrimming="CharacterEllipsis"
+            />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
     </Grid>
   </Border>
 </UserControl>
