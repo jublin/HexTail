@@ -28,9 +28,16 @@ connections.
 - Named saved filters, applied from the sidebar or the command palette.
 - Search tabs (Pin as tab) with a separate highlight color for each search.
 - Independent follow-tail toggles for the All view and each search view.
+- Timestamps for log lines: read from well-known fields, ISO-8601, common-log
+  and syslog prefixes (or the Elastic document), with lines such as stack
+  traces inheriting the entry above them.
+- Columns for structured sources (JSONL, logfmt, Elastic): Time, Level and
+  Message by default, with a resizable header, a **Columns** menu for more
+  fields, absolute or relative time, level colours and a tinted error row.
 - A row inspector (`Ctrl+I`): raw text, parsed fields you can turn into
-  show-only, hide or highlight rules or copy, **Copy raw** and **Copy JSON**,
-  an optional **Show context** list of neighbouring rows, and a bookmark toggle.
+  show-only, hide or highlight rules, copy, or add as a column, **Copy raw**
+  and **Copy JSON**, an optional **Show context** list of neighbouring rows,
+  and a bookmark toggle.
 - Session bookmarks: `m` marks the selected row, `]` and `[` jump between
   bookmarked rows. Bookmarks are not saved.
 - Global rules: make any rule apply to every source with the chip's **All
@@ -103,6 +110,10 @@ dotnet run --project src/HexTail.LogGenerator -- --format jsonl --output /tmp/he
    Shift+Enter shows only matching rows, Alt+Enter hides them. Turn on **Pin as
    tab** first to make Enter add a search tab instead; tabs show matching
    lines while the All view highlights the same matches.
+   JSONL, logfmt and Elastic sources show Time, Level and Message columns
+   under a header you can drag to resize; the **Columns** menu at its right end
+   adds fields, switches between absolute and relative time, composes rows
+   back into one line, or resets the layout.
 4. **Follow** is on each view's toolbar. Follow keeps a view at
    the newest line or match; scrolling away shows a **↓ N new lines** pill that
    jumps back and resumes following. Press `Ctrl+I`, Enter on a row, or
@@ -147,8 +158,32 @@ are paused; `Esc` closes the palette.
 
 Files with a `.logfmt` extension use the built-in `key=value` parser. Files with
 a `.jsonl` extension parse JSON object fields, flattening nested objects with
-dot-separated keys. All log lines remain displayed as raw text; malformed
-logfmt/JSONL lines and non-object JSONL values are treated as plain text.
+dot-separated keys. Malformed logfmt/JSONL lines and non-object JSONL values are
+treated as plain text. Plain-text files stay one text row per line; JSONL,
+logfmt and Elastic sources are shown as columns (see below), and the raw line is
+always available in the inspector.
+
+Every source gets a timestamp per line where one can be found:
+
+- A field named `@timestamp`, `timestamp`, `time`, `ts`, `@t`, `t`, `date`,
+  `datetime` or `eventTime`, as an ISO-8601/RFC 3339 string or a Unix number in
+  seconds, milliseconds, microseconds or nanoseconds (told apart by size).
+- A line prefix: ISO-8601 (`T` or a space, `.` or `,` fractions, optional `Z`
+  or offset), the common-log `[dd/Mmm/yyyy:HH:mm:ss +zzzz]` near the start, or a
+  classic syslog `Mmm dd HH:mm:ss` (the year is inferred).
+- For Elastic rows, the document's timestamp.
+
+A time without a zone is read in the display time zone (**Local** or **Utc**) at
+the moment the line is read. One format is chosen per source from its first
+timestamped line. A line without a timestamp, such as a stack trace line,
+inherits the previous one and its time is shown dimmed.
+
+JSONL, logfmt and Elastic sources show **Time**, **Level** and **Message** columns
+by default (Elastic: Time and Level plus the view's output fields). The header
+resizes columns by dragging, and the **Columns** menu adds or removes fields,
+toggles **Composed row**, switches **Time** between **Absolute** and
+**Relative**, and has **Reset columns**. See the
+[user guide](docs/user-guide.md#timestamps-and-columns) for details.
 
 The default in-memory limit is 100,000 lines per source. Change it in
 Settings → Limits → Maximum lines per source (1,000 to 1,000,000); the new
