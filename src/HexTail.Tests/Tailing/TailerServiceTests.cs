@@ -214,6 +214,35 @@ public sealed class TailerServiceTests
     }
 
     [Fact]
+    public async Task StartTailer_ForgetsTheTimestampOfTheOldFile_AfterTruncation()
+    {
+        var path = CreateTempFile("2026-11-07T10:11:12Z old entry\n");
+        await using var service = new LogSourceService(
+            new TailerOptions
+            {
+                PollInterval = TimeSpan.FromMilliseconds(10),
+                UseFileSystemWatcher = false,
+            }
+        );
+        var parser = new TimestampingParser(new PlainTextParser(), () => TimeZoneInfo.Utc);
+        await using var tailer = service.StartFile("file-1", path, parser);
+
+        var first = await ReadEventAsync<SourceLines>(service.Events);
+        Assert.NotNull(Assert.Single(first.Lines).Timestamp);
+        await File.WriteAllTextAsync(path, "plain\n", TestContext.Current.CancellationToken);
+
+        await ReadEventAsync<SourceReset>(service.Events);
+        var replacement = await ReadEventAsync<SourceLines>(
+            service.Events,
+            e => e.Lines.Select(line => line.Raw).SequenceEqual(["plain"])
+        );
+
+        var line = Assert.Single(replacement.Lines);
+        Assert.Null(line.Timestamp);
+        Assert.False(line.TimestampInherited);
+    }
+
+    [Fact]
     public async Task StartTailer_EmitsRotated_WhenFileIsRecreated()
     {
         var directory = Directory.CreateTempSubdirectory("hextail-");

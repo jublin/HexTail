@@ -148,6 +148,9 @@ public sealed class Search
     /// <summary>Highlight ranges for one line, for the "All" view. Empty when the line does not match.</summary>
     public IReadOnlyList<HighlightRange> GetHighlights(Line line) => Query.GetHighlights(line.Raw);
 
+    /// <summary>Highlight ranges within <paramref name="text"/> (one cell of a row). Empty when it does not match.</summary>
+    public IReadOnlyList<HighlightRange> GetHighlights(string text) => Query.GetHighlights(text);
+
     internal void ScanAppended(FileBuffer buffer, int startIndex)
     {
         for (var i = startIndex; i < buffer.Count; i++)

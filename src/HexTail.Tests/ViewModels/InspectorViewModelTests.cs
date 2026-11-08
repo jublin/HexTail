@@ -384,4 +384,188 @@ public sealed class InspectorViewModelTests
             File.Delete(path);
         }
     }
+
+    private static async Task<(
+        MainWindowViewModel Owner,
+        FileTabViewModel File,
+        string Path,
+        Avalonia.Controls.Window Window,
+        TestPersistence Persistence
+    )> OpenStructuredAsync(string extension, Line line)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}{extension}");
+        File.WriteAllText(path, string.Empty);
+        var persistence = new TestPersistence();
+        var window = TestWindow.Create(persistence, out var owner);
+        await owner.OpenPathsCommand.Execute([path]);
+        var file = owner.SelectedFile!;
+        file.Model.Buffer.Append([line]);
+        file.SyncViews();
+        owner.State.SelectLine(file.Model, line);
+        owner.Inspector.Sync();
+        return (owner, file, path, window, persistence);
+    }
+
+    private static Line ServiceLine() =>
+        new(
+            "{\"msg\":\"hello\",\"service\":\"checkout\"}",
+            new Dictionary<string, string> { ["msg"] = "hello", ["service"] = "checkout" }
+        );
+
+    private static async Task<bool> CanAddColumnAsync(InspectorFieldViewModel field) =>
+        await field.AddColumnCommand.CanExecute.FirstAsync();
+
+    [AvaloniaFact]
+    public async Task AddColumnAppendsTheFieldToAJsonlSourceAndPersistsIt()
+    {
+        var (owner, file, path, window, persistence) = await OpenStructuredAsync(
+            ".jsonl",
+            ServiceLine()
+        );
+        try
+        {
+            var service = owner.Inspector.Fields.Single(field => field.Key == "service");
+            Assert.True(await CanAddColumnAsync(service));
+            Assert.Equal("Add column", service.AddColumnHeader);
+            Assert.Null(service.AddColumnTip);
+
+            await service.AddColumnCommand.Execute();
+
+            Assert.Equal(
+                ["@time", "@level", "@message", "service"],
+                file.Model.Columns!.Columns.Select(column => column.Key)
+            );
+            Assert.Equal("service", Assert.Single(persistence.Config!.OpenFiles).Columns![^1].Key);
+            Assert.Null(owner.Inspector.Error);
+            // The field now reads as a column and cannot be added again.
+            Assert.True(service.IsColumn);
+            Assert.Equal("In columns", service.AddColumnHeader);
+            Assert.Equal("In columns: service", service.AddColumnName);
+            Assert.False(await CanAddColumnAsync(service));
+            Assert.True(
+                await CanAddColumnAsync(owner.Inspector.Fields.Single(f => f.Key == "msg"))
+            );
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task AddColumnOnAComposedStructuredSourceTurnsColumnsOn()
+    {
+        var (owner, file, path, window, _) = await OpenStructuredAsync(".jsonl", ServiceLine());
+        try
+        {
+            var layout = file.SelectedView.ComputeLayout();
+            await owner.State.SetColumnLayoutAsync(file.Model, layout with { ComposedRows = true });
+            Assert.True(file.Model.Columns!.ComposedRows);
+
+            await owner.Inspector.AddColumnAsync(
+                owner.Inspector.Fields.Single(field => field.Key == "service")
+            );
+
+            Assert.False(file.Model.Columns!.ComposedRows);
+            Assert.Equal("service", file.Model.Columns.Columns[^1].Key);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task AddColumnIsUnavailableForAPlainTextSource()
+    {
+        var (owner, file, path, window, persistence) = await OpenStructuredAsync(
+            ".log",
+            ServiceLine()
+        );
+        try
+        {
+            var saves = persistence.SaveCount;
+            var service = owner.Inspector.Fields.Single(field => field.Key == "service");
+
+            Assert.False(await CanAddColumnAsync(service));
+            Assert.Equal("Columns are available for structured sources", service.AddColumnTip);
+            Assert.False(service.IsColumn);
+            await owner.Inspector.AddColumnAsync(service);
+
+            Assert.Null(file.Model.Columns);
+            Assert.Equal(saves, persistence.SaveCount);
+            Assert.Null(owner.Inspector.Error);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task AddingAnExistingColumnChangesNothing()
+    {
+        var (owner, file, path, window, persistence) = await OpenStructuredAsync(
+            ".jsonl",
+            ServiceLine()
+        );
+        try
+        {
+            var service = owner.Inspector.Fields.Single(field => field.Key == "service");
+            await owner.Inspector.AddColumnAsync(service);
+            var layout = file.Model.Columns;
+            var saves = persistence.SaveCount;
+
+            await owner.Inspector.AddColumnAsync(service);
+
+            Assert.Same(layout, file.Model.Columns);
+            Assert.Equal(saves, persistence.SaveCount);
+            Assert.Null(owner.Inspector.Error);
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task AFailedSaveLandsInTheInspectorErrorAndKeepsTheLayout()
+    {
+        var (owner, file, path, window, persistence) = await OpenStructuredAsync(
+            ".jsonl",
+            ServiceLine()
+        );
+        try
+        {
+            var service = owner.Inspector.Fields.Single(field => field.Key == "service");
+            persistence.SaveError = new IOException("disk is full");
+
+            await service.AddColumnCommand.Execute();
+
+            Assert.Contains("disk is full", owner.Inspector.Error);
+            Assert.Null(file.Model.Columns);
+            Assert.False(service.IsColumn);
+            Assert.True(await CanAddColumnAsync(service));
+
+            persistence.SaveError = null;
+            await service.AddColumnCommand.Execute();
+            Assert.Null(owner.Inspector.Error);
+            Assert.True(service.IsColumn);
+        }
+        finally
+        {
+            persistence.SaveError = null;
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
 }

@@ -86,13 +86,16 @@ public sealed class RuleSet
         return true;
     }
 
-    public IReadOnlyList<ColoredRange> Highlights(Line line)
+    public IReadOnlyList<ColoredRange> Highlights(Line line) => Highlights(line.Raw);
+
+    /// <summary>Highlight ranges within <paramref name="text"/> (a whole line or one cell of it).</summary>
+    public IReadOnlyList<ColoredRange> Highlights(string text)
     {
         if (_highlight.Length == 0)
             return [];
         List<ColoredRange>? ranges = null;
         foreach (var matcher in _highlight)
-        foreach (var range in matcher.Query.GetHighlights(line.Raw))
+        foreach (var range in matcher.Query.GetHighlights(text))
             (ranges ??= []).Add(new ColoredRange(range.Start, range.Length, matcher.Color));
         return ranges ?? [];
     }

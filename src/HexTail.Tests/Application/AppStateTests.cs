@@ -661,6 +661,268 @@ public sealed class AppStateTests
     }
 
     [Fact]
+    public async Task SetColumnLayout_PersistsAndBumpsTheVersion_AndRestores()
+    {
+        var path = CreateTempFile("error\n");
+        var persistence = new MemoryPersistence();
+        await using (var tailers = NewTailers())
+        await using (
+            var state = new AppState(
+                tailers,
+                persistence,
+                credentials: new InMemoryCredentialVault()
+            )
+        )
+        {
+            var tab = await state.OpenFileAsync(
+                path,
+                cancellationToken: TestContext.Current.CancellationToken
+            );
+            Assert.Null(Assert.Single(persistence.Config!.OpenFiles).Columns);
+            var version = tab.ColumnsVersion;
+            var layout = (
+                ColumnLayout.DefaultFor(tab.Source, null) with
+                {
+                    ComposedRows = true,
+                    TimeDisplay = TimeDisplay.Relative,
+                }
+            )
+                .WithColumn("service")
+                .WithWidth("@message", 640);
+
+            await state.SetColumnLayoutAsync(tab, layout, TestContext.Current.CancellationToken);
+
+            Assert.Same(layout, tab.Columns);
+            Assert.True(tab.ColumnsVersion > version);
+            var saved = Assert.Single(persistence.Config!.OpenFiles);
+            Assert.Equal(
+                ["@time", "@level", "@message", "service"],
+                saved.Columns!.Select(c => c.Key)
+            );
+            Assert.True(saved.ComposedRows);
+            Assert.Equal(TimeDisplay.Relative, saved.TimeDisplay);
+        }
+
+        await using var restoredTailers = NewTailers();
+        await using var restored = new AppState(
+            restoredTailers,
+            persistence,
+            credentials: new InMemoryCredentialVault()
+        );
+        await restored.RestoreAsync(TestContext.Current.CancellationToken);
+
+        var restoredLayout = Assert.Single(restored.Files).Columns;
+        Assert.NotNull(restoredLayout);
+        Assert.Equal(
+            ["@time", "@level", "@message", "service"],
+            restoredLayout.Columns.Select(c => c.Key)
+        );
+        Assert.Equal(640, restoredLayout.Columns.Single(c => c.Key == "@message").Width);
+        Assert.True(restoredLayout.ComposedRows);
+        Assert.Equal(TimeDisplay.Relative, restoredLayout.TimeDisplay);
+    }
+
+    [Fact]
+    public async Task SetColumnLayout_ElasticTabRoundTrips()
+    {
+        var connection = ElasticConnection("ops") with
+        {
+            Views =
+            [
+                new ElasticViewSettings
+                {
+                    Id = "view",
+                    Name = "Logs",
+                    DataViewId = "view",
+                    DataViewTitle = "logs-*",
+                    TimeFieldName = "@timestamp",
+                    ServerField = "server",
+                    OutputFields = ["service", "message"],
+                    Sources = [new ElasticSourceSettings { Id = "source-1", ServerValue = "api" }],
+                },
+            ],
+        };
+        var settings = new AppSettings { ElasticConnections = [connection] };
+        var persistence = new MemoryPersistence();
+        await using (
+            var state = new AppState(
+                NewTailers(),
+                persistence,
+                settings,
+                new InMemoryCredentialVault(),
+                new FakeElasticApiClient()
+            )
+        )
+        {
+            var tab = await state.OpenElasticSourceAsync(
+                "source-1",
+                save: false,
+                cancellationToken: TestContext.Current.CancellationToken
+            );
+            await state.SetColumnLayoutAsync(
+                tab,
+                ColumnLayout.DefaultFor(tab.Source, ["service"]) with
+                {
+                    TimeDisplay = TimeDisplay.Relative,
+                },
+                TestContext.Current.CancellationToken
+            );
+        }
+
+        await using var restored = new AppState(
+            NewTailers(),
+            persistence,
+            settings,
+            new InMemoryCredentialVault(),
+            new FakeElasticApiClient()
+        );
+        await restored.RestoreAsync(TestContext.Current.CancellationToken);
+
+        var layout = Assert.Single(restored.Files).Columns;
+        Assert.NotNull(layout);
+        Assert.Equal(["@time", "@level", "service"], layout.Columns.Select(c => c.Key));
+        Assert.Equal(TimeDisplay.Relative, layout.TimeDisplay);
+    }
+
+    [Fact]
+    public async Task SetColumnLayout_AFailedSaveDoesNotClobberALaterOverlappingChange()
+    {
+        var path = CreateTempFile("error\n");
+        var persistence = new GatedFirstSavePersistence();
+        await using var tailers = NewTailers();
+        await using var state = new AppState(
+            tailers,
+            persistence,
+            credentials: new InMemoryCredentialVault()
+        );
+        var tab = await state.OpenFileAsync(
+            path,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        var original = ColumnLayout.DefaultFor(tab.Source, null).WithoutColumn("@level");
+        await state.SetColumnLayoutAsync(tab, original, TestContext.Current.CancellationToken);
+        var layoutA = original.WithColumn("service");
+        var layoutB = original.WithColumn("host");
+        persistence.Arm();
+
+        // A is stuck in its save when B starts and finishes.
+        var callA = state
+            .SetColumnLayoutAsync(tab, layoutA, TestContext.Current.CancellationToken)
+            .AsTask();
+        await persistence.FirstSaveStarted.Task.WaitAsync(
+            TimeSpan.FromSeconds(10),
+            TestContext.Current.CancellationToken
+        );
+        await state.SetColumnLayoutAsync(tab, layoutB, TestContext.Current.CancellationToken);
+        persistence.ReleaseFirstSave();
+
+        await Assert.ThrowsAsync<IOException>(() => callA);
+        Assert.Same(layoutB, tab.Columns);
+    }
+
+    private sealed class GatedFirstSavePersistence : IAppPersistence
+    {
+        private readonly TaskCompletionSource _release = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        private int _armed;
+
+        public TaskCompletionSource FirstSaveStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public AppConfig? Config { get; private set; }
+
+        public void Arm() => Interlocked.Exchange(ref _armed, 1);
+
+        public void ReleaseFirstSave() => _release.TrySetResult();
+
+        public ValueTask<AppConfig?> LoadAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(Config);
+
+        public async ValueTask SaveAsync(
+            AppConfig config,
+            CancellationToken cancellationToken = default
+        )
+        {
+            if (Interlocked.Exchange(ref _armed, 0) == 1)
+            {
+                FirstSaveStarted.TrySetResult();
+                await _release.Task.ConfigureAwait(false);
+                throw new IOException("gated save failed");
+            }
+            Config = AppConfigJson.Deserialize(AppConfigJson.Serialize(config));
+        }
+    }
+
+    [Fact]
+    public async Task SetColumnLayout_SaveFailureRestoresThePreviousLayout()
+    {
+        var path = CreateTempFile("error\n");
+        var persistence = new MemoryPersistence();
+        await using var tailers = NewTailers();
+        await using var state = new AppState(
+            tailers,
+            persistence,
+            credentials: new InMemoryCredentialVault()
+        );
+        var tab = await state.OpenFileAsync(
+            path,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        var original = ColumnLayout.DefaultFor(tab.Source, null).WithoutColumn("@level");
+        await state.SetColumnLayoutAsync(tab, original, TestContext.Current.CancellationToken);
+        var version = tab.ColumnsVersion;
+        persistence.SaveError = new IOException("disk full");
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            state
+                .SetColumnLayoutAsync(
+                    tab,
+                    original.WithColumn("service"),
+                    TestContext.Current.CancellationToken
+                )
+                .AsTask()
+        );
+
+        Assert.Same(original, tab.Columns);
+        Assert.True(tab.ColumnsVersion > version);
+        persistence.SaveError = null;
+        Assert.Equal(
+            ["@time", "@message"],
+            Assert.Single(persistence.Config!.OpenFiles).Columns!.Select(c => c.Key)
+        );
+    }
+
+    [Fact]
+    public async Task RestoreSanitizesSavedColumns()
+    {
+        var path = CreateTempFile("error\n");
+        var config = AppConfigJson.Deserialize(
+            $$"""
+            { "version": 2,
+              "openFiles": [{ "path": {{System.Text.Json.JsonSerializer.Serialize(path)}},
+                "columns": [
+                  { "key": "@time", "width": 1 }, { "key": "@time", "width": 2 },
+                  { "key": " ", "width": 9 }, { "key": "svc", "width": 99999 }] }] }
+            """
+        );
+        var seeded = new MemoryPersistence();
+        await seeded.SaveAsync(config, TestContext.Current.CancellationToken);
+
+        await using var restoredTailers = NewTailers();
+        await using var restored = new AppState(
+            restoredTailers,
+            seeded,
+            credentials: new InMemoryCredentialVault()
+        );
+        await restored.RestoreAsync(TestContext.Current.CancellationToken);
+
+        var layout = Assert.Single(restored.Files).Columns!;
+        Assert.Equal(["@time", "svc"], layout.Columns.Select(c => c.Key));
+        Assert.Equal([40d, 1200d], layout.Columns.Select(c => c.Width));
+    }
+
+    [Fact]
     public void AppConfigJson_LoadsOlderConfigWithMissingOptionalFields()
     {
         var config = AppConfigJson.Deserialize("{\"openFiles\":[{\"path\":\"/tmp/app.log\"}]}");

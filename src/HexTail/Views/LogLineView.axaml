@@ -39,24 +39,69 @@
     DoubleTapped="OnDoubleTapped"
   >
     <Grid ColumnDefinitions="Auto,*">
+      <!-- Column rows reserve a fixed 24 px slot, so the cells line up with the column header whether or not the row is bookmarked. -->
+      <Border x:Name="BookmarkSlot" Width="24" IsVisible="{Binding UsesColumns}" />
       <ic:Icon
         x:Name="BookmarkGlyph"
         Value="mdi-bookmark"
         Foreground="{DynamicResource AccentBrush}"
         IsVisible="{Binding IsBookmarked}"
         VerticalAlignment="Center"
+        HorizontalAlignment="Left"
         Margin="0,0,6,0"
       />
       <views:HighlightedTextBlock
+        x:Name="ComposedText"
         Grid.Column="1"
         Text="{Binding Line.Raw}"
         Spans="{Binding Spans}"
+        IsVisible="{Binding !UsesColumns}"
         FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
         FontSize="{Binding FontSize}"
         Foreground="{Binding Foreground}"
         TextWrapping="NoWrap"
         TextTrimming="CharacterEllipsis"
       />
+      <ItemsControl
+        x:Name="RowCells"
+        Grid.Column="1"
+        ItemsSource="{Binding Cells}"
+        IsVisible="{Binding UsesColumns}"
+        FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+        FontSize="{Binding FontSize}"
+        Foreground="{Binding Foreground}"
+      >
+        <ItemsControl.Styles>
+          <Style Selector="ContentPresenter">
+            <Setter Property="DockPanel.Dock" Value="Left" />
+          </Style>
+        </ItemsControl.Styles>
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <DockPanel LastChildFill="True" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:LogCellViewModel">
+            <views:HighlightedTextBlock
+              Classes="cell"
+              Classes.dimmed="{Binding IsDimmed}"
+              Classes.trc="{Binding IsTraceLevel}"
+              Classes.dbg="{Binding IsDebugLevel}"
+              Classes.inf="{Binding IsInfoLevel}"
+              Classes.wrn="{Binding IsWarnLevel}"
+              Classes.err="{Binding IsErrorLevel}"
+              Text="{Binding Text}"
+              Spans="{Binding Spans}"
+              Width="{Binding RenderWidth}"
+              Padding="0,0,8,0"
+              ToolTip.Tip="{Binding ToolTip}"
+              TextWrapping="NoWrap"
+              TextTrimming="CharacterEllipsis"
+            />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
     </Grid>
   </Border>
 </UserControl>

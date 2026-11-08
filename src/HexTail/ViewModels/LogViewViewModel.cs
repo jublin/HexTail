@@ -22,6 +22,8 @@ internal sealed class LogViewViewModel : ReactiveObject
     private int _lastViewsVersion;
     private int _lastRulesVersion;
     private int _lastBookmarksVersion;
+    private int _lastColumnsVersion = -1;
+    private ColumnLayout? _layout;
     private ViewSnapshot? _lastSnapshot;
     internal const int UnseenScanLimit = 10_000;
     private Line? _seenAnchor;
@@ -35,7 +37,11 @@ internal sealed class LogViewViewModel : ReactiveObject
         Search = search;
         SelectLineCommand = ReactiveCommand.Create<Line>(line => _file.SelectLine(line));
         JumpToLatestCommand = ReactiveCommand.Create(JumpToLatest, owner.Scheduler);
+        ColumnHeader = new ColumnHeaderViewModel(this);
     }
+
+    /// <summary>The header above the rows: column titles, resize thumbs and the Columns menu.</summary>
+    public ColumnHeaderViewModel ColumnHeader { get; }
 
     public Search? Search { get; }
     public MainWindowViewModel Workspace => _owner;
@@ -65,6 +71,49 @@ internal sealed class LogViewViewModel : ReactiveObject
     public bool HasInitialLimitMessage => InitialLimitMessage.Length > 0;
 
     public override string ToString() => Header;
+
+    /// <summary>The column layout the rows render with; refreshed by <see cref="Sync"/>.</summary>
+    internal ColumnLayout Layout => _layout ??= ComputeLayout();
+
+    internal ColumnLayout ComputeLayout() =>
+        File.EffectiveColumns(ElasticOutputFields(Settings, File.Source), LogFontSize);
+
+    /// <summary>The columns a source starts with (and "Reset columns" returns to), at the current font size.</summary>
+    internal ColumnLayout DefaultLayout() =>
+        ColumnLayout.DefaultFor(
+            File.Source,
+            ElasticOutputFields(Settings, File.Source),
+            LogFontSize
+        );
+
+    /// <summary>The row text size in pixels; the default column widths scale with it.</summary>
+    internal double LogFontSize => LogLineViewModel.FontSizeFor(Settings.LogFontSize);
+
+    /// <summary>
+    /// Re-reads the layout and re-renders the realized rows, without touching the row list. A column
+    /// drag calls this at most once per frame.
+    /// </summary>
+    internal void RefreshLayout()
+    {
+        _lastColumnsVersion = File.ColumnsVersion;
+        _layout = ComputeLayout();
+        InvalidateRows(Lines);
+        ColumnHeader.Sync();
+    }
+
+    private static IReadOnlyList<string>? ElasticOutputFields(
+        AppSettings settings,
+        LogSourceDescriptor source
+    )
+    {
+        if (source.Kind != LogSourceKind.Elastic || source.ElasticSourceId is not { } sourceId)
+            return null;
+        foreach (var connection in settings.ElasticConnections)
+        foreach (var view in connection.Views)
+            if (view.Sources.Any(candidate => candidate.Id == sourceId))
+                return view.OutputFields;
+        return null;
+    }
 
     public AvaloniaList<LogLineViewModel> Lines { get; } = [];
     public ReactiveCommand<Line, Unit> SelectLineCommand { get; }
@@ -220,13 +269,18 @@ internal sealed class LogViewViewModel : ReactiveObject
         var settingsChanged = !ReferenceEquals(_lastSettings, settings);
         var viewsChanged = _lastViewsVersion != _file.ViewsVersion;
         var rulesChanged = _lastRulesVersion != _file.Model.RulesVersion;
+        var columnsChanged = _lastColumnsVersion != _file.Model.ColumnsVersion;
         _lastRulesVersion = _file.Model.RulesVersion;
+        _lastColumnsVersion = _file.Model.ColumnsVersion;
         _lastSettings = settings;
         _lastViewsVersion = _file.ViewsVersion;
-        if (viewsChanged || rulesChanged)
+        if (columnsChanged || settingsChanged || _layout is null)
+            _layout = ComputeLayout();
+        if (viewsChanged || rulesChanged || columnsChanged)
         {
             InvalidateRows(Lines);
         }
+        ColumnHeader.Sync();
         var lines = LinesFor();
         var frozen = _owner.IsPaused && Lines.Count > 0;
         if (!frozen)
@@ -309,11 +363,7 @@ internal sealed class LogViewViewModel : ReactiveObject
                 if (refreshRows)
                     foreach (var row in current)
                         row.Refresh();
-                current.AddRange(
-                    desired
-                        .Skip(lastIndex + 1)
-                        .Select(line => new LogLineViewModel(this, _file, line))
-                );
+                current.AddRange(CreateRows(desired, lastIndex + 1));
                 return;
             }
         }
@@ -338,14 +388,12 @@ internal sealed class LogViewViewModel : ReactiveObject
             if (isHeadRollover)
             {
                 current.RemoveRange(0, retainedStart);
+                // The row that is now first has no row before it (relative time shows it absolute).
+                current[0].PreviousTimestamp = null;
                 if (refreshRows)
                     foreach (var row in current)
                         row.Refresh();
-                current.AddRange(
-                    desired
-                        .Skip(retainedCount)
-                        .Select(line => new LogLineViewModel(this, _file, line))
-                );
+                current.AddRange(CreateRows(desired, retainedCount));
                 return;
             }
         }
@@ -357,21 +405,36 @@ internal sealed class LogViewViewModel : ReactiveObject
         if (existing is not null)
             foreach (var row in current)
                 existing[row.Line] = row;
-        var rows = desired
-            .Select(line =>
-            {
-                var row =
-                    existing is not null && existing.TryGetValue(line, out var retained)
-                        ? retained
-                        : null;
-                if (row is null)
-                    row = new LogLineViewModel(this, _file, line);
-                else if (refreshRows)
-                    row.Refresh();
-                return row;
-            })
-            .ToList();
+        var rows = new List<LogLineViewModel>(desired.Count);
+        for (var index = 0; index < desired.Count; index++)
+        {
+            var line = desired[index];
+            var row =
+                existing is not null && existing.TryGetValue(line, out var retained)
+                    ? retained
+                    : null;
+            if (row is null)
+                row = new LogLineViewModel(this, _file, line);
+            else if (refreshRows)
+                row.Refresh();
+            row.PreviousTimestamp = index > 0 ? desired[index - 1].Timestamp : null;
+            rows.Add(row);
+        }
         SyncCollection(current, rows, resetItems);
+    }
+
+    /// <summary>New rows for <c>desired[start..]</c>, each told the timestamp of the row shown before it.</summary>
+    private List<LogLineViewModel> CreateRows(IReadOnlyList<Line> desired, int start)
+    {
+        var rows = new List<LogLineViewModel>(Math.Max(0, desired.Count - start));
+        for (var index = start; index < desired.Count; index++)
+            rows.Add(
+                new LogLineViewModel(this, _file, desired[index])
+                {
+                    PreviousTimestamp = index > 0 ? desired[index - 1].Timestamp : null,
+                }
+            );
+        return rows;
     }
 
     public static void SyncCollection<T>(

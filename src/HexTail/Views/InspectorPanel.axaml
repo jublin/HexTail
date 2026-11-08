@@ -93,6 +93,17 @@
                           <MenuItem Header="Show only this value" Command="{Binding ShowOnlyCommand}" />
                           <MenuItem Header="Hide value" Command="{Binding HideCommand}" />
                           <MenuItem Header="Highlight" Command="{Binding HighlightCommand}" />
+                          <MenuItem
+                            Header="{Binding AddColumnHeader}"
+                            Command="{Binding AddColumnCommand}"
+                            ToolTip.Tip="{Binding AddColumnTip}"
+                            ToolTip.ShowOnDisabled="True"
+                            AutomationProperties.Name="{Binding AddColumnName}"
+                          >
+                            <MenuItem.Icon>
+                              <ic:Icon Value="mdi-check" IsVisible="{Binding IsColumn}" />
+                            </MenuItem.Icon>
+                          </MenuItem>
                           <MenuItem Header="Copy value" Click="OnCopyFieldValue" />
                         </MenuFlyout>
                       </Button.Flyout>

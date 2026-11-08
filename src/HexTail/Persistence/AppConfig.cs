@@ -39,6 +39,9 @@ public sealed class PersistedElasticTab
     public int? SelectedLine { get; init; }
     public List<ViewRule> Rules { get; init; } = [];
     public LogLevels Levels { get; init; } = LogLevels.All;
+    public List<PersistedColumn>? Columns { get; init; }
+    public bool ComposedRows { get; init; }
+    public TimeDisplay TimeDisplay { get; init; } = TimeDisplay.Absolute;
 }
 
 public sealed class PersistedFileTab
@@ -50,6 +53,21 @@ public sealed class PersistedFileTab
     public int? SelectedLine { get; init; }
     public List<ViewRule> Rules { get; init; } = [];
     public LogLevels Levels { get; init; } = LogLevels.All;
+    public List<PersistedColumn>? Columns { get; init; }
+    public bool ComposedRows { get; init; }
+    public TimeDisplay TimeDisplay { get; init; } = TimeDisplay.Absolute;
+}
+
+public enum TimeDisplay
+{
+    Absolute,
+    Relative,
+}
+
+public sealed class PersistedColumn
+{
+    public string Key { get; init; } = string.Empty;
+    public double Width { get; init; }
 }
 
 public sealed class PersistedSearch
@@ -161,7 +179,10 @@ public static class AppConfigJson
             foreach (var tabs in new[] { root["openFiles"], root["openElasticTabs"] })
                 if (tabs is JsonArray array)
                     foreach (var tab in array.OfType<JsonObject>())
+                    {
                         SanitizeRulesAndLevels(tab);
+                        SanitizeColumns(tab);
+                    }
             SanitizeSavedFilters(root);
             return root.ToJsonString();
         }
@@ -180,6 +201,30 @@ public static class AppConfigJson
             && !(owner["levels"] is { } levels && Parses<LogLevels>(levels))
         )
             owner.Remove("levels");
+    }
+
+    /// <summary>Column settings are optional: bad entries are dropped and an unknown time display falls back to Absolute.</summary>
+    private static void SanitizeColumns(JsonObject tab)
+    {
+        if (tab.ContainsKey("columns"))
+        {
+            if (tab["columns"] is not JsonArray columns)
+                tab.Remove("columns");
+            else
+                for (var index = columns.Count - 1; index >= 0; index--)
+                    if (columns[index] is not JsonObject column || !Parses<PersistedColumn>(column))
+                        columns.RemoveAt(index);
+        }
+        if (
+            tab.ContainsKey("composedRows")
+            && !(tab["composedRows"] is JsonValue flag && flag.TryGetValue<bool>(out _))
+        )
+            tab.Remove("composedRows");
+        if (
+            tab.ContainsKey("timeDisplay")
+            && !(tab["timeDisplay"] is { } display && Parses<TimeDisplay>(display))
+        )
+            tab.Remove("timeDisplay");
     }
 
     /// <summary>Saved filters are optional: a malformed list is dropped, as are entries without a name.</summary>

@@ -35,11 +35,14 @@ flowchart LR
    command-line paths.
 3. `AppState` restores session data, opens each path, and owns the selected
    file, settings, searches, and window state.
-4. `TailerService` starts one `FileTailer` per file. Tailers publish immutable
-   events for new lines, truncation, rotation, and missing-file recovery.
+4. `TailerService` starts one `FileTailer` per file, each given a
+   `TimestampingParser` that wraps the file's parser and stamps every parsed
+   line on the tailer thread. Tailers publish immutable events for new lines,
+   truncation, rotation, and missing-file recovery.
 5. `AppState` drains events on the UI dispatcher, appends parsed lines to the
    bounded `FileBuffer`, updates searches, and notifies the view models.
-6. Virtualized `ListBox` controls render only the visible log rows; the inspector's context list shows a small window of rows.
+6. Virtualized `ListBox` controls render only the visible log rows, and a
+   structured source's cells are computed only for those rows; the inspector's context list shows a small window of rows.
    Closing the window saves state and disposes the tailers.
 
 ## Component map
@@ -48,11 +51,12 @@ flowchart LR
 | --- | --- | --- |
 | Application shell | `src/HexTail/MainWindow.axaml` | Commands, tabs, search controls, follow toggle, inspector and settings panes; the Elastic setup page is shown in the workspace area while open |
 | State | `src/HexTail/Application/AppState.cs` | Open files, selected file, settings, searches, persistence coordination |
-| File state | `src/HexTail/Application/FileTabState.cs` | One file buffer, derived views, follow state, selected line (`SelectedLine`), bookmarks (`Bookmarks`) |
-| Domain | `src/HexTail/Domain/` | Lines, bounded buffers, parsers, search compilation, highlight ranges |
+| File state | `src/HexTail/Application/FileTabState.cs` | One file buffer, derived views, follow state, selected line (`SelectedLine`), bookmarks (`Bookmarks`), the source's optional `ColumnLayout` |
+| Columns | `src/HexTail/Application/ColumnLayout.cs` | `ColumnLayout` (columns, widths, composed rows, time display), per-source defaults and `MessageField` |
+| Domain | `src/HexTail/Domain/` | Lines, bounded buffers, parsers, `TimestampDetector` and `TimestampingParser`, search compilation, highlight ranges |
 | Tailing | `src/HexTail/Tailing/` | Background file monitoring and resilient tail events |
-| Views | `src/HexTail/Views/` | Native Avalonia log rows, search tabs, inspector panel, settings controls (Appearance and Limits only), and `ElasticSetupPage`, the five-step Elastic setup page shown in the workspace area while the sidebar and status bar stay |
-| View models | `src/HexTail/ViewModels/` | Window, settings and per-view state; `InspectorViewModel` owns the inspector (open state, width, fields, context list) and toggles bookmarks on the selected row; `ElasticSetupViewModel` drives the Elastic setup flow (see below) |
+| Views | `src/HexTail/Views/` | Native Avalonia log rows, search tabs, inspector panel, `ColumnHeaderBar` (column titles, resize handles, Columns menu), settings controls (Appearance and Limits only), and `ElasticSetupPage`, the five-step Elastic setup page shown in the workspace area while the sidebar and status bar stay |
+| View models | `src/HexTail/ViewModels/` | Window, settings and per-view state; `InspectorViewModel` owns the inspector (open state, width, fields, context list) and toggles bookmarks on the selected row; `ColumnHeaderViewModel` backs the column header and menu and `LogLineViewModel` builds a row's cells; `ElasticSetupViewModel` drives the Elastic setup flow (see below) |
 | Elastic | `src/HexTail/Elastic/` | Kibana and Elasticsearch clients (`IElasticApiClient`), tailer, health monitor, and the setup helpers `CloudId`, `Rison` and `DiscoverUrlImport` |
 | Persistence | `src/HexTail/Persistence/` | Atomic JSON session load/save and persisted configuration types |
 | Tests | `src/HexTail.Tests/` | Domain, tailing, persistence, view-model, and headless UI coverage |
@@ -63,6 +67,26 @@ flowchart LR
   other extension uses `PlainTextParser`.
 - `JsonlParser` preserves raw JSONL text and exposes flattened object leaf fields;
   malformed or non-object lines remain plain text.
+- `Line.Timestamp` is a `DateTimeOffset?` and `Line.TimestampInherited` marks a
+  line that took the previous line's time. `TimestampDetector` reads well-known
+  fields (ISO or Unix s/ms/us/ns) and ISO-8601, common-log and syslog prefixes;
+  a zone-less time is read in the zone supplied when the line is parsed (the
+  display zone). `TimestampingParser` fixes one strategy per source from its
+  first timestamped line, lets untimestamped lines inherit the previous one, and
+  forgets the strategy after 200 consecutive misses. Elastic hits carry their
+  document timestamp.
+- Structured sources (JSONL, logfmt, Elastic) render as cells. A source's
+  `ColumnLayout` (columns, widths, composed rows, absolute or relative time) is
+  held on `FileTabState` and persisted as optional fields on the file and
+  Elastic tab configs; when absent, `ColumnLayout.DefaultFor` supplies Time |
+  Level | Message (Elastic: Time | Level | the view's output fields). Layout
+  changes go through `AppState.SetColumnLayoutAsync`, which rolls back if the
+  save fails. Plain text, and composed rows, keep the single text row.
+  `LogLineViewModel` builds a row's `LogCellViewModel` cells (time, level,
+  message or field, with per-cell highlight spans) only when the row is
+  realized; `ColumnHeaderViewModel` and `ColumnHeaderBar` drive the header,
+  resize drags and the Columns menu, and the inspector's field menu can add a
+  column.
 - Search results are buffer-relative. When old lines roll out, result indices
   are rebased with the buffer.
 - Filter rules (`ViewRule`) have an action (highlight, show only, hide) and a

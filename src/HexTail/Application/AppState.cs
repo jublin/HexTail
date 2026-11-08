@@ -387,6 +387,11 @@ public sealed class AppState : IAsyncDisposable
             tab.SetRules(NormalizeRules(persisted.Rules, RuleScope.Source));
             tab.Levels = NormalizeLevels(persisted.Levels);
             tab.SelectedLine = persisted.SelectedLine;
+            tab.Columns = ColumnLayout.FromPersisted(
+                persisted.Columns,
+                persisted.ComposedRows,
+                persisted.TimeDisplay
+            );
 
             // Global-rule searches were added when the tab opened; the persisted lists only hold user
             // searches, so each follow flag is applied to the search it was saved with.
@@ -427,6 +432,11 @@ public sealed class AppState : IAsyncDisposable
                 tab.FollowAll = persisted.FollowAll;
                 tab.SetRules(NormalizeRules(persisted.Rules, RuleScope.Source));
                 tab.Levels = NormalizeLevels(persisted.Levels);
+                tab.Columns = ColumnLayout.FromPersisted(
+                    persisted.Columns,
+                    persisted.ComposedRows,
+                    persisted.TimeDisplay
+                );
                 for (var i = 0; i < persisted.Searches.Count; i++)
                 {
                     var search = persisted.Searches[i];
@@ -503,7 +513,10 @@ public sealed class AppState : IAsyncDisposable
             {
                 var id = $"file-{++_nextFileId}";
                 var buffer = new FileBuffer(_settings.MaxLines);
-                var parser = LogParserSelector.ForPath(fullPath);
+                ILogParser parser = new TimestampingParser(
+                    LogParserSelector.ForPath(fullPath),
+                    () => NaiveZone(_settings.TimeZoneMode)
+                );
                 var tailer = _tailers.StartFile(id, fullPath, parser);
                 tab = new FileTabState(id, fullPath, buffer, parser, tailer)
                 {
@@ -937,6 +950,47 @@ public sealed class AppState : IAsyncDisposable
         await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Replaces a source's column layout and saves the session. A failed save restores the previous
+    /// layout (and tells the views) before the error is rethrown.
+    /// </summary>
+    public async ValueTask SetColumnLayoutAsync(
+        FileTabState tab,
+        ColumnLayout layout,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(layout);
+        ColumnLayout? previous;
+        lock (_gate)
+        {
+            if (!_files.Contains(tab))
+                return;
+            previous = tab.Columns;
+            tab.Columns = layout;
+        }
+        NotifyChanged();
+        try
+        {
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Only undo our own change: a later overlapping call may have replaced the layout since.
+            bool restored;
+            lock (_gate)
+            {
+                restored = ReferenceEquals(tab.Columns, layout);
+                if (restored)
+                    tab.Columns = previous;
+            }
+            if (restored)
+                NotifyChanged();
+            throw;
+        }
+    }
+
     internal static LogLevels NormalizeLevels(LogLevels levels)
     {
         var known = levels & LogLevels.All;
@@ -1167,6 +1221,9 @@ public sealed class AppState : IAsyncDisposable
                             .ToList(),
                         Rules = [.. tab.Rules],
                         Levels = tab.Levels,
+                        Columns = tab.Columns?.ToPersisted(),
+                        ComposedRows = tab.Columns?.ComposedRows ?? false,
+                        TimeDisplay = tab.Columns?.TimeDisplay ?? TimeDisplay.Absolute,
                         SelectedLine = tab.SelectedLine,
                         Searches = tab
                             .Searches.Where(search => !search.IsGlobalRule)
@@ -1198,6 +1255,9 @@ public sealed class AppState : IAsyncDisposable
                             .ToList(),
                         Rules = [.. tab.Rules],
                         Levels = tab.Levels,
+                        Columns = tab.Columns?.ToPersisted(),
+                        ComposedRows = tab.Columns?.ComposedRows ?? false,
+                        TimeDisplay = tab.Columns?.TimeDisplay ?? TimeDisplay.Absolute,
                         SelectedLine = tab.SelectedLine,
                         Searches = tab
                             .Searches.Where(search => !search.IsGlobalRule)
@@ -1562,6 +1622,9 @@ public sealed class AppState : IAsyncDisposable
                 );
         }
     }
+
+    private static TimeZoneInfo NaiveZone(AppTimeZoneMode mode) =>
+        mode == AppTimeZoneMode.Local ? TimeZoneInfo.Local : TimeZoneInfo.Utc;
 
     private DateTimeOffset Now() =>
         _settings.TimeZoneMode == AppTimeZoneMode.Local

@@ -215,4 +215,97 @@ public sealed class InspectorPanelTests
             File.Delete(path);
         }
     }
+
+    private static async Task<(
+        Avalonia.Controls.Window Window,
+        HexTail.ViewModels.MainWindowViewModel Owner,
+        string Path
+    )> OpenWithFieldAsync(string extension)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}{extension}");
+        File.WriteAllText(path, string.Empty);
+        var window = TestWindow.Create(out var owner);
+        await owner.OpenPathsCommand.Execute([path]);
+        var file = owner.SelectedFile!;
+        var line = new Line(
+            "{\"service\":\"checkout\"}",
+            new Dictionary<string, string> { ["service"] = "checkout" }
+        );
+        file.Model.Buffer.Append([line]);
+        file.SyncViews();
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        owner.Inspector.Open();
+        owner.State.SelectLine(file.Model, line);
+        owner.Inspector.Sync();
+        await UiWait.Until(() => owner.Inspector.Fields.Count == 1);
+        Dispatcher.UIThread.RunJobs();
+        return (window, owner, path);
+    }
+
+    private static MenuItem OpenAddColumnItem(Avalonia.Controls.Window window, string name)
+    {
+        var button = window
+            .GetVisualDescendants()
+            .OfType<Button>()
+            .Single(candidate =>
+                Avalonia.Automation.AutomationProperties.GetName(candidate) == "Actions for service"
+            );
+        var flyout = Assert.IsType<MenuFlyout>(button.Flyout);
+        flyout.ShowAt(button);
+        Dispatcher.UIThread.RunJobs();
+        return flyout
+            .Items.OfType<MenuItem>()
+            .Single(item => Avalonia.Automation.AutomationProperties.GetName(item) == name);
+    }
+
+    [AvaloniaFact]
+    public async Task TheFieldMenuAddsAColumnAndThenShowsItAsAlreadyInColumns()
+    {
+        var (window, owner, path) = await OpenWithFieldAsync(".jsonl");
+        try
+        {
+            var item = OpenAddColumnItem(window, "Add column: service");
+
+            Assert.Equal("Add column", item.Header);
+            Assert.True(item.IsEffectivelyEnabled);
+            item.Command!.Execute(null);
+            await UiWait.Until(() => owner.SelectedFile!.Model.Columns is not null);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal("service", owner.SelectedFile!.Model.Columns!.Columns[^1].Key);
+            await UiWait.Until(() => !item.IsEffectivelyEnabled);
+            Assert.Equal("In columns", item.Header);
+            Assert.Equal(
+                "In columns: service",
+                Avalonia.Automation.AutomationProperties.GetName(item)
+            );
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task TheFieldMenuDisablesAddColumnForPlainTextWithATooltip()
+    {
+        var (window, owner, path) = await OpenWithFieldAsync(".log");
+        try
+        {
+            var item = OpenAddColumnItem(window, "Add column: service");
+
+            Assert.False(item.IsEffectivelyEnabled);
+            Assert.Equal("Add column", item.Header);
+            Assert.Equal("Columns are available for structured sources", ToolTip.GetTip(item));
+        }
+        finally
+        {
+            window.Close();
+            await owner.DisposeAsync();
+            File.Delete(path);
+        }
+    }
 }

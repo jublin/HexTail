@@ -304,7 +304,10 @@ public sealed class ElasticApiClient : IElasticApiClient
         return new ElasticHit(
             hit.GetProperty("_id").GetString()!,
             timestamp,
-            ElasticDocumentMapper.Map(source, fields, outputFields),
+            ElasticDocumentMapper.Map(source, fields, outputFields) with
+            {
+                Timestamp = timestamp,
+            },
             sort
         );
     }

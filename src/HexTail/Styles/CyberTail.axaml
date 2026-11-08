@@ -20,6 +20,7 @@
     <SolidColorBrush x:Key="SelectedTabBrush" Color="#28D7FE" />
     <SolidColorBrush x:Key="SuccessBrush" Color="#39E58C" />
     <SolidColorBrush x:Key="ErrorBrush" Color="#FF667A" />
+    <SolidColorBrush x:Key="ErrorRowBrush" Color="#26FF667A" />
     <SolidColorBrush x:Key="ScrimBrush" Color="#99000000" />
     <x:Double x:Key="ControlHeight">34</x:Double>
   </Styles.Resources>
@@ -331,5 +332,25 @@
 <Style Selector="Button.swatch.selected">
   <Setter Property="BorderThickness" Value="2" />
   <Setter Property="BorderBrush" Value="{DynamicResource TextBrush}" />
+</Style>
+<!-- Column-mode row cells -->
+<Style Selector=":is(TextBlock).cell.dimmed">
+  <Setter Property="Foreground" Value="{DynamicResource FaintTextBrush}" />
+</Style>
+<Style Selector=":is(TextBlock).cell.trc">
+  <Setter Property="Foreground" Value="{DynamicResource FaintTextBrush}" />
+</Style>
+<Style Selector=":is(TextBlock).cell.dbg">
+  <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+</Style>
+<Style Selector=":is(TextBlock).cell.inf">
+  <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+</Style>
+<Style Selector=":is(TextBlock).cell.wrn">
+  <Setter Property="Foreground" Value="#F5B942" />
+</Style>
+<Style Selector=":is(TextBlock).cell.err">
+  <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+  <Setter Property="FontWeight" Value="SemiBold" />
 </Style>
 </Styles>

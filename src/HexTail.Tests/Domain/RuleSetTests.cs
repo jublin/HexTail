@@ -106,4 +106,21 @@ public sealed class RuleSetTests
         Assert.False(combined.IsVisible(L("y")));
         Assert.Same(RuleSet.For(list), RuleSet.Combine(list, []));
     }
+
+    [Fact]
+    public void Highlights_ForTextMatchTheLineOverload()
+    {
+        var rules = new RuleSet([
+            Rule("error", color: "#ff0000"),
+            Rule("fail.+d", mode: MatchMode.Regex),
+        ]);
+        const string text = "ERROR: it failed, error again";
+
+        var fromText = rules.Highlights(text);
+
+        Assert.Equal(rules.Highlights(L(text)), fromText);
+        Assert.Equal(3, fromText.Count);
+        Assert.Empty(rules.Highlights("nothing here"));
+        Assert.Empty(RuleSet.Empty.Highlights(text));
+    }
 }

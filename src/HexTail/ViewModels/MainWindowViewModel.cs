@@ -170,6 +170,9 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ObservableCollection<ElasticConnectionGroupViewModel> ElasticConnectionGroups { get; } =
     [];
     internal IScheduler Scheduler => _scheduler;
+
+    /// <summary>The zone "local" time is shown in; the machine's own unless a test pins another.</summary>
+    internal TimeZoneInfo LocalZone { get; set; } = TimeZoneInfo.Local;
     public bool HasElasticSources => ElasticSources.Count > 0;
     public bool HasElasticWarning => _state.HasElasticWarning;
     public string ElasticSourceIcon => HasElasticWarning ? "mdi-cloud-alert" : "mdi-cloud-check";
@@ -782,6 +785,21 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                     return Task.CompletedTask;
                 }
             );
+            if (file.Model.IsStructured)
+            {
+                yield return new(
+                    "Toggle composed rows",
+                    "View",
+                    null,
+                    () => file.SelectedView.ColumnHeader.ToggleComposedAsync()
+                );
+                yield return new(
+                    "Reset columns",
+                    "View",
+                    null,
+                    async () => await file.SelectedView.ColumnHeader.ResetCommand.Execute()
+                );
+            }
             yield return new(
                 "Focus search",
                 "Search",
