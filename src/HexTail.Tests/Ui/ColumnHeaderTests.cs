@@ -322,7 +322,15 @@ public sealed class ColumnHeaderTests
 
         var boxes = h.ChoiceBoxes(flyout);
         Assert.Equal(
-            ["Time", "Level", "Message", "host", "level", "msg", "service"],
+            [
+                "Time (detected)",
+                "Level (detected)",
+                "Message (detected)",
+                "host",
+                "level",
+                "msg",
+                "service",
+            ],
             boxes.Select(box => (string)box.Content!)
         );
         Assert.Equal(
@@ -334,6 +342,60 @@ public sealed class ColumnHeaderTests
             h.Model.Choices.Select(choice => choice.Key)
         );
     }
+
+    [AvaloniaFact]
+    public async Task OpenColumnsMenu_KeepsItsChoices_WhileTheBufferChanges()
+    {
+        await using var h = await OpenAsync(".jsonl");
+        h.OpenMenu();
+        var before = h.Model.Choices.ToList();
+
+        // A new field arrives, then enough lines without "host" and "service" push them out of the
+        // 500-line window: the open list must not shift under the pointer.
+        h.File.Model.Buffer.Append([FieldLine("brandnew", "x")]);
+        for (var round = 0; round < 3; round++)
+        {
+            h.File.Model.Buffer.Append(Enumerable.Range(0, 300).Select(_ => FieldLine("msg", "m")));
+            h.File.SyncViews();
+            h.Model.Sync();
+        }
+
+        Assert.Equal(before.Count, h.Model.Choices.Count);
+        for (var index = 0; index < before.Count; index++)
+            Assert.Same(before[index], h.Model.Choices[index]);
+
+        // Closing reconciles the list with the buffer.
+        h.Model.SetMenuOpen(false);
+        Assert.DoesNotContain(h.Model.Choices, choice => choice.Key == "host");
+        Assert.DoesNotContain(h.Model.Choices, choice => choice.Key == "brandnew");
+    }
+
+    [AvaloniaFact]
+    public async Task OpenColumnsMenu_InsertsAColumnTheLayoutGained_AtItsSortedPosition()
+    {
+        await using var h = await OpenAsync(".jsonl");
+        h.OpenMenu();
+        var before = h.Model.Choices.ToList();
+
+        await h.Workspace.State.SetColumnLayoutAsync(h.File.Model, h.Layout.WithColumn("middle"));
+        h.File.Views[0].RefreshLayout();
+        h.Model.Sync();
+
+        var keys = h.Model.Choices.Select(choice => choice.Key).ToList();
+        Assert.Equal(
+            ["@time", "@level", "@message", "host", "level", "middle", "msg", "service"],
+            keys
+        );
+        foreach (var choice in before)
+            Assert.Contains(choice, h.Model.Choices);
+        Assert.True(h.Model.Choices.Single(choice => choice.Key == "middle").IsOn);
+    }
+
+    private static Line FieldLine(string key, string value) =>
+        new($"{{\"{key}\":\"{value}\"}}", new Dictionary<string, string> { [key] = value })
+        {
+            Timestamp = new DateTimeOffset(2020, 1, 2, 3, 4, 9, 0, TimeSpan.Zero),
+        };
 
     [AvaloniaFact]
     public async Task TogglingAFieldOn_AppendsAColumn_AndOff_RemovesIt()
@@ -362,12 +424,12 @@ public sealed class ColumnHeaderTests
         await using var h = await OpenAsync(".jsonl");
         var flyout = h.OpenMenu();
 
-        foreach (var title in new[] { "Time", "Level" })
+        foreach (var title in new[] { "Time (detected)", "Level (detected)" })
             h.ChoiceBoxes(flyout).Single(box => (string)box.Content! == title).IsChecked = false;
         await UiWait.Until(() => h.Layout.Columns.Count == 1);
 
         var boxes = h.ChoiceBoxes(flyout);
-        var message = boxes.Single(box => (string)box.Content! == "Message");
+        var message = boxes.Single(box => (string)box.Content! == "Message (detected)");
         await UiWait.Until(() => !message.IsEnabled);
         Assert.All(
             boxes.Where(box => !ReferenceEquals(box, message)),
@@ -376,7 +438,7 @@ public sealed class ColumnHeaderTests
         Assert.Empty(h.VisibleThumbs());
 
         // Adding another column enables the first again.
-        boxes.Single(box => (string)box.Content! == "Level").IsChecked = true;
+        boxes.Single(box => (string)box.Content! == "Level (detected)").IsChecked = true;
         await UiWait.Until(() => message.IsEnabled);
     }
 
@@ -528,6 +590,11 @@ public sealed class ColumnHeaderTests
         Assert.Equal("Resize Level column", Name(h.Thumb("Level")));
         foreach (var box in h.ChoiceBoxes(flyout))
             Assert.Contains((string)box.Content!, Name(box));
+        // The pseudo-column reads "Level (detected)", next to the real "level" field.
+        Assert.Equal(
+            ["Time (detected)", "Level (detected)", "Message (detected)"],
+            h.ChoiceBoxes(flyout).Take(3).Select(Name)
+        );
         var root = (Control)flyout.Content!;
         foreach (var control in root.GetVisualDescendants().OfType<Control>())
         {

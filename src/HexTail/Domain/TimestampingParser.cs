@@ -7,7 +7,7 @@ namespace HexTail.Domain;
 /// traces and wrapped messages attached to their entry. After <see cref="MissLimit"/> consecutive
 /// misses the strategy is forgotten so a changed format can be re-detected.
 /// </summary>
-public sealed class TimestampingParser : ILogParser
+public sealed class TimestampingParser : ILogParser, IResettableParser
 {
     public const int MissLimit = 200;
 
@@ -39,6 +39,20 @@ public sealed class TimestampingParser : ILogParser
         {
             lock (_gate)
                 return _strategy;
+        }
+    }
+
+    /// <summary>
+    /// Forgets the strategy, the inherited timestamp and the miss count, as for a source that has just
+    /// been opened. The tailer calls it when the file is rotated or truncated. Thread-safe.
+    /// </summary>
+    public void Reset()
+    {
+        lock (_gate)
+        {
+            _strategy = null;
+            _last = null;
+            _misses = 0;
         }
     }
 

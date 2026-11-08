@@ -1,16 +1,19 @@
+using Avalonia.Headless.XUnit;
 using HexTail.Application;
 using HexTail.Persistence;
 using HexTail.Tailing;
 using HexTail.Tests.Support;
 using HexTail.ViewModels;
+using ReactiveUI.Reactive.Builder;
 
 namespace HexTail.Tests.ViewModels;
 
 public sealed class SettingsSectionTests
 {
-    [Fact]
+    [AvaloniaFact]
     public async Task SectionsAreAppearanceThenLimitsAndClampToThoseTwo()
     {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
         var state = new AppState(
             new LogSourceService(),
             new TestPersistence(),
@@ -35,9 +38,10 @@ public sealed class SettingsSectionTests
         Assert.Equal("appearance", settings.Section);
     }
 
-    [Fact]
+    [AvaloniaFact]
     public async Task SetUpElasticOpensTheSetupFlow()
     {
+        RxAppBuilder.CreateReactiveUIBuilder().WithCoreServices().BuildApp();
         var state = new AppState(
             new LogSourceService(),
             new TestPersistence(),

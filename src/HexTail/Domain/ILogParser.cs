@@ -9,6 +9,15 @@ public interface ILogParser
     Line Parse(string rawText);
 }
 
+/// <summary>
+/// A parser that keeps state between lines (a detected format, the last timestamp). The tailer calls
+/// <see cref="Reset"/> when the source starts over, so the new content does not inherit the old state.
+/// </summary>
+public interface IResettableParser
+{
+    void Reset();
+}
+
 /// <summary>No transformation; each line has no parsed fields.</summary>
 public sealed class PlainTextParser : ILogParser
 {

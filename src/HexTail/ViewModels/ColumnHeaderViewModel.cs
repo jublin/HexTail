@@ -61,7 +61,7 @@ internal sealed class ColumnChoiceViewModel : ReactiveObject
     {
         _owner = owner;
         Key = key;
-        Title = ColumnHeaderViewModel.TitleOf(key);
+        Title = ColumnHeaderViewModel.MenuTitleOf(key);
     }
 
     public string Key { get; }
@@ -199,6 +199,13 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
             _ => key,
         };
 
+    /// <summary>
+    /// The name in the Columns menu: a pseudo-column says "(detected)", so it never looks like a real
+    /// field of the same name (a source can carry a <c>level</c> field next to the Level column).
+    /// </summary>
+    internal static string MenuTitleOf(string key) =>
+        IsPseudo(key) ? $"{TitleOf(key)} (detected)" : key;
+
     /// <summary>The Time, Level and Message pseudo-columns; any other key, <c>@timestamp</c> too, is a field.</summary>
     private static bool IsPseudo(string key) =>
         key is ColumnLayout.Time or ColumnLayout.Level or ColumnLayout.Message;
@@ -232,8 +239,10 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
                 this.RaisePropertyChanged(nameof(IsRelativeTime));
             }
         }
+        // While the menu is open the list is never rebuilt: the checkboxes stay under the pointer and
+        // keep their focus. Only the checked/enabled state follows the layout.
         if (changed || _menuOpen)
-            SyncChoices(layout, scanFields: _menuOpen);
+            SyncChoices(layout, scanFields: false, inPlace: _menuOpen);
     }
 
     private void SyncColumns(ColumnLayout layout)
@@ -264,8 +273,21 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
             );
     }
 
-    private void SyncChoices(ColumnLayout layout, bool scanFields)
+    private void SyncChoices(ColumnLayout layout, bool scanFields, bool inPlace = false)
     {
+        if (inPlace)
+        {
+            // An open menu: never clear or remove. A column the layout gained that the menu lacks
+            // (Reset picking up new output fields) is inserted at its sorted position.
+            foreach (var column in layout.Columns)
+                if (!Choices.Any(choice => choice.Key == column.Key))
+                    Choices.Insert(
+                        SortedIndex(column.Key),
+                        new ColumnChoiceViewModel(this, column.Key)
+                    );
+            UpdateChoiceStates(layout);
+            return;
+        }
         List<string> fields = [];
         if (scanFields)
             fields.AddRange(_owner.File.KnownFields());
@@ -290,6 +312,19 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
                         : new ColumnChoiceViewModel(this, key)
                 );
         }
+        UpdateChoiceStates(layout);
+    }
+
+    private int SortedIndex(string key)
+    {
+        for (var index = 0; index < Choices.Count; index++)
+            if (!IsPseudo(Choices[index].Key) && string.CompareOrdinal(Choices[index].Key, key) > 0)
+                return index;
+        return Choices.Count;
+    }
+
+    private void UpdateChoiceStates(ColumnLayout layout)
+    {
         var onlyOne = layout.Columns.Count <= 1;
         foreach (var choice in Choices)
         {
@@ -302,8 +337,8 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
     internal void SetMenuOpen(bool open)
     {
         _menuOpen = open;
-        if (open)
-            SyncChoices(_owner.Layout, scanFields: true);
+        // One scan per opening, and one reconcile on closing, when nothing is on screen to shift.
+        SyncChoices(_owner.Layout, scanFields: true);
     }
 
     /// <summary>A checkbox of the menu changed: show or hide that column.</summary>

@@ -785,6 +785,76 @@ public sealed class AppStateTests
     }
 
     [Fact]
+    public async Task SetColumnLayout_AFailedSaveDoesNotClobberALaterOverlappingChange()
+    {
+        var path = CreateTempFile("error\n");
+        var persistence = new GatedFirstSavePersistence();
+        await using var tailers = NewTailers();
+        await using var state = new AppState(
+            tailers,
+            persistence,
+            credentials: new InMemoryCredentialVault()
+        );
+        var tab = await state.OpenFileAsync(
+            path,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        var original = ColumnLayout.DefaultFor(tab.Source, null).WithoutColumn("@level");
+        await state.SetColumnLayoutAsync(tab, original, TestContext.Current.CancellationToken);
+        var layoutA = original.WithColumn("service");
+        var layoutB = original.WithColumn("host");
+        persistence.Arm();
+
+        // A is stuck in its save when B starts and finishes.
+        var callA = state
+            .SetColumnLayoutAsync(tab, layoutA, TestContext.Current.CancellationToken)
+            .AsTask();
+        await persistence.FirstSaveStarted.Task.WaitAsync(
+            TimeSpan.FromSeconds(10),
+            TestContext.Current.CancellationToken
+        );
+        await state.SetColumnLayoutAsync(tab, layoutB, TestContext.Current.CancellationToken);
+        persistence.ReleaseFirstSave();
+
+        await Assert.ThrowsAsync<IOException>(() => callA);
+        Assert.Same(layoutB, tab.Columns);
+    }
+
+    private sealed class GatedFirstSavePersistence : IAppPersistence
+    {
+        private readonly TaskCompletionSource _release = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        private int _armed;
+
+        public TaskCompletionSource FirstSaveStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public AppConfig? Config { get; private set; }
+
+        public void Arm() => Interlocked.Exchange(ref _armed, 1);
+
+        public void ReleaseFirstSave() => _release.TrySetResult();
+
+        public ValueTask<AppConfig?> LoadAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(Config);
+
+        public async ValueTask SaveAsync(
+            AppConfig config,
+            CancellationToken cancellationToken = default
+        )
+        {
+            if (Interlocked.Exchange(ref _armed, 0) == 1)
+            {
+                FirstSaveStarted.TrySetResult();
+                await _release.Task.ConfigureAwait(false);
+                throw new IOException("gated save failed");
+            }
+            Config = AppConfigJson.Deserialize(AppConfigJson.Serialize(config));
+        }
+    }
+
+    [Fact]
     public async Task SetColumnLayout_SaveFailureRestoresThePreviousLayout()
     {
         var path = CreateTempFile("error\n");

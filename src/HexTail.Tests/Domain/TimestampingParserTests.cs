@@ -35,6 +35,20 @@ public sealed class TimestampingParserTests
     }
 
     [Fact]
+    public void Reset_ForgetsTheStrategyAndTheInheritedTimestamp()
+    {
+        var parser = Plain();
+        parser.Parse("2026-11-07T10:11:12Z boom");
+
+        parser.Reset();
+        var after = parser.Parse("    no timestamp here");
+
+        Assert.Null(parser.Strategy);
+        Assert.Null(after.Timestamp);
+        Assert.False(after.TimestampInherited);
+    }
+
+    [Fact]
     public void LineBeforeAnyTimestamp_HasNone()
     {
         var parser = Plain();

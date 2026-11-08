@@ -294,6 +294,9 @@ internal sealed class FileTailer : ILogTailer
     {
         _offset = 0;
         _pendingBytes.Clear();
+        // Runs on the tailer thread, the only one that parses for this tailer, so the first line of
+        // the new content is not given the old file's timestamp.
+        (_parser as Domain.IResettableParser)?.Reset();
     }
 
     private async ValueTask EmitLinesAsync(List<string> lines, CancellationToken cancellationToken)

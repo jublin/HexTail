@@ -977,9 +977,16 @@ public sealed class AppState : IAsyncDisposable
         }
         catch
         {
+            // Only undo our own change: a later overlapping call may have replaced the layout since.
+            bool restored;
             lock (_gate)
-                tab.Columns = previous;
-            NotifyChanged();
+            {
+                restored = ReferenceEquals(tab.Columns, layout);
+                if (restored)
+                    tab.Columns = previous;
+            }
+            if (restored)
+                NotifyChanged();
             throw;
         }
     }
