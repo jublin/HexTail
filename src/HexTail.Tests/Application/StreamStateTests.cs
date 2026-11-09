@@ -55,6 +55,31 @@ public sealed class StreamStateTests
     }
 
     [Fact]
+    public void SetMembers_KeysThatMapToTheSameTab_ListTheMemberOnce()
+    {
+        var a = Tab("file-1", "/logs/a.log");
+        var b = Tab("file-2", "/logs/b.log");
+        var definition = Definition(
+            ("file:/logs/a.log", "#111111"),
+            ("file:/LOGS/A.log", "#222222"),
+            ("file:/logs/b.log", "#333333")
+        );
+        var state = NewState();
+
+        state.SetMembers(
+            definition,
+            new Dictionary<string, FileTabState>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["file:/logs/a.log"] = a,
+                ["file:/logs/b.log"] = b,
+            }
+        );
+
+        Assert.Equal(["file-1", "file-2"], state.MemberIds);
+        Assert.Empty(state.MissingMembers);
+    }
+
+    [Fact]
     public void UnknownSources_FallBackToANeutralColourAndTheirId()
     {
         var state = NewState();

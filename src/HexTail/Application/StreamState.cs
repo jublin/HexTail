@@ -9,14 +9,15 @@ namespace HexTail.Application;
 /// <para>
 /// Mutation happens only under AppState's lock (the merger is not thread-safe). The member snapshot is
 /// immutable and swapped atomically, so views can read colours, names and missing members without
-/// locking; <see cref="IsLate"/> reads the merger and is meant for the UI thread that also drains.
+/// locking; <see cref="IsLate"/> takes the same lock as the drain, so it is safe from any thread.
 /// </para>
 /// </summary>
 public sealed class StreamState
 {
     private readonly TimeSpan _hold;
     private readonly Func<DateTimeOffset> _clock;
-    private readonly HashSet<string> _hiddenKeys = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _hiddenKeys = new(StreamMember.KeyComparer);
+    private readonly object _gate;
 
     // Copy-on-write: every member that was ever open in this stream, so rows from a member that has
     // since closed keep their colour and name. Replaced whole, so readers never see a half-written map.
@@ -29,8 +30,14 @@ public sealed class StreamState
     // stream from the member buffers, so a source that is still loading does not leave late rows behind.
     private readonly HashSet<string> _awaitingFirstLines = new(StringComparer.Ordinal);
 
-    internal StreamState(StreamSettings definition, TimeSpan hold, Func<DateTimeOffset> clock)
+    internal StreamState(
+        StreamSettings definition,
+        TimeSpan hold,
+        Func<DateTimeOffset> clock,
+        object? gate = null
+    )
     {
+        _gate = gate ?? new object();
         Definition = definition;
         _hold = hold;
         _clock = clock;
@@ -84,7 +91,16 @@ public sealed class StreamState
         : _everSeen.TryGetValue(sourceId, out var seen) && seen.Tab is { } tab ? tab.DisplayName
         : sourceId;
 
-    public bool IsLate(Line line) => Merger.IsLate(line);
+    /// <summary>
+    /// True when the line was released out of order. Takes AppState's lock (the merger's late set is
+    /// mutated by the drain), so it is safe from any thread; it is uncontended on the UI thread that
+    /// also drains, and the lock is reentrant if called from inside a drain.
+    /// </summary>
+    public bool IsLate(Line line)
+    {
+        lock (_gate)
+            return Merger.IsLate(line);
+    }
 
     internal const string Fallback = "#94a3b8";
 
@@ -96,6 +112,18 @@ public sealed class StreamState
     /// </summary>
     internal bool NoteDelivery(string memberId) =>
         _awaitingFirstLines.Count > 0 && _awaitingFirstLines.Remove(memberId);
+
+    /// <summary>
+    /// A member was reset (its buffer cleared) and reloads asynchronously: its next delivery must re-merge
+    /// the stream, because the rebuild that follows the reset runs while the member is still empty and
+    /// releases the other members' lines past the ones about to be reloaded. Consumed by
+    /// <see cref="NoteDelivery"/>, so it re-arms only on a reset and never loops.
+    /// </summary>
+    internal void AwaitFirstLines(string memberId)
+    {
+        if (_snapshot.MemberIds.Contains(memberId))
+            _awaitingFirstLines.Add(memberId);
+    }
 
     /// <summary>The key of the open member behind a tab id, or null.</summary>
     internal string? KeyOf(string sourceId)
@@ -129,6 +157,9 @@ public sealed class StreamState
         {
             if (open.TryGetValue(member.Key, out var tab))
             {
+                // Keys that differ only in case resolve to one tab: it is one member.
+                if (ids.Contains(tab.Id))
+                    continue;
                 ids.Add(tab.Id);
                 keys.Add(member.Key);
                 tabs.Add(tab);
@@ -167,8 +198,8 @@ public sealed class StreamState
         // Keep the member-order of the definition for the missing list.
         missing.Sort(
             (a, b) =>
-                Definition.Members.FindIndex(m => m.Key == a)
-                - Definition.Members.FindIndex(m => m.Key == b)
+                Definition.Members.FindIndex(m => StreamMember.KeyComparer.Equals(m.Key, a))
+                - Definition.Members.FindIndex(m => StreamMember.KeyComparer.Equals(m.Key, b))
         );
         _snapshot = new Snapshot(ids, keys, tabs, missing, HiddenIdsFor(ids, keys));
     }
@@ -177,7 +208,7 @@ public sealed class StreamState
     {
         _hiddenKeys.Clear();
         foreach (var key in keys)
-            if (Definition.Members.Any(member => member.Key == key))
+            if (Definition.Members.Any(member => StreamMember.KeyComparer.Equals(member.Key, key)))
                 _hiddenKeys.Add(key);
         _snapshot = _snapshot with
         {

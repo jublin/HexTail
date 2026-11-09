@@ -416,6 +416,65 @@ public sealed class SessionToleranceTests
     }
 
     [Fact]
+    public void Streams_DuplicateOpenStreamEntriesForOneStreamKeepTheFirst()
+    {
+        var config = AppConfigJson.Deserialize(
+            """
+            { "version": 2,
+              "streams": [{ "id": "a", "name": "A", "members": [] }, { "id": "b", "name": "B", "members": [] }],
+              "openStreams": [
+                { "streamId": "a", "from": "now-1h" },
+                { "streamId": "b" },
+                { "streamId": "a", "from": "now-2h" }
+              ] }
+            """
+        );
+
+        Assert.Equal(["a", "b"], config.OpenStreams.Select(tab => tab.StreamId));
+        Assert.Equal("now-1h", config.OpenStreams[0].From);
+    }
+
+    [Fact]
+    public void Streams_MemberKeysThatDifferOnlyInCaseAreOneMember()
+    {
+        var config = AppConfigJson.Deserialize(
+            """
+            { "version": 2,
+              "streams": [{ "id": "a", "members": [
+                { "key": "file:/Logs/X.log", "color": "#111111" },
+                { "key": "file:/logs/x.LOG", "color": "#222222" },
+                { "key": "file:/logs/y.log", "color": "#333333" }
+              ] }] }
+            """
+        );
+
+        Assert.Equal(
+            ["file:/Logs/X.log", "file:/logs/y.log"],
+            Assert.Single(config.Streams).Members.Select(member => member.Key)
+        );
+    }
+
+    [Fact]
+    public void Streams_SelectedLineRoundTripsAndABadValueIsDropped()
+    {
+        var saved = AppConfigJson.Deserialize(
+            AppConfigJson.Serialize(
+                new AppConfig
+                {
+                    Streams = [new StreamSettings("a", "A", [])],
+                    OpenStreams = [new PersistedStreamTab { StreamId = "a", SelectedLine = 7 }],
+                }
+            )
+        );
+        Assert.Equal(7, Assert.Single(saved.OpenStreams).SelectedLine);
+
+        var bad = AppConfigJson.Deserialize(
+            """{ "version": 2, "openStreams": [{ "streamId": "a", "selectedLine": "last" }] }"""
+        );
+        Assert.Null(Assert.Single(bad.OpenStreams).SelectedLine);
+    }
+
+    [Fact]
     public void Streams_AMalformedContainerIsDropped()
     {
         var config = AppConfigJson.Deserialize(

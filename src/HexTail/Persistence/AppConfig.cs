@@ -27,7 +27,14 @@ public sealed class AppConfig
 }
 
 /// <summary>One member of a stream. <paramref name="Key"/> is <c>file:{full path}</c> or <c>elastic:{source id}</c>.</summary>
-public sealed record StreamMember(string Key, string Color);
+public sealed record StreamMember(string Key, string Color)
+{
+    /// <summary>
+    /// The one comparer for member keys everywhere. Opening a file already treats paths that differ only
+    /// in case as the same tab, so keys do too; otherwise one tab would be listed under two keys.
+    /// </summary>
+    public static StringComparer KeyComparer => StringComparer.OrdinalIgnoreCase;
+}
 
 /// <summary>A named stream: a set of sources merged by timestamp into one tab.</summary>
 public sealed record StreamSettings(string Id, string Name, List<StreamMember> Members)
@@ -49,7 +56,7 @@ public sealed record StreamSettings(string Id, string Name, List<StreamMember> M
             if (stream is null || string.IsNullOrWhiteSpace(stream.Id) || !ids.Add(stream.Id))
                 continue;
             var members = new List<StreamMember>();
-            var keys = new HashSet<string>(StringComparer.Ordinal);
+            var keys = new HashSet<string>(StreamMember.KeyComparer);
             foreach (var member in stream.Members ?? [])
             {
                 if (
@@ -100,6 +107,7 @@ public sealed class PersistedStreamTab
     public List<PersistedSearch> Searches { get; init; } = [];
     public bool FollowAll { get; init; } = true;
     public List<bool> FollowSearches { get; init; } = [];
+    public int? SelectedLine { get; init; }
     public List<ViewRule> Rules { get; init; } = [];
     public LogLevels Levels { get; init; } = LogLevels.All;
     public List<PersistedColumn>? Columns { get; init; }
@@ -389,6 +397,14 @@ public static class AppConfigJson
                     SanitizeColumns(tab);
                     SanitizeStreamTabFields(tab);
                 }
+            // One tab per stream: a repeated streamId keeps the first entry.
+            if (root["openStreams"] is JsonArray all)
+            {
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                for (var index = 0; index < all.Count; index++)
+                    if (!seen.Add(all[index]!["streamId"]!.GetValue<string>()))
+                        all.RemoveAt(index--);
+            }
         }
 
         if (root.ContainsKey("selectedStreamId") && !IsText(root["selectedStreamId"], true))
@@ -400,6 +416,14 @@ public static class AppConfigJson
         foreach (var name in new[] { "from", "to" })
             if (tab.ContainsKey(name) && !IsText(tab[name], allowBlank: false))
                 tab.Remove(name);
+        if (
+            tab.ContainsKey("selectedLine")
+            && !(
+                tab["selectedLine"] is null
+                || tab["selectedLine"] is JsonValue line && line.TryGetValue<int>(out _)
+            )
+        )
+            tab.Remove("selectedLine");
         foreach (var name in new[] { "live", "followAll" })
             if (
                 tab.ContainsKey(name)

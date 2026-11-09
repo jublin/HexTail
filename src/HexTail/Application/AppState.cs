@@ -565,6 +565,7 @@ public sealed class AppState : IAsyncDisposable
         tab.FollowAll = persisted.FollowAll;
         tab.SetRules(NormalizeRules(persisted.Rules, RuleScope.Source));
         tab.Levels = NormalizeLevels(persisted.Levels);
+        tab.SelectedLine = persisted.SelectedLine;
         tab.Columns = ColumnLayout.FromPersisted(
             persisted.Columns,
             persisted.ComposedRows,
@@ -935,8 +936,22 @@ public sealed class AppState : IAsyncDisposable
     )
     {
         StreamSettings? definition;
+        FileTabState? alreadyOpen = null;
         lock (_gate)
+        {
             definition = _streamDefs.FirstOrDefault(item => item.Id == streamId);
+            // An open stream is only selected: members the user closed stay closed (they show as missing).
+            alreadyOpen = _streamTabs.FirstOrDefault(item =>
+                item.Stream!.Definition.Id == streamId
+            );
+            if (alreadyOpen is not null)
+                SelectedFile = alreadyOpen;
+        }
+        if (alreadyOpen is not null)
+        {
+            NotifyChanged();
+            return alreadyOpen;
+        }
         if (definition is null)
             return null;
 
@@ -952,6 +967,7 @@ public sealed class AppState : IAsyncDisposable
             );
             if (existing is not null)
             {
+                // Opened concurrently while the members were opening.
                 SelectedFile = existing;
                 tab = existing;
             }
@@ -961,7 +977,7 @@ public sealed class AppState : IAsyncDisposable
                 definition = _streamDefs.FirstOrDefault(item => item.Id == streamId);
                 if (definition is null)
                     return null;
-                var state = new StreamState(definition, StreamHold, StreamClock);
+                var state = new StreamState(definition, StreamHold, StreamClock, _gate);
                 state.SetMembers(definition, OpenMembersByKey());
                 var descriptor = LogSourceDescriptor.Stream(definition);
                 tab = new FileTabState(
@@ -1059,7 +1075,7 @@ public sealed class AppState : IAsyncDisposable
                     nameof(tabs)
                 );
             var key = MemberKey(tab);
-            if (!keys.Contains(key))
+            if (!keys.Contains(key, StreamMember.KeyComparer))
                 keys.Add(key);
         }
         if (keys.Count < 2)
@@ -1068,13 +1084,17 @@ public sealed class AppState : IAsyncDisposable
                 nameof(tabs)
             );
         var used = new HashSet<string>(
-            existing.Where(member => keys.Contains(member.Key)).Select(member => member.Color),
+            existing
+                .Where(member => keys.Contains(member.Key, StreamMember.KeyComparer))
+                .Select(member => member.Color),
             StringComparer.OrdinalIgnoreCase
         );
         var result = new List<StreamMember>(keys.Count);
         foreach (var key in keys)
         {
-            var color = existing.FirstOrDefault(member => member.Key == key)?.Color;
+            var color = existing
+                .FirstOrDefault(member => StreamMember.KeyComparer.Equals(member.Key, key))
+                ?.Color;
             if (string.IsNullOrWhiteSpace(color))
             {
                 color =
@@ -1090,7 +1110,7 @@ public sealed class AppState : IAsyncDisposable
     /// <summary>Open File and Elastic tabs by member key. Under _gate.</summary>
     private Dictionary<string, FileTabState> OpenMembersByKey()
     {
-        var map = new Dictionary<string, FileTabState>(StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, FileTabState>(StreamMember.KeyComparer);
         foreach (var tab in _files)
             if (tab.Source.Kind != LogSourceKind.Stream)
                 map.TryAdd(MemberKey(tab), tab);
@@ -1118,7 +1138,8 @@ public sealed class AppState : IAsyncDisposable
         {
             if (!map.TryGetValue(id, out var list))
                 map[id] = list = [];
-            list.Add(tab.Stream);
+            if (!list.Contains(tab.Stream))
+                list.Add(tab.Stream);
         }
         _memberStreams = map.ToDictionary(pair => pair.Key, pair => pair.Value.ToArray());
     }
@@ -1137,7 +1158,7 @@ public sealed class AppState : IAsyncDisposable
             if (
                 state.MemberIds.Contains(member.Id)
                 || !state.Definition.Members.Any(item =>
-                    string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase)
+                    StreamMember.KeyComparer.Equals(item.Key, key)
                 )
             )
                 continue;
@@ -1168,12 +1189,20 @@ public sealed class AppState : IAsyncDisposable
         }
     }
 
-    /// <summary>The member's buffer was cleared outside the event loop: its streams must re-merge. Under _gate.</summary>
+    /// <summary>
+    /// The member's buffer was cleared (a reset, an Elastic reload or range change): its streams must
+    /// re-merge. The member reloads asynchronously, so the rebuild that the next drain runs sees it empty;
+    /// it is also re-armed to re-merge once more on its first delivery, so the reloaded lines are sorted in
+    /// instead of arriving behind a watermark the other members have already pushed past. Under _gate.
+    /// </summary>
     private void MarkStreamsForRebuild(string memberId)
     {
         if (_memberStreams.TryGetValue(memberId, out var streams))
             foreach (var stream in streams)
+            {
                 stream.NeedsRebuild = true;
+                stream.AwaitFirstLines(memberId);
+            }
     }
 
     /// <summary>Clears the stream's buffer and re-merges every open member's current lines in one pass. Under _gate.</summary>
@@ -1839,6 +1868,7 @@ public sealed class AppState : IAsyncDisposable
                         Columns = tab.Columns?.ToPersisted(),
                         ComposedRows = tab.Columns?.ComposedRows ?? false,
                         TimeDisplay = tab.Columns?.TimeDisplay ?? TimeDisplay.Absolute,
+                        SelectedLine = tab.SelectedLine,
                         HiddenSources = [.. tab.Stream.HiddenKeys],
                         From = tab.Stream.RangeFrom,
                         To = tab.Stream.RangeTo,
