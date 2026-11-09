@@ -11,7 +11,205 @@
 >
   <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="8" Spacing="2">
-      <Grid ColumnDefinitions="*,Auto" Margin="4,4,0,2">
+      <StackPanel x:Name="StreamsSection" Spacing="2">
+        <Grid ColumnDefinitions="*,Auto" Margin="4,4,0,2">
+          <TextBlock Text="STREAMS" Classes="sidebar-heading" />
+          <Button
+            x:Name="SidebarNewStreamButton"
+            Grid.Column="1"
+            Classes="icon tab-close"
+            Width="24"
+            Height="24"
+            FontSize="16"
+            Command="{Binding NewStreamCommand}"
+            ToolTip.Tip="New stream"
+            AutomationProperties.Name="New stream"
+          >
+            <ic:Icon Value="mdi-plus" />
+          </Button>
+        </Grid>
+        <TextBlock
+          x:Name="NoStreamsHint"
+          Text="No streams. Merge sources by timestamp."
+          Classes="hint"
+          TextWrapping="Wrap"
+          Margin="6,2"
+          IsVisible="{Binding !HasStreams}"
+        />
+        <ItemsControl x:Name="StreamList" ItemsSource="{Binding StreamRows}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:StreamRowViewModel">
+              <Border
+                Classes="source-row"
+                Classes.selected="{Binding IsSelected}"
+                ToolTip.Tip="{Binding ToolTip}"
+              >
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="2">
+                  <Button
+                    Classes="source-select"
+                    Command="{Binding $parent[UserControl].DataContext.OpenStreamCommand}"
+                    CommandParameter="{Binding Id}"
+                    AutomationProperties.Name="{Binding Name, StringFormat='Open {0}'}"
+                  >
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <ItemsControl ItemsSource="{Binding Dots}" VerticalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="2" />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <Ellipse Width="8" Height="8" Fill="{Binding}" />
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <TextBlock
+                        Text="{Binding Name}"
+                        Classes.muted="{Binding !IsOpen}"
+                        TextTrimming="CharacterEllipsis"
+                      />
+                    </StackPanel>
+                  </Button>
+                  <Button
+                    Grid.Column="1"
+                    Classes="icon tab-close"
+                    Width="22"
+                    Height="22"
+                    FontSize="14"
+                    Command="{Binding $parent[UserControl].DataContext.EditStreamCommand}"
+                    CommandParameter="{Binding Id}"
+                    ToolTip.Tip="{Binding Name, StringFormat='Edit {0}'}"
+                    AutomationProperties.Name="{Binding Name, StringFormat='Edit {0}'}"
+                  >
+                    <ic:Icon Value="mdi-pencil-outline" />
+                  </Button>
+                  <Button
+                    Grid.Column="2"
+                    Classes="icon tab-close"
+                    Width="22"
+                    Height="22"
+                    FontSize="14"
+                    IsVisible="{Binding IsOpen}"
+                    Command="{Binding $parent[UserControl].DataContext.CloseStreamCommand}"
+                    CommandParameter="{Binding Tab}"
+                    ToolTip.Tip="{Binding Name, StringFormat='Close {0}'}"
+                    AutomationProperties.Name="{Binding Name, StringFormat='Close {0}'}"
+                  >
+                    <ic:Icon Value="mdi-close" />
+                  </Button>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <StackPanel x:Name="StreamEditorPanel" IsVisible="{Binding IsStreamEditorOpen}">
+          <Border
+            DataContext="{Binding StreamEditor}"
+            x:DataType="vm:StreamEditorViewModel"
+            Classes="stream-editor"
+            Background="{DynamicResource RaisedAltBrush}"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="4"
+            Padding="8"
+            Margin="0,4"
+          >
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+              <TextBox
+                x:Name="StreamNameBox"
+                Text="{Binding Name, Mode=TwoWay}"
+                PlaceholderText="Stream name"
+                AutomationProperties.Name="Stream name"
+              />
+              <TextBlock Text="Sources to merge" Classes="sidebar-heading" />
+              <TextBlock
+                Text="Open at least two sources to make a stream."
+                Classes="hint"
+                TextWrapping="Wrap"
+                IsVisible="{Binding NeedsMoreSources}"
+              />
+              <ItemsControl x:Name="StreamChoiceList" ItemsSource="{Binding Choices}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:StreamMemberChoice">
+                    <CheckBox
+                      IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                      ToolTip.Tip="{Binding ToolTip}"
+                      AutomationProperties.Name="{Binding Label}"
+                    >
+                      <TextBlock
+                        Text="{Binding Label}"
+                        Classes.muted="{Binding IsMissing}"
+                        TextTrimming="CharacterEllipsis"
+                      />
+                    </CheckBox>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock
+                x:Name="StreamEditorError"
+                Text="{Binding Error}"
+                IsVisible="{Binding HasError}"
+                Classes="error"
+                TextWrapping="Wrap"
+                FontSize="12"
+              />
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Button
+                  x:Name="StreamSaveButton"
+                  Content="Save"
+                  Classes="primary"
+                  Command="{Binding SaveCommand}"
+                  AutomationProperties.Name="Save stream"
+                />
+                <Button
+                  x:Name="StreamCancelButton"
+                  Content="Cancel"
+                  Command="{Binding CancelCommand}"
+                  AutomationProperties.Name="Cancel stream editor"
+                />
+                <Button
+                  x:Name="StreamDeleteButton"
+                  Content="Delete"
+                  IsVisible="{Binding IsEditMode}"
+                  Command="{Binding DeleteCommand}"
+                  AutomationProperties.Name="Delete stream"
+                />
+              </StackPanel>
+              <StackPanel
+                x:Name="StreamDeleteConfirm"
+                Spacing="6"
+                IsVisible="{Binding IsConfirmingDelete}"
+              >
+                <TextBlock
+                  Text="Delete this stream? Its member sources stay open."
+                  Classes="error"
+                  TextWrapping="Wrap"
+                  FontSize="12"
+                />
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Button
+                    x:Name="StreamDeleteConfirmButton"
+                    Content="Confirm"
+                    Command="{Binding ConfirmDeleteCommand}"
+                    AutomationProperties.Name="Confirm delete stream"
+                  />
+                  <Button
+                    x:Name="StreamDeleteKeepButton"
+                    Content="Keep"
+                    Command="{Binding CancelDeleteCommand}"
+                    AutomationProperties.Name="Keep stream"
+                  />
+                </StackPanel>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </StackPanel>
+
+      <Grid ColumnDefinitions="*,Auto" Margin="4,12,0,2">
         <TextBlock Text="FILES" Classes="sidebar-heading" />
         <Button
           x:Name="SidebarOpenFileButton"

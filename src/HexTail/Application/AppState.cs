@@ -828,11 +828,16 @@ public sealed class AppState : IAsyncDisposable
         return created;
     }
 
+    /// <param name="keepMissingKeys">
+    /// Keys of members of the saved definition that are not open (missing) and should stay in it. They count
+    /// toward the two-member minimum and keep their colour; keys that are not in the definition are ignored.
+    /// </param>
     public async ValueTask UpdateStreamAsync(
         string streamId,
         string name,
         IReadOnlyList<FileTabState> members,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        IReadOnlyCollection<string>? keepMissingKeys = null
     )
     {
         ArgumentNullException.ThrowIfNull(members);
@@ -846,7 +851,7 @@ public sealed class AppState : IAsyncDisposable
             var updated = previous with
             {
                 Name = string.IsNullOrWhiteSpace(name) ? StreamSettings.DefaultName : name.Trim(),
-                Members = BuildMembers(members, previous.Members),
+                Members = BuildMembers(members, previous.Members, keepMissingKeys),
             };
             _streamDefs[index] = updated;
             ApplyDefinition(updated);
@@ -1063,7 +1068,8 @@ public sealed class AppState : IAsyncDisposable
     /// <summary>Distinct, non-stream member tabs as definition members; colours of retained keys are kept. Under _gate.</summary>
     private List<StreamMember> BuildMembers(
         IReadOnlyList<FileTabState> tabs,
-        IReadOnlyList<StreamMember> existing
+        IReadOnlyList<StreamMember> existing,
+        IReadOnlyCollection<string>? keepMissingKeys = null
     )
     {
         var keys = new List<string>();
@@ -1078,6 +1084,12 @@ public sealed class AppState : IAsyncDisposable
             if (!keys.Contains(key, StreamMember.KeyComparer))
                 keys.Add(key);
         }
+        foreach (var member in existing)
+            if (
+                keepMissingKeys?.Contains(member.Key, StreamMember.KeyComparer) == true
+                && !keys.Contains(member.Key, StreamMember.KeyComparer)
+            )
+                keys.Add(member.Key);
         if (keys.Count < 2)
             throw new ArgumentException(
                 "A stream needs at least two different sources.",

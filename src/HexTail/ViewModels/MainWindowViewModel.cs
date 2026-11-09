@@ -59,6 +59,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private bool _narrowShell;
     private bool _narrowPaneOpen;
     private double _sidebarWidth = 240;
+    private StreamEditorViewModel? _streamEditor;
 
     public MainWindowViewModel(
         AppState state,
@@ -125,6 +126,13 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             RemoveSearchAsync,
             _scheduler
         );
+        NewStreamCommand = ReactiveCommand.Create(() => OpenStreamEditor(null), _scheduler);
+        EditStreamCommand = ReactiveCommand.Create<string>(OpenStreamEditor, _scheduler);
+        OpenStreamCommand = ReactiveCommand.CreateFromTask<string>(OpenStreamAsync, _scheduler);
+        CloseStreamCommand = ReactiveCommand.CreateFromTask<FileTabViewModel>(
+            CloseStreamAsync,
+            _scheduler
+        );
 
         _subscriptions.Add(
             Observable
@@ -137,6 +145,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 .Subscribe(_ => QueueSyncFromState())
         );
         FileTabs.CollectionChanged += (_, _) => this.RaisePropertyChanged(nameof(HasFileTabs));
+        StreamRows.CollectionChanged += (_, _) => this.RaisePropertyChanged(nameof(HasStreams));
         SavedFilters.CollectionChanged += (_, _) =>
             this.RaisePropertyChanged(nameof(HasSavedFilters));
 
@@ -149,7 +158,11 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                     OpenSampleCommand.ThrownExceptions,
                     SaveCommand.ThrownExceptions,
                     CloseFileCommand.ThrownExceptions,
-                    RemoveSearchCommand.ThrownExceptions
+                    RemoveSearchCommand.ThrownExceptions,
+                    NewStreamCommand.ThrownExceptions,
+                    EditStreamCommand.ThrownExceptions,
+                    OpenStreamCommand.ThrownExceptions,
+                    CloseStreamCommand.ThrownExceptions
                 )
                 .Subscribe(ex => SetFileError(ex.Message))
         );
@@ -164,6 +177,23 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ObservableCollection<FileTabViewModel> Files { get; } = [];
     public ObservableCollection<FileTabViewModel> FileTabs { get; } = [];
     public bool HasFileTabs => FileTabs.Count > 0;
+
+    /// <summary>The STREAMS section: one row per saved stream, open or closed.</summary>
+    public ObservableCollection<StreamRowViewModel> StreamRows { get; } = [];
+    public bool HasStreams => StreamRows.Count > 0;
+
+    /// <summary>The open stream editor (new or edit), or null.</summary>
+    public StreamEditorViewModel? StreamEditor
+    {
+        get => _streamEditor;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _streamEditor, value);
+            this.RaisePropertyChanged(nameof(IsStreamEditorOpen));
+        }
+    }
+
+    public bool IsStreamEditorOpen => _streamEditor is not null;
     public ObservableCollection<SavedFilterViewModel> SavedFilters { get; } = [];
     public bool HasSavedFilters => SavedFilters.Count > 0;
     public ObservableCollection<ElasticSourceOptionViewModel> ElasticSources { get; } = [];
@@ -196,6 +226,16 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<string, Unit> ApplyRangePresetCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> CloseFileCommand { get; }
     public ReactiveCommand<LogViewViewModel, Unit> RemoveSearchCommand { get; }
+    public ReactiveCommand<Unit, Unit> NewStreamCommand { get; }
+
+    /// <summary>Opens the editor on a saved stream; the parameter is the stream's id.</summary>
+    public ReactiveCommand<string, Unit> EditStreamCommand { get; }
+
+    /// <summary>Opens a saved stream's tab (or selects it when it is open); the parameter is the stream's id.</summary>
+    public ReactiveCommand<string, Unit> OpenStreamCommand { get; }
+
+    /// <summary>Closes a stream's tab. The saved definition and the member sources stay.</summary>
+    public ReactiveCommand<FileTabViewModel, Unit> CloseStreamCommand { get; }
 
     public FileTabViewModel? SelectedFile
     {
@@ -238,9 +278,17 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
     internal static string DescribeSources(IReadOnlyCollection<FileTabState> files)
     {
-        if (files.Count == 0)
-            return "No sources open";
-        var text = files.Count == 1 ? "1 source open" : $"{files.Count} sources open";
+        var streams = files.Count(file => file.Source.Kind == LogSourceKind.Stream);
+        var sources = files.Count - streams;
+        // A stream merges sources, it is not one, so it never counts toward the sources.
+        var text = sources switch
+        {
+            0 => "No sources open",
+            1 => "1 source open",
+            _ => $"{sources} sources open",
+        };
+        if (streams > 0)
+            text += streams == 1 ? " · 1 stream open" : $" · {streams} streams open";
         var failing = files.Count(file => file.Error is not null);
         return failing == 0 ? text : $"{text} · {failing} with errors";
     }
@@ -733,6 +781,22 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     {
         yield return new("Open files…", "File", "Ctrl+O", async () => await OpenCommand.Execute());
         yield return new(
+            "New stream",
+            "Streams",
+            null,
+            async () => await NewStreamCommand.Execute()
+        );
+        foreach (var stream in _state.Streams)
+        {
+            var id = stream.Id;
+            yield return new(
+                $"Open stream {stream.Name}",
+                "Streams",
+                null,
+                async () => await OpenStreamCommand.Execute(id)
+            );
+        }
+        yield return new(
             "Set up Elastic",
             "Elastic",
             null,
@@ -874,6 +938,75 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             );
     }
 
+    private void OpenStreamEditor(string? streamId)
+    {
+        StreamSettings? existing = null;
+        if (streamId is not null)
+        {
+            existing = _state.Streams.FirstOrDefault(item => item.Id == streamId);
+            if (existing is null)
+            {
+                SetFileError("The stream no longer exists.");
+                return;
+            }
+        }
+        try
+        {
+            StreamEditor = new StreamEditorViewModel(this, existing);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            SetFileError(ex.Message);
+        }
+    }
+
+    internal void CloseStreamEditor(StreamEditorViewModel editor)
+    {
+        if (ReferenceEquals(StreamEditor, editor))
+            StreamEditor = null;
+    }
+
+    internal async Task OpenStreamAsync(string streamId)
+    {
+        try
+        {
+            if (await _state.OpenStreamAsync(streamId) is not null)
+            {
+                SelectedViewIndex = 0;
+                DismissNarrowSidebar();
+                SetFileError(null);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            SetFileError(ex.Message);
+        }
+    }
+
+    private async Task CloseStreamAsync(FileTabViewModel tab)
+    {
+        if (tab.Model.Source.Kind != LogSourceKind.Stream)
+            return;
+        await CloseFileAsync(tab);
+    }
+
+    /// <summary>The key of a stream member as text: the file's path, or the Elastic source id.</summary>
+    internal static string DescribeMemberKey(string key) =>
+        key.StartsWith("file:", StringComparison.Ordinal) ? key[5..]
+        : key.StartsWith("elastic:", StringComparison.Ordinal) ? key[8..]
+        : key;
+
+    /// <summary>A short name for a saved member that is not open: the file name, or the Elastic source's name.</summary>
+    internal string DescribeMissingMember(string key)
+    {
+        var text = DescribeMemberKey(key);
+        if (key.StartsWith("elastic:", StringComparison.Ordinal))
+            return ElasticSources.FirstOrDefault(option => option.SourceId == text)?.DisplayName
+                ?? text;
+        var name = System.IO.Path.GetFileName(text);
+        return string.IsNullOrEmpty(name) ? text : name;
+    }
+
     internal void SelectFile(FileTabViewModel file)
     {
         _state.SelectFile(file.Model);
@@ -945,6 +1078,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         SelectedFile = _state.SelectedFile is null
             ? null
             : Files.FirstOrDefault(item => ReferenceEquals(item.Model, _state.SelectedFile));
+        SyncStreamRows();
         Settings.Sync(_state.Settings);
         FilterBar.Sync();
         Inspector.Sync();
@@ -1035,6 +1169,33 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             this.RaisePropertyChanged(nameof(HasElasticWarning));
         if (previous.ElasticSourceIcon != current.ElasticSourceIcon)
             this.RaisePropertyChanged(nameof(ElasticSourceIcon));
+    }
+
+    private void SyncStreamRows()
+    {
+        var definitions = _state.Streams;
+        for (var index = StreamRows.Count - 1; index >= 0; index--)
+            if (!definitions.Any(definition => definition.Id == StreamRows[index].Id))
+                StreamRows.RemoveAt(index);
+        for (var index = 0; index < definitions.Count; index++)
+        {
+            var definition = definitions[index];
+            var row = StreamRows.FirstOrDefault(item => item.Id == definition.Id);
+            var tab = Files.FirstOrDefault(file =>
+                file.Model.Stream?.Definition.Id == definition.Id
+            );
+            var selected = tab is not null && ReferenceEquals(tab, SelectedFile);
+            if (row is null)
+            {
+                row = new StreamRowViewModel(definition.Id);
+                row.Sync(definition, tab, selected);
+                StreamRows.Insert(index, row);
+                continue;
+            }
+            row.Sync(definition, tab, selected);
+            if (StreamRows.IndexOf(row) is var current && current != index)
+                StreamRows.Move(current, index);
+        }
     }
 
     private void SyncSavedFilters()
