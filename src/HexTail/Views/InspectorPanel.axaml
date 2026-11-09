@@ -52,6 +52,23 @@
             Classes="hint"
             IsVisible="{Binding !HasLine}"
           />
+          <StackPanel Spacing="4" IsVisible="{Binding HasSource}">
+            <TextBlock Text="SOURCE" Classes="sidebar-heading" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Ellipse
+                Width="8"
+                Height="8"
+                Fill="{Binding SourceBrush}"
+                VerticalAlignment="Center"
+              />
+              <SelectableTextBlock
+                x:Name="InspectorSource"
+                Text="{Binding SourceName}"
+                TextWrapping="Wrap"
+                AutomationProperties.Name="Source of this row"
+              />
+            </StackPanel>
+          </StackPanel>
           <StackPanel Spacing="4" IsVisible="{Binding HasLine}">
             <TextBlock Text="RAW" Classes="sidebar-heading" />
             <SelectableTextBlock

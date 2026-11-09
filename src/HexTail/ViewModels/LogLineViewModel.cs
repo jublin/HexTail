@@ -40,6 +40,21 @@ internal sealed class LogLineViewModel : ReactiveObject
     public bool UsesColumns { get; private set; }
     public IReadOnlyList<LogCellViewModel> Cells { get; private set; } = [];
 
+    /// <summary>True on a stream tab's rows, which carry a left stripe in the member colour.</summary>
+    public bool IsStreamRow { get; private set; }
+
+    /// <summary>The member colour of a stream row; null on every other row.</summary>
+    public IBrush? StripeBrush { get; private set; }
+
+    /// <summary>The member's display name on a stream row; empty elsewhere.</summary>
+    public string SourceName { get; private set; } = string.Empty;
+
+    /// <summary>True when a stream released this row out of order.</summary>
+    public bool IsLate { get; private set; }
+
+    /// <summary>"Arrived late from {name}" on a late row; null otherwise.</summary>
+    public string? LateToolTip { get; private set; }
+
     /// <summary>True when the line's level is Error; the row gets a faint tint in both modes.</summary>
     public bool IsErrorRow { get; private set; }
 
@@ -164,6 +179,7 @@ internal sealed class LogLineViewModel : ReactiveObject
             Cells = [];
         }
         UsesColumns = usesColumns;
+        RenderStream();
         IsErrorRow = level == LogLevels.Error;
         Background = ThemeManager.Brush(IsErrorRow ? "ErrorRowBrush" : "SurfaceBrush");
         this.RaisePropertyChanged(nameof(Spans));
@@ -173,6 +189,38 @@ internal sealed class LogLineViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(Background));
         this.RaisePropertyChanged(nameof(ParsedFieldsText));
         _renderDirty = false;
+    }
+
+    /// <summary>
+    /// Resolves the member colour, name and late flag of a stream row. The late lookup takes AppState's
+    /// lock, so it runs once per row render (never per cell) and only for realized rows.
+    /// </summary>
+    private void RenderStream()
+    {
+        var stream = _file.Model.Stream;
+        if (stream is null)
+        {
+            if (!IsStreamRow)
+                return;
+            IsStreamRow = false;
+            StripeBrush = null;
+            SourceName = string.Empty;
+            IsLate = false;
+            LateToolTip = null;
+        }
+        else
+        {
+            IsStreamRow = true;
+            StripeBrush = StreamBrushes.For(stream.ColorFor(Line.SourceId));
+            SourceName = stream.DisplayNameFor(Line.SourceId);
+            IsLate = stream.IsLate(Line);
+            LateToolTip = IsLate ? $"Arrived late from {SourceName}" : null;
+        }
+        this.RaisePropertyChanged(nameof(IsStreamRow));
+        this.RaisePropertyChanged(nameof(StripeBrush));
+        this.RaisePropertyChanged(nameof(SourceName));
+        this.RaisePropertyChanged(nameof(IsLate));
+        this.RaisePropertyChanged(nameof(LateToolTip));
     }
 
     private LogCellViewModel[] BuildCells(
@@ -203,6 +251,9 @@ internal sealed class LogLineViewModel : ReactiveObject
                 case ColumnLayout.Time:
                     dimmed = Line.TimestampInherited;
                     text = TimeText(layout, zone, out toolTip);
+                    break;
+                case ColumnLayout.Source:
+                    text = _file.Model.Stream?.DisplayNameFor(Line.SourceId) ?? string.Empty;
                     break;
                 case ColumnLayout.Level:
                     text = LevelText(level, out levelClass);

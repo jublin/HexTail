@@ -3,6 +3,7 @@ using System.Reactive;
 using System.Reactive.Concurrency;
 using HexTail.Application;
 using HexTail.Domain;
+using HexTail.Persistence;
 using ReactiveUI;
 using ReactiveUI.Reactive;
 
@@ -47,6 +48,10 @@ internal sealed class FilterBarViewModel : ReactiveObject
 
     internal IScheduler Scheduler => _owner.Scheduler;
     public ObservableCollection<RuleChipViewModel> Chips { get; } = [];
+
+    /// <summary>One toggle per member of the selected stream tab; empty on every other tab.</summary>
+    public ObservableCollection<SourceChipViewModel> SourceChips { get; } = [];
+    public bool HasSourceChips => SourceChips.Count > 0;
     public bool HasChips => Chips.Count > 0;
     public IReadOnlyList<LevelToggleViewModel> LevelToggles { get; }
     public bool HasLevelFilter =>
@@ -172,6 +177,108 @@ internal sealed class FilterBarViewModel : ReactiveObject
         }
     }
 
+    internal bool IsSourceShown(string tabId) =>
+        _owner.SelectedFile?.Model.Stream is { } stream && !stream.HiddenSources.Contains(tabId);
+
+    internal async Task ToggleSourceAsync(SourceChipViewModel chip)
+    {
+        var file = _owner.SelectedFile?.Model;
+        if (file?.Stream is not { } stream || chip.TabId is not { } id)
+        {
+            chip.Refresh();
+            return;
+        }
+        Error = null;
+        try
+        {
+            var hidden = new HashSet<string>(stream.HiddenSources, StringComparer.Ordinal);
+            if (!hidden.Remove(id))
+                hidden.Add(id);
+            await _owner.State.SetHiddenSourcesAsync(file, hidden);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Error = ex.Message;
+        }
+        finally
+        {
+            // The button flipped itself; put it back in step with the stream's real state.
+            foreach (var other in SourceChips)
+                other.Refresh();
+        }
+    }
+
+    private void SyncSourceChips()
+    {
+        var stream = _owner.SelectedFile?.Model.Stream;
+        if (stream is null)
+        {
+            if (SourceChips.Count > 0)
+            {
+                SourceChips.Clear();
+                this.RaisePropertyChanged(nameof(HasSourceChips));
+            }
+            return;
+        }
+        var members = stream.Definition.Members;
+        var open = stream.MemberIds;
+        var wanted = new List<(string Key, string? TabId, string Name, string Color)>(
+            members.Count
+        );
+        foreach (var member in members)
+        {
+            string? tabId = null;
+            foreach (var id in open)
+                if (stream.KeyOf(id) is { } key && StreamMember.KeyComparer.Equals(key, member.Key))
+                {
+                    tabId = id;
+                    break;
+                }
+            wanted.Add(
+                (
+                    member.Key,
+                    tabId,
+                    tabId is null ? MissingName(member.Key) : stream.DisplayNameFor(tabId),
+                    member.Color
+                )
+            );
+        }
+        var same =
+            SourceChips.Count == wanted.Count
+            && wanted
+                .Select(
+                    (item, index) =>
+                        SourceChips[index].Key == item.Key
+                        && SourceChips[index].TabId == item.TabId
+                        && SourceChips[index].Name == item.Name
+                        && SourceChips[index].Color == item.Color
+                )
+                .All(match => match);
+        if (!same)
+        {
+            SourceChips.Clear();
+            foreach (var item in wanted)
+                SourceChips.Add(
+                    new SourceChipViewModel(this, item.Key, item.TabId, item.Name, item.Color)
+                );
+            this.RaisePropertyChanged(nameof(HasSourceChips));
+        }
+        foreach (var chip in SourceChips)
+            chip.Refresh();
+    }
+
+    /// <summary>A readable name for a member that is not open: the file name, or the Elastic source id.</summary>
+    private static string MissingName(string key)
+    {
+        var colon = key.IndexOf(':');
+        var tail = colon >= 0 ? key[(colon + 1)..] : key;
+        return key.StartsWith("file:", StringComparison.Ordinal)
+            ? Path.GetFileName(tail) is { Length: > 0 } name
+                ? name
+                : tail
+            : tail;
+    }
+
     internal void Sync()
     {
         // The level control follows the selected source on every sync, chips changed or not.
@@ -180,6 +287,7 @@ internal sealed class FilterBarViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(HasLevelFilter));
         this.RaisePropertyChanged(nameof(CanSaveFilter));
         SyncChips();
+        SyncSourceChips();
     }
 
     private void SyncChips()

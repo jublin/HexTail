@@ -194,6 +194,7 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
         key switch
         {
             ColumnLayout.Time => "Time",
+            ColumnLayout.Source => "Source",
             ColumnLayout.Level => "Level",
             ColumnLayout.Message => "Message",
             _ => key,
@@ -206,9 +207,13 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
     internal static string MenuTitleOf(string key) =>
         IsPseudo(key) ? $"{TitleOf(key)} (detected)" : key;
 
-    /// <summary>The Time, Level and Message pseudo-columns; any other key, <c>@timestamp</c> too, is a field.</summary>
+    /// <summary>The Time, Source, Level and Message pseudo-columns; any other key, <c>@timestamp</c> too, is a field.</summary>
     private static bool IsPseudo(string key) =>
-        key is ColumnLayout.Time or ColumnLayout.Level or ColumnLayout.Message;
+        key
+            is ColumnLayout.Time
+                or ColumnLayout.Source
+                or ColumnLayout.Level
+                or ColumnLayout.Message;
 
     private ColumnLayout CurrentLayout() => _owner.ComputeLayout();
 
@@ -298,7 +303,12 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
         foreach (var column in layout.Columns)
             if (!IsPseudo(column.Key) && !fields.Contains(column.Key))
                 fields.Add(column.Key);
-        var keys = new List<string> { ColumnLayout.Time, ColumnLayout.Level, ColumnLayout.Message };
+        // Only a stream has a source column to offer.
+        var keys = new List<string> { ColumnLayout.Time };
+        if (_owner.File.Source.Kind == LogSourceKind.Stream)
+            keys.Add(ColumnLayout.Source);
+        keys.Add(ColumnLayout.Level);
+        keys.Add(ColumnLayout.Message);
         keys.AddRange(fields.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
 
         if (!Choices.Select(choice => choice.Key).SequenceEqual(keys))

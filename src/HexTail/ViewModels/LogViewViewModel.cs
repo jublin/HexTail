@@ -538,9 +538,16 @@ internal sealed class LogViewViewModel : ReactiveObject
         var rules = _file.Model.EffectiveRules(_owner.State.Settings);
         var levels = _file.Model.Levels;
         var filterLevels = levels != LogLevels.All;
-        if (!rules.HasVisibilityRules && !filterLevels)
+        // The snapshot is replaced, never mutated, so one read serves the whole pass.
+        var hidden = _file.Model.Stream?.HiddenSources;
+        var filterSources = hidden is { Count: > 0 };
+        if (!rules.HasVisibilityRules && !filterLevels && !filterSources)
             return lines as IReadOnlyList<Line> ?? lines.ToList();
         var result = lines;
+        if (filterSources)
+            result = result.Where(line =>
+                line.SourceId is null || !hidden!.Contains(line.SourceId)
+            );
         if (rules.HasVisibilityRules)
             result = result.Where(rules.IsVisible);
         if (filterLevels)

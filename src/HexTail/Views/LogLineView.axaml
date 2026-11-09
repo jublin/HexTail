@@ -30,6 +30,7 @@
       />
     </ContextMenu>
   </UserControl.ContextMenu>
+  <Grid>
   <Border
     Background="{Binding Background}"
     BorderBrush="{DynamicResource BorderBrush}"
@@ -104,4 +105,27 @@
       </ItemsControl>
     </Grid>
   </Border>
+    <!-- Stream rows only. Both overlay the row's 12 px left padding, so they never shift the cells away from the column header. -->
+    <Border
+      x:Name="SourceStripe"
+      Width="3"
+      HorizontalAlignment="Left"
+      Background="{Binding StripeBrush}"
+      IsVisible="{Binding IsStreamRow}"
+      IsHitTestVisible="False"
+    />
+    <ic:Icon
+      x:Name="LateMarker"
+      Value="mdi-clock-alert-outline"
+      Width="8"
+      Height="8"
+      Margin="4,0,0,0"
+      HorizontalAlignment="Left"
+      VerticalAlignment="Center"
+      Foreground="{DynamicResource MutedBrush}"
+      IsVisible="{Binding IsLate}"
+      ToolTip.Tip="{Binding LateToolTip}"
+      AutomationProperties.Name="{Binding LateToolTip}"
+    />
+  </Grid>
 </UserControl>

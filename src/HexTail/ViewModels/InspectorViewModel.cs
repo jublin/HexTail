@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using Avalonia.Media;
 using HexTail.Domain;
 using ReactiveUI;
 using ReactiveUI.Reactive;
@@ -34,6 +35,8 @@ internal sealed class InspectorViewModel : ReactiveObject
     private bool _contextOpen;
     private bool _isBookmarked;
     private int _lastBookmarksVersion = -1;
+    private string? _sourceName;
+    private IBrush? _sourceBrush;
 
     internal InspectorViewModel(MainWindowViewModel owner)
     {
@@ -87,6 +90,14 @@ internal sealed class InspectorViewModel : ReactiveObject
     public bool IsBookmarked => _isBookmarked;
 
     public bool HasLine => _line is not null;
+
+    /// <summary>The member a stream row came from; null for every row of a non-stream tab.</summary>
+    public string? SourceName => _sourceName;
+
+    public bool HasSource => _sourceName is not null;
+
+    /// <summary>The member's colour as a brush for the dot beside the source name.</summary>
+    public IBrush? SourceBrush => _sourceBrush;
     public string Title => _title;
     public string RawText => _rawText;
     public bool HasFields => Fields.Count > 0;
@@ -250,6 +261,16 @@ internal sealed class InspectorViewModel : ReactiveObject
         Error = null;
         _title = line is null ? NoRowTitle : $"Line {index + 1:N0}";
         _rawText = line?.Raw ?? string.Empty;
+        if (line is not null && file?.Stream is { } stream)
+        {
+            _sourceName = stream.DisplayNameFor(line.SourceId);
+            _sourceBrush = StreamBrushes.For(stream.ColorFor(line.SourceId));
+        }
+        else
+        {
+            _sourceName = null;
+            _sourceBrush = null;
+        }
 
         Fields.Clear();
         _jsonText = null;
@@ -261,6 +282,9 @@ internal sealed class InspectorViewModel : ReactiveObject
         }
 
         this.RaisePropertyChanged(nameof(HasLine));
+        this.RaisePropertyChanged(nameof(SourceName));
+        this.RaisePropertyChanged(nameof(HasSource));
+        this.RaisePropertyChanged(nameof(SourceBrush));
         this.RaisePropertyChanged(nameof(Title));
         this.RaisePropertyChanged(nameof(RawText));
         this.RaisePropertyChanged(nameof(HasFields));

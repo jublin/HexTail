@@ -17,6 +17,7 @@ public sealed record ColumnLayout(
 )
 {
     public const string Time = "@time";
+    public const string Source = "@source";
     public const string Level = "@level";
     public const string Message = "@message";
     public const double MinWidth = 40;
@@ -31,8 +32,8 @@ public sealed record ColumnLayout(
     private const double CellGutter = 8;
 
     /// <summary>
-    /// Files get time, level and message; Elastic sources get time, level and then the view's output
-    /// fields in order (message first when the view lists no fields).
+    /// Files get time, level and message; streams add the source after the time; Elastic sources get
+    /// time, level and then the view's output fields in order (message first when the view lists no fields).
     /// </summary>
     public static ColumnLayout DefaultFor(
         LogSourceDescriptor source,
@@ -41,7 +42,8 @@ public sealed record ColumnLayout(
     )
     {
         ArgumentNullException.ThrowIfNull(source);
-        List<string> keys = [Time, Level];
+        List<string> keys =
+            source.Kind == LogSourceKind.Stream ? [Time, Source, Level] : [Time, Level];
         if (source.Kind == LogSourceKind.Elastic)
         {
             foreach (var field in elasticOutputFields ?? [])
@@ -67,6 +69,7 @@ public sealed record ColumnLayout(
         key switch
         {
             Time => Math.Ceiling(TimeTextChars * MonospaceEm * Math.Max(1, fontSize)) + CellGutter,
+            Source => 120,
             Level => 48,
             Message => 400,
             _ => 140,

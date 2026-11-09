@@ -155,6 +155,38 @@
       Text="{Binding Error}"
       IsVisible="{Binding HasError}"
     />
+    <ItemsControl
+      x:Name="SourceChipList"
+      ItemsSource="{Binding SourceChips}"
+      IsVisible="{Binding HasSourceChips}"
+      AutomationProperties.Name="Stream sources"
+    >
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <WrapPanel />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:SourceChipViewModel">
+          <ToggleButton
+            Name="SourceToggle"
+            Classes="source-chip"
+            Margin="0,0,6,4"
+            IsChecked="{Binding IsOn, Mode=OneWay}"
+            IsEnabled="{Binding IsEnabled}"
+            Command="{Binding ToggleCommand}"
+            ToolTip.Tip="{Binding ToolTip}"
+            ToolTip.ShowOnDisabled="True"
+            AutomationProperties.Name="{Binding AutomationName}"
+          >
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Ellipse Width="8" Height="8" Fill="{Binding Brush}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+            </StackPanel>
+          </ToggleButton>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
     <ItemsControl x:Name="ChipList" ItemsSource="{Binding Chips}" IsVisible="{Binding HasChips}">
       <ItemsControl.ItemsPanel>
         <ItemsPanelTemplate>
