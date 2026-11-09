@@ -36,6 +36,7 @@ internal sealed class InspectorViewModel : ReactiveObject
     private bool _isBookmarked;
     private int _lastBookmarksVersion = -1;
     private string? _sourceName;
+    private string? _sourceText;
     private IBrush? _sourceBrush;
 
     internal InspectorViewModel(MainWindowViewModel owner)
@@ -93,6 +94,9 @@ internal sealed class InspectorViewModel : ReactiveObject
 
     /// <summary>The member a stream row came from; null for every row of a non-stream tab.</summary>
     public string? SourceName => _sourceName;
+
+    /// <summary>The source line's text: the member name, plus "arrived late" for a row released after its time.</summary>
+    public string? SourceText => _sourceText;
 
     public bool HasSource => _sourceName is not null;
 
@@ -264,11 +268,13 @@ internal sealed class InspectorViewModel : ReactiveObject
         if (line is not null && file?.Stream is { } stream)
         {
             _sourceName = stream.DisplayNameFor(line.SourceId);
+            _sourceText = stream.IsLate(line) ? $"{_sourceName} \u00b7 arrived late" : _sourceName;
             _sourceBrush = StreamBrushes.For(stream.ColorFor(line.SourceId));
         }
         else
         {
             _sourceName = null;
+            _sourceText = null;
             _sourceBrush = null;
         }
 
@@ -283,6 +289,7 @@ internal sealed class InspectorViewModel : ReactiveObject
 
         this.RaisePropertyChanged(nameof(HasLine));
         this.RaisePropertyChanged(nameof(SourceName));
+        this.RaisePropertyChanged(nameof(SourceText));
         this.RaisePropertyChanged(nameof(HasSource));
         this.RaisePropertyChanged(nameof(SourceBrush));
         this.RaisePropertyChanged(nameof(Title));

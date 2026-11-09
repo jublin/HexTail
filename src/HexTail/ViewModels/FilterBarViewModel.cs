@@ -264,7 +264,7 @@ internal sealed class FilterBarViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(HasSourceChips));
         }
         foreach (var chip in SourceChips)
-            chip.Refresh();
+            chip.RefreshIfChanged();
     }
 
     /// <summary>A readable name for a member that is not open: the file name, or the Elastic source id.</summary>

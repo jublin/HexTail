@@ -168,6 +168,7 @@ internal sealed class LogLineViewModel : ReactiveObject
             ? string.Join("  ", Line.ParsedFields.Select(field => $"{field.Key}={field.Value}"))
             : string.Empty;
         var level = LevelDetector.Detect(Line);
+        RenderStream();
         if (usesColumns)
         {
             Spans = [];
@@ -179,7 +180,6 @@ internal sealed class LogLineViewModel : ReactiveObject
             Cells = [];
         }
         UsesColumns = usesColumns;
-        RenderStream();
         IsErrorRow = level == LogLevels.Error;
         Background = ThemeManager.Brush(IsErrorRow ? "ErrorRowBrush" : "SurfaceBrush");
         this.RaisePropertyChanged(nameof(Spans));
@@ -251,6 +251,8 @@ internal sealed class LogLineViewModel : ReactiveObject
                 case ColumnLayout.Time:
                     dimmed = Line.TimestampInherited;
                     text = TimeText(layout, zone, out toolTip);
+                    if (LateToolTip is not null)
+                        toolTip = toolTip is null ? LateToolTip : $"{toolTip}\n{LateToolTip}";
                     break;
                 case ColumnLayout.Source:
                     text = _file.Model.Stream?.DisplayNameFor(Line.SourceId) ?? string.Empty;

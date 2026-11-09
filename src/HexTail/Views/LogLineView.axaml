@@ -124,6 +124,7 @@
       VerticalAlignment="Center"
       Foreground="{DynamicResource MutedBrush}"
       IsVisible="{Binding IsLate}"
+      IsHitTestVisible="False"
       ToolTip.Tip="{Binding LateToolTip}"
       AutomationProperties.Name="{Binding LateToolTip}"
     />

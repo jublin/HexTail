@@ -723,7 +723,7 @@ public sealed class AppStateStreamTests
     }
 
     [Fact]
-    public async Task StreamIsStructured_WhenAnyMemberIs()
+    public async Task StreamIsStructured_EvenWhenNoMemberIs()
     {
         await using var h = new Harness();
         var plain = await h.OpenLoaded(h.Write("a.log", FirstLines), 2);
@@ -738,8 +738,11 @@ public sealed class AppStateStreamTests
         var textTab = (await h.State.OpenStreamAsync(textual.Id, Ct))!;
         var mixedTab = (await h.State.OpenStreamAsync(mixed.Id, Ct))!;
 
-        Assert.False(textTab.IsStructured);
+        // A stream always uses columns; plain members only differ in AnyMemberStructured.
+        Assert.True(textTab.IsStructured);
+        Assert.False(textTab.Stream!.AnyMemberStructured);
         Assert.True(mixedTab.IsStructured);
+        Assert.True(mixedTab.Stream!.AnyMemberStructured);
         Assert.False(textTab.ElasticLoading);
     }
 

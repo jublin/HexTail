@@ -148,10 +148,13 @@ public sealed class FileTabState : IAsyncDisposable
         double fontSize = ColumnLayout.DefaultFontSize
     ) => Columns ?? ColumnLayout.DefaultFor(Source, elasticOutputFields, fontSize);
 
-    /// <summary>True when lines carry parsed fields: JSONL and logfmt files, every Elastic source, and a stream with any structured member.</summary>
+    /// <summary>
+    /// True when rows render as columns: JSONL and logfmt files, every Elastic source, and every stream
+    /// (the Source column keeps members distinguishable by text, not only colour; a plain line shows its
+    /// raw text as the message).
+    /// </summary>
     public bool IsStructured =>
-        Source.Kind == LogSourceKind.Elastic
-        || (Stream?.AnyMemberStructured ?? false)
+        Source.Kind is LogSourceKind.Elastic or LogSourceKind.Stream
         || (Parser is TimestampingParser wrapped ? wrapped.Inner : Parser)
             is JsonlParser
                 or LogfmtParser;

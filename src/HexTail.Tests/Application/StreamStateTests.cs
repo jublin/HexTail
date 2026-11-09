@@ -160,7 +160,8 @@ public sealed class StreamStateTests
             definition,
             new Dictionary<string, FileTabState> { ["file:/logs/a.log"] = plain }
         );
-        Assert.False(streamTab.IsStructured);
+        Assert.False(state.AnyMemberStructured);
+        Assert.True(streamTab.IsStructured);
 
         state.SetMembers(
             definition,
@@ -170,6 +171,7 @@ public sealed class StreamStateTests
                 ["file:/logs/b.jsonl"] = jsonl,
             }
         );
+        Assert.True(state.AnyMemberStructured);
         Assert.True(streamTab.IsStructured);
     }
 

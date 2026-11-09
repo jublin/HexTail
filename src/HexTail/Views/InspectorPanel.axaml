@@ -63,7 +63,7 @@
               />
               <SelectableTextBlock
                 x:Name="InspectorSource"
-                Text="{Binding SourceName}"
+                Text="{Binding SourceText}"
                 TextWrapping="Wrap"
                 AutomationProperties.Name="Source of this row"
               />

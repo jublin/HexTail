@@ -211,13 +211,16 @@ public sealed class StreamRenderingTests
     }
 
     [AvaloniaFact]
-    public async Task PlainTextStream_ShowsStripesInComposedRows()
+    public async Task PlainTextStream_UsesColumns_SoTheSourceNameIsText_NotJustColour()
     {
         await using var h = await Harness.CreateAsync(structured: false);
 
         var row = h.Row(0);
 
-        Assert.False(row.UsesColumns);
+        Assert.True(row.UsesColumns);
+        Assert.Equal(["@time", "@source", "@level", "@message"], row.Cells.Select(c => c.Key));
+        Assert.Equal(h.A.DisplayName, row.Cells[1].Text);
+        Assert.Equal(row.Line.Raw, row.Cells[3].Text);
         Assert.Equal(Color.Parse(h.ColorOf(h.A)), ((ISolidColorBrush)row.StripeBrush!).Color);
     }
 
@@ -249,6 +252,9 @@ public sealed class StreamRenderingTests
         Assert.Equal("te", Tail(late));
         Assert.True(late.IsLate);
         Assert.Equal($"Arrived late from {h.A.DisplayName}", late.LateToolTip);
+        var timeTip = late.Cells.Single(c => c.Key == "@time").ToolTip;
+        Assert.Contains($"Arrived late from {h.A.DisplayName}", timeTip);
+        Assert.DoesNotContain("Arrived late", h.Row(0).Cells.Single(c => c.Key == "@time").ToolTip);
         Assert.All(Enumerable.Range(0, 4), index => Assert.False(h.Row(index).IsLate));
         Assert.All(Enumerable.Range(0, 4), index => Assert.Null(h.Row(index).LateToolTip));
     }
@@ -294,6 +300,7 @@ public sealed class StreamRenderingTests
         await UiWait.Until(() => marker.IsVisible);
         Assert.Equal($"Arrived late from {h.A.DisplayName}", ToolTip.GetTip(marker));
         Assert.Contains("Arrived late", AutomationProperties.GetName(marker));
+        Assert.False(marker.IsHitTestVisible);
     }
 
     [AvaloniaFact]
@@ -344,6 +351,31 @@ public sealed class StreamRenderingTests
         Assert.All(chips, chip => Assert.True(chip.IsEnabled));
         Assert.Contains($"{h.A.DisplayName} shown", chips[0].AutomationName);
         Assert.True(h.Workspace.FilterBar.HasSourceChips);
+    }
+
+    [AvaloniaFact]
+    public async Task ResyncingUnchangedChips_RaisesNoPropertyChanges_ButARealChangeDoes()
+    {
+        await using var h = await Harness.CreateAsync(structured: false);
+        var bar = h.Workspace.FilterBar;
+        bar.Sync();
+        var chips = bar.SourceChips.ToList();
+        List<string?> raised = [];
+        foreach (var chip in chips)
+            chip.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        bar.Sync();
+        bar.Sync();
+
+        Assert.Empty(raised);
+        Assert.Equal(chips, bar.SourceChips);
+
+        await h.State.SetHiddenSourcesAsync(h.Stream, new HashSet<string> { h.A.Id }, Ct);
+        bar.Sync();
+
+        Assert.False(chips[0].IsOn);
+        Assert.Contains(nameof(SourceChipViewModel.IsOn), raised);
+        Assert.Contains(nameof(SourceChipViewModel.AutomationName), raised);
     }
 
     [AvaloniaFact]
@@ -421,7 +453,7 @@ public sealed class StreamRenderingTests
         Assert.False(missing.IsEnabled);
         Assert.False(missing.IsOn);
         Assert.Contains("missing", missing.Label);
-        Assert.Contains("missing", missing.AutomationName);
+        Assert.Contains(missing.Label, missing.AutomationName);
         // Rows of the closed member stay in the stream, still coloured and named.
         Assert.Equal(4, h.Stream.Buffer.Count);
     }
@@ -472,6 +504,25 @@ public sealed class StreamRenderingTests
 
         Assert.False(inspector.HasSource);
         Assert.Null(inspector.SourceName);
+    }
+
+    [AvaloniaFact]
+    public async Task Inspector_SourceLine_SaysWhenTheRowArrivedLate()
+    {
+        await using var h = await Harness.CreateAsync(structured: false);
+        h.PublishLate(h.A, "10:00:01", "late");
+        var inspector = h.Workspace.Inspector;
+
+        h.State.SelectLine(h.Stream, h.Stream.Buffer[4]);
+        inspector.Sync();
+
+        Assert.Equal(h.A.DisplayName, inspector.SourceName);
+        Assert.Equal($"{h.A.DisplayName} \u00b7 arrived late", inspector.SourceText);
+
+        h.State.SelectLine(h.Stream, h.Stream.Buffer[0]);
+        inspector.Sync();
+
+        Assert.Equal(h.A.DisplayName, inspector.SourceText);
     }
 
     [AvaloniaFact]

@@ -12,6 +12,7 @@ namespace HexTail.ViewModels;
 internal sealed class SourceChipViewModel : ReactiveObject
 {
     private readonly FilterBarViewModel _owner;
+    private bool _notifiedOn;
 
     internal SourceChipViewModel(
         FilterBarViewModel owner,
@@ -31,6 +32,7 @@ internal sealed class SourceChipViewModel : ReactiveObject
             () => _owner.ToggleSourceAsync(this),
             owner.Scheduler
         );
+        _notifiedOn = IsOn;
     }
 
     /// <summary>The member key (<c>file:…</c> or <c>elastic:…</c>) that identifies the chip across rebuilds.</summary>
@@ -52,7 +54,7 @@ internal sealed class SourceChipViewModel : ReactiveObject
     public bool IsOn => TabId is not null && _owner.IsSourceShown(TabId);
 
     public string AutomationName =>
-        IsMissing ? $"{Name} missing"
+        IsMissing ? Label
         : IsOn ? $"{Name} shown"
         : $"{Name} hidden";
 
@@ -63,8 +65,20 @@ internal sealed class SourceChipViewModel : ReactiveObject
 
     public ReactiveCommand<Unit, Unit> ToggleCommand { get; }
 
+    /// <summary>Raises the state-derived properties only when the shown state really changed since the last notification.</summary>
+    internal void RefreshIfChanged()
+    {
+        if (IsOn != _notifiedOn)
+            Refresh();
+    }
+
+    /// <summary>
+    /// Always raises the state-derived properties: after a toggle the button has flipped itself and must
+    /// be put back in step with the stream's real state, even when that state did not change.
+    /// </summary>
     internal void Refresh()
     {
+        _notifiedOn = IsOn;
         this.RaisePropertyChanged(nameof(IsOn));
         this.RaisePropertyChanged(nameof(AutomationName));
         this.RaisePropertyChanged(nameof(ToolTip));
