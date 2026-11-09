@@ -362,4 +362,74 @@ public sealed class SessionToleranceTests
 
         public void Dispose() => Directory.Delete(_path, recursive: true);
     }
+
+    [Fact]
+    public void Streams_BlankNamesDuplicatesAndMalformedEntriesCostOnlyThatValue()
+    {
+        var config = AppConfigJson.Deserialize(
+            """
+            { "version": 2,
+              "streams": [
+                { "id": "a", "name": "  ",
+                  "members": [
+                    { "key": "file:/x.log", "color": "#111111" },
+                    { "key": "file:/x.log", "color": "#222222" },
+                    { "key": "elastic:gone" },
+                    { "key": 5 }, "junk", null, {}
+                  ] },
+                { "id": "b", "name": 7, "members": "oops" },
+                { "id": "a", "name": "duplicate id", "members": [] },
+                { "name": "no id" },
+                "junk", null,
+                { "id": "c", "name": "single", "members": [{ "key": "file:/y.log", "color": "#333333" }] }
+              ],
+              "openStreams": [
+                { "streamId": "a", "levels": "Nope", "rules": "oops", "hiddenSources": ["file:/x.log", 4, null],
+                  "from": 5, "live": "yes", "followSearches": [true, "x"],
+                  "searches": [{ "query": "ok" }, { "mode": "Fuzzy" }, 3],
+                  "columns": [{ "key": "@time", "width": 90 }, 5], "timeDisplay": "Sideways" },
+                { "streamId": 3 }, { "nothing": true }, "junk"
+              ],
+              "selectedStreamId": 12 }
+            """
+        );
+
+        Assert.Equal(["a", "b", "c"], config.Streams.Select(stream => stream.Id));
+        Assert.Equal("Stream", config.Streams[0].Name);
+        Assert.Equal(["file:/x.log", "elastic:gone"], config.Streams[0].Members.Select(m => m.Key));
+        Assert.Equal("#111111", config.Streams[0].Members[0].Color);
+        Assert.Equal(StreamPalette.ColorAt(1), config.Streams[0].Members[1].Color);
+        Assert.Equal("Stream", config.Streams[1].Name);
+        Assert.Empty(config.Streams[1].Members);
+        Assert.Single(config.Streams[2].Members);
+        var tab = Assert.Single(config.OpenStreams);
+        Assert.Equal(LogLevels.All, tab.Levels);
+        Assert.Empty(tab.Rules);
+        Assert.Equal(["file:/x.log"], tab.HiddenSources);
+        Assert.Equal("now-15m", tab.From);
+        Assert.True(tab.Live);
+        Assert.Equal([true], tab.FollowSearches);
+        Assert.Equal("ok", Assert.Single(tab.Searches).Query);
+        Assert.Equal("@time", Assert.Single(tab.Columns!).Key);
+        Assert.Equal(TimeDisplay.Absolute, tab.TimeDisplay);
+        Assert.Null(config.SelectedStreamId);
+    }
+
+    [Fact]
+    public void Streams_AMalformedContainerIsDropped()
+    {
+        var config = AppConfigJson.Deserialize(
+            """
+            { "version": 2, "streams": "oops", "openStreams": 7, "selectedStreamId": null,
+              "openFiles": [{ "path": "/tmp/a.log" }] }
+            """
+        );
+
+        Assert.Empty(config.Streams);
+        Assert.Empty(config.OpenStreams);
+        Assert.Equal("/tmp/a.log", Assert.Single(config.OpenFiles).Path);
+        Assert.Empty(
+            AppConfigJson.Deserialize("""{ "streams": null, "openStreams": null }""").Streams
+        );
+    }
 }

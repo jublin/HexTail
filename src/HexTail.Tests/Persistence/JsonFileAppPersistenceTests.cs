@@ -357,6 +357,75 @@ public sealed class JsonFileAppPersistenceTests
         Assert.Equal(TimeDisplay.Relative, second.TimeDisplay);
     }
 
+    [Fact]
+    public void Streams_RoundTripThroughTheSessionFile()
+    {
+        var config = new AppConfig
+        {
+            Streams =
+            [
+                new StreamSettings(
+                    "s1",
+                    "Prod + staging",
+                    [
+                        new StreamMember("file:/var/log/a.log", "#38bdf8"),
+                        new StreamMember("elastic:src-1", "#f59e0b"),
+                    ]
+                ),
+            ],
+            OpenStreams =
+            [
+                new PersistedStreamTab
+                {
+                    StreamId = "s1",
+                    Levels = LogLevels.Warn,
+                    ComposedRows = true,
+                    TimeDisplay = TimeDisplay.Relative,
+                    HiddenSources = ["elastic:src-1"],
+                    From = "now-1h",
+                    To = "now-5m",
+                    Live = false,
+                    FollowAll = false,
+                    Searches = [new PersistedSearch { Query = "boom" }],
+                    FollowSearches = [true],
+                },
+            ],
+            SelectedStreamId = "s1",
+        };
+
+        var restored = AppConfigJson.Deserialize(AppConfigJson.Serialize(config));
+
+        Assert.Equal(2, restored.Version);
+        var stream = Assert.Single(restored.Streams);
+        Assert.Equal("s1", stream.Id);
+        Assert.Equal("Prod + staging", stream.Name);
+        Assert.Equal(config.Streams[0].Members, stream.Members);
+        var tab = Assert.Single(restored.OpenStreams);
+        Assert.Equal("s1", tab.StreamId);
+        Assert.Equal(LogLevels.Warn, tab.Levels);
+        Assert.True(tab.ComposedRows);
+        Assert.Equal(TimeDisplay.Relative, tab.TimeDisplay);
+        Assert.Equal(["elastic:src-1"], tab.HiddenSources);
+        Assert.Equal(("now-1h", "now-5m", false), (tab.From, tab.To, tab.Live));
+        Assert.False(tab.FollowAll);
+        Assert.Equal("boom", Assert.Single(tab.Searches).Query);
+        Assert.Equal([true], tab.FollowSearches);
+        Assert.Equal("s1", restored.SelectedStreamId);
+    }
+
+    [Fact]
+    public void SessionsWithoutStreams_LoadWithNone()
+    {
+        var config = AppConfigJson.Deserialize(
+            """{ "version": 2, "openFiles": [{ "path": "/tmp/a.log" }] }"""
+        );
+
+        Assert.Empty(config.Streams);
+        Assert.Empty(config.OpenStreams);
+        Assert.Null(config.SelectedStreamId);
+        Assert.Equal(2, config.Version);
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         public TempDirectory() =>

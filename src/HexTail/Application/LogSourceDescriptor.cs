@@ -6,6 +6,7 @@ public enum LogSourceKind
 {
     File,
     Elastic,
+    Stream,
 }
 
 public sealed record LogSourceDescriptor(
@@ -17,6 +18,25 @@ public sealed record LogSourceDescriptor(
     string? ElasticSourceId = null
 )
 {
+    /// <summary>The descriptor of a stream tab. Its id (<c>stream:{id}</c>) cannot clash with file or Elastic ids.</summary>
+    internal static LogSourceDescriptor Stream(StreamSettings stream)
+    {
+        var members = string.Join(
+            "\n",
+            stream.Members.Select(member =>
+                $"• {(member.Key.StartsWith("file:", StringComparison.Ordinal) ? member.Key[5..] : member.Key.StartsWith("elastic:", StringComparison.Ordinal) ? member.Key[8..] : member.Key)}"
+            )
+        );
+        return new(
+            $"stream:{stream.Id}",
+            LogSourceKind.Stream,
+            stream.Name,
+            members.Length == 0
+                ? $"Stream {stream.Name}"
+                : $"Stream {stream.Name}\nMerges:\n{members}"
+        );
+    }
+
     internal static LogSourceDescriptor Elastic(
         ElasticConnectionSettings connection,
         ElasticViewSettings view,

@@ -45,6 +45,9 @@ public sealed class FileTabState : IAsyncDisposable
         Buffer.Changed += OnBufferChanged;
     }
 
+    /// <summary>Non-null only for stream tabs: the merge state behind this tab.</summary>
+    public StreamState? Stream { get; internal init; }
+
     public LogSourceDescriptor Source { get; internal set; }
     public string Id => Source.Id;
     public string Path => Source.LocalPath ?? string.Empty;
@@ -145,9 +148,10 @@ public sealed class FileTabState : IAsyncDisposable
         double fontSize = ColumnLayout.DefaultFontSize
     ) => Columns ?? ColumnLayout.DefaultFor(Source, elasticOutputFields, fontSize);
 
-    /// <summary>True when lines carry parsed fields: JSONL and logfmt files, and every Elastic source.</summary>
+    /// <summary>True when lines carry parsed fields: JSONL and logfmt files, every Elastic source, and a stream with any structured member.</summary>
     public bool IsStructured =>
         Source.Kind == LogSourceKind.Elastic
+        || (Stream?.AnyMemberStructured ?? false)
         || (Parser is TimestampingParser wrapped ? wrapped.Inner : Parser)
             is JsonlParser
                 or LogfmtParser;

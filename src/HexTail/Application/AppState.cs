@@ -21,6 +21,12 @@ public sealed class AppState : IAsyncDisposable
     private readonly List<string> _recentFiles = [];
     private readonly List<string> _recentElasticSourceIds = [];
     private readonly List<SavedFilter> _savedFilters = [];
+    private readonly List<StreamSettings> _streamDefs = [];
+
+    // Open stream tabs (also in _files) and, per member tab id, the open streams that merge it.
+    // Both are guarded by _gate; the drain looks members up here instead of scanning every stream.
+    private readonly List<FileTabState> _streamTabs = [];
+    private Dictionary<string, StreamState[]> _memberStreams = new(StringComparer.Ordinal);
     private AppSettings _settings;
     private int _nextFileId;
     private Task? _healthLoop;
@@ -28,6 +34,12 @@ public sealed class AppState : IAsyncDisposable
     private SourceLines? _pendingBatch;
     private int _pendingBatchOffset;
     internal const int MaxLinesPerDrain = 10_000;
+
+    /// <summary>Test seam: how long a stream holds lines back for slower members. Read when a stream opens.</summary>
+    internal TimeSpan StreamHold { get; set; } = StreamMerger.DefaultHold;
+
+    /// <summary>Test seam: the clock streams use for line arrival times. Read when a stream opens.</summary>
+    internal Func<DateTimeOffset> StreamClock { get; set; } = () => DateTimeOffset.UtcNow;
     private const int MaxEventsPerDrain = 128;
 
     public AppState(
@@ -55,6 +67,17 @@ public sealed class AppState : IAsyncDisposable
                 return _files.ToArray();
         }
     }
+
+    /// <summary>The saved stream definitions, open or not.</summary>
+    public IReadOnlyList<StreamSettings> Streams
+    {
+        get
+        {
+            lock (_gate)
+                return _streamDefs.ToArray();
+        }
+    }
+
     public IReadOnlyList<string> RecentFiles
     {
         get
@@ -195,6 +218,7 @@ public sealed class AppState : IAsyncDisposable
                     tab.Tailer = replacement;
                     tab.Source = LogSourceDescriptor.Elastic(connection, match.view, match.source);
                     tab.Buffer.Clear();
+                    MarkStreamsForRebuild(tab.Id);
                     tab.Error = null;
                     tab.ElasticLoading = true;
                     tab.ElasticInitialLimitReached = null;
@@ -231,7 +255,10 @@ public sealed class AppState : IAsyncDisposable
                 )
                 .ToArray();
             foreach (var item in removed)
+            {
                 _files.Remove(item.Tab);
+                ForgetStreamLinks(item.Tab);
+            }
             if (removed.Any(item => item.Tab == SelectedFile))
                 SelectedFile = _files.FirstOrDefault();
             _settings = NormalizeSettings(
@@ -253,7 +280,10 @@ public sealed class AppState : IAsyncDisposable
             {
                 _settings = previous;
                 foreach (var item in removed)
+                {
                     _files.Insert(Math.Min(item.Index, _files.Count), item.Tab);
+                    AttachToStreams(item.Tab);
+                }
                 SelectedFile = previousSelection;
             }
             throw;
@@ -373,6 +403,8 @@ public sealed class AppState : IAsyncDisposable
             _savedFilters.Clear();
             foreach (var filter in config.SavedFilters ?? [])
                 UpsertSavedFilter(filter?.Name, filter?.Rules, filter?.Levels ?? LogLevels.All);
+            _streamDefs.Clear();
+            _streamDefs.AddRange(StreamSettings.Normalize(config.Streams));
         }
         foreach (var persisted in config.OpenFiles)
         {
@@ -458,6 +490,9 @@ public sealed class AppState : IAsyncDisposable
             catch (ArgumentException) { }
             catch (InvalidOperationException) { }
         }
+        // Streams come last: their members (files and Elastic sources) must already be open.
+        foreach (var persisted in config.OpenStreams ?? [])
+            await RestoreStreamTabAsync(persisted, cancellationToken).ConfigureAwait(false);
         StartHealthLoop();
         if (_settings.ElasticConnections.Count > 0)
             SignalHealthCheck();
@@ -486,8 +521,73 @@ public sealed class AppState : IAsyncDisposable
                     _files.FirstOrDefault(file =>
                         file.Source.ElasticSourceId == config.SelectedElasticSourceId
                     ) ?? SelectedFile;
+            if (config.SelectedStreamId is not null)
+                SelectedFile =
+                    _streamTabs.FirstOrDefault(tab =>
+                        tab.Stream!.Definition.Id == config.SelectedStreamId
+                    ) ?? SelectedFile;
         }
         NotifyChanged();
+    }
+
+    private async ValueTask RestoreStreamTabAsync(
+        PersistedStreamTab? persisted,
+        CancellationToken cancellationToken
+    )
+    {
+        if (persisted is null || string.IsNullOrWhiteSpace(persisted.StreamId))
+            return;
+        FileTabState? tab;
+        try
+        {
+            tab = await OpenStreamAsync(persisted.StreamId, cancellationToken, save: false)
+                .ConfigureAwait(false);
+        }
+        catch (ArgumentException)
+        {
+            return;
+        }
+        catch (InvalidOperationException)
+        {
+            return;
+        }
+        if (tab?.Stream is not { } stream)
+            return;
+        lock (_gate)
+        {
+            stream.SetHiddenKeys(persisted.HiddenSources ?? []);
+            stream.RangeFrom = string.IsNullOrWhiteSpace(persisted.From)
+                ? "now-15m"
+                : persisted.From;
+            stream.RangeTo = string.IsNullOrWhiteSpace(persisted.To) ? "now" : persisted.To;
+            stream.Live = persisted.Live;
+        }
+        tab.FollowAll = persisted.FollowAll;
+        tab.SetRules(NormalizeRules(persisted.Rules, RuleScope.Source));
+        tab.Levels = NormalizeLevels(persisted.Levels);
+        tab.Columns = ColumnLayout.FromPersisted(
+            persisted.Columns,
+            persisted.ComposedRows,
+            persisted.TimeDisplay
+        );
+        var searches = persisted.Searches ?? [];
+        for (var i = 0; i < searches.Count; i++)
+        {
+            var search = searches[i];
+            try
+            {
+                tab.AddSearch(
+                    new Search(
+                        new CompiledQuery(search.Query, search.Mode, search.CaseSensitive),
+                        search.Color,
+                        tab.Buffer
+                    )
+                );
+                if (persisted.FollowSearches is { } follows && i < follows.Count)
+                    tab.FollowSearches[^1] = follows[i];
+            }
+            catch (ArgumentException) { }
+        }
     }
 
     public async ValueTask<FileTabState> OpenFileAsync(
@@ -526,6 +626,7 @@ public sealed class AppState : IAsyncDisposable
                 };
                 tab.SyncGlobalRuleSearches(_settings.Rules);
                 _files.Add(tab);
+                AttachToStreams(tab);
                 SelectedFile = tab;
             }
             if (remember)
@@ -614,6 +715,7 @@ public sealed class AppState : IAsyncDisposable
         lock (_gate)
         {
             _files.Add(tab);
+            AttachToStreams(tab);
             SelectedFile = tab;
             if (remember)
                 Remember(_recentElasticSourceIds, sourceId, StringComparer.Ordinal);
@@ -635,6 +737,8 @@ public sealed class AppState : IAsyncDisposable
             throw new ArgumentException("The selected tab is not an Elastic tab.", nameof(tab));
         tailer.SetTimeRange(from, to);
         tab.Buffer.Clear();
+        lock (_gate)
+            MarkStreamsForRebuild(tab.Id);
         tab.Error = null;
         tab.ElasticFrom = from.Trim();
         tab.ElasticTo = to.Trim();
@@ -660,6 +764,7 @@ public sealed class AppState : IAsyncDisposable
             if (!_files.Remove(tab))
                 return;
 
+            ForgetStreamLinks(tab);
             SelectedFile = _files.FirstOrDefault();
         }
         await tab.DisposeAsync().ConfigureAwait(false);
@@ -667,6 +772,420 @@ public sealed class AppState : IAsyncDisposable
         SignalHealthCheck();
         if (save)
             await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    // ---- Streams ---------------------------------------------------------------------------------------
+    // A stream is a tab of its own kind whose lines come from the stream's open members. All stream state
+    // is touched only under _gate: members feed their lines into each stream's merger from the drain, and
+    // the drain appends whatever the merger releases. Nothing here awaits while holding the lock.
+
+    /// <summary>"file:{full path}" or "elastic:{source id}": the stable identity of a stream member.</summary>
+    internal static string MemberKey(FileTabState tab)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        return tab.Source.Kind switch
+        {
+            LogSourceKind.File => "file:" + tab.Path,
+            LogSourceKind.Elastic => "elastic:" + (tab.Source.ElasticSourceId ?? tab.Id),
+            _ => throw new ArgumentException(
+                "A stream cannot contain another stream.",
+                nameof(tab)
+            ),
+        };
+    }
+
+    public async ValueTask<StreamSettings> CreateStreamAsync(
+        string name,
+        IReadOnlyList<FileTabState> members,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(members);
+        StreamSettings created;
+        lock (_gate)
+        {
+            var list = BuildMembers(members, []);
+            created = new StreamSettings(
+                Guid.NewGuid().ToString("N"),
+                string.IsNullOrWhiteSpace(name) ? StreamSettings.DefaultName : name.Trim(),
+                list
+            );
+            _streamDefs.Add(created);
+        }
+        NotifyChanged();
+        try
+        {
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            lock (_gate)
+                _streamDefs.Remove(created);
+            NotifyChanged();
+            throw;
+        }
+        return created;
+    }
+
+    public async ValueTask UpdateStreamAsync(
+        string streamId,
+        string name,
+        IReadOnlyList<FileTabState> members,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(members);
+        StreamSettings previous;
+        lock (_gate)
+        {
+            var index = _streamDefs.FindIndex(item => item.Id == streamId);
+            if (index < 0)
+                throw new ArgumentException("The stream does not exist.", nameof(streamId));
+            previous = _streamDefs[index];
+            var updated = previous with
+            {
+                Name = string.IsNullOrWhiteSpace(name) ? StreamSettings.DefaultName : name.Trim(),
+                Members = BuildMembers(members, previous.Members),
+            };
+            _streamDefs[index] = updated;
+            ApplyDefinition(updated);
+        }
+        NotifyChanged();
+        try
+        {
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            lock (_gate)
+            {
+                var index = _streamDefs.FindIndex(item => item.Id == streamId);
+                if (index >= 0)
+                {
+                    _streamDefs[index] = previous;
+                    ApplyDefinition(previous);
+                }
+            }
+            NotifyChanged();
+            throw;
+        }
+    }
+
+    public async ValueTask DeleteStreamAsync(
+        string streamId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        StreamSettings? removed;
+        FileTabState? tab;
+        int definitionIndex;
+        int tabIndex = -1;
+        FileTabState? previousSelection;
+        lock (_gate)
+        {
+            definitionIndex = _streamDefs.FindIndex(item => item.Id == streamId);
+            if (definitionIndex < 0)
+                return;
+            removed = _streamDefs[definitionIndex];
+            _streamDefs.RemoveAt(definitionIndex);
+            previousSelection = SelectedFile;
+            tab = _streamTabs.FirstOrDefault(item => item.Stream!.Definition.Id == streamId);
+            if (tab is not null)
+            {
+                tabIndex = _files.IndexOf(tab);
+                _files.Remove(tab);
+                ForgetStreamLinks(tab);
+                if (ReferenceEquals(SelectedFile, tab))
+                    SelectedFile = _files.FirstOrDefault();
+            }
+        }
+        NotifyChanged();
+        try
+        {
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            lock (_gate)
+            {
+                _streamDefs.Insert(Math.Min(definitionIndex, _streamDefs.Count), removed);
+                if (tab is not null)
+                {
+                    _files.Insert(Math.Min(Math.Max(tabIndex, 0), _files.Count), tab);
+                    _streamTabs.Add(tab);
+                    ReindexStreams();
+                    SelectedFile = previousSelection;
+                }
+            }
+            NotifyChanged();
+            throw;
+        }
+        if (tab is not null)
+            await tab.DisposeAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Opens the stream's tab and selects it. Members that are not open are opened first; one that cannot be
+    /// opened (missing file, unconfigured Elastic source, unavailable credential) is simply listed as missing.
+    /// </summary>
+    public async ValueTask<FileTabState?> OpenStreamAsync(
+        string streamId,
+        CancellationToken cancellationToken = default,
+        bool save = true
+    )
+    {
+        StreamSettings? definition;
+        lock (_gate)
+            definition = _streamDefs.FirstOrDefault(item => item.Id == streamId);
+        if (definition is null)
+            return null;
+
+        foreach (var member in definition.Members)
+            await EnsureMemberOpenAsync(member.Key, cancellationToken).ConfigureAwait(false);
+
+        FileTabState tab;
+        var created = false;
+        lock (_gate)
+        {
+            var existing = _streamTabs.FirstOrDefault(item =>
+                item.Stream!.Definition.Id == streamId
+            );
+            if (existing is not null)
+            {
+                SelectedFile = existing;
+                tab = existing;
+            }
+            else
+            {
+                // The definition may have been edited or deleted while members were opening.
+                definition = _streamDefs.FirstOrDefault(item => item.Id == streamId);
+                if (definition is null)
+                    return null;
+                var state = new StreamState(definition, StreamHold, StreamClock);
+                state.SetMembers(definition, OpenMembersByKey());
+                var descriptor = LogSourceDescriptor.Stream(definition);
+                tab = new FileTabState(
+                    descriptor,
+                    new FileBuffer(_settings.MaxLines),
+                    new PlainTextParser(),
+                    new NullTailer(descriptor.Id, descriptor.DisplayName)
+                )
+                {
+                    Stream = state,
+                };
+                tab.SyncGlobalRuleSearches(_settings.Rules);
+                _files.Add(tab);
+                _streamTabs.Add(tab);
+                ReindexStreams();
+                RebuildStream(tab);
+                SelectedFile = tab;
+                created = true;
+            }
+        }
+        NotifyChanged();
+        if (created && save)
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
+        return tab;
+    }
+
+    /// <summary>Hides the rows of the given members (tab ids) in a stream; rows of other members stay.</summary>
+    public async ValueTask SetHiddenSourcesAsync(
+        FileTabState stream,
+        IReadOnlySet<string> hidden,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentNullException.ThrowIfNull(hidden);
+        lock (_gate)
+        {
+            if (!_files.Contains(stream) || stream.Stream is not { } state)
+                return;
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var id in hidden)
+                if (state.KeyOf(id) is { } key)
+                    keys.Add(key);
+            // Members that are not open cannot be toggled by id; they keep their saved choice.
+            foreach (var key in state.HiddenKeys)
+                if (state.MissingMembers.Contains(key))
+                    keys.Add(key);
+            state.SetHiddenKeys(keys);
+        }
+        NotifyChanged();
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask EnsureMemberOpenAsync(string key, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+            if (OpenMembersByKey().ContainsKey(key))
+                return;
+        try
+        {
+            if (key.StartsWith("file:", StringComparison.Ordinal))
+            {
+                var path = key[5..];
+                if (File.Exists(path))
+                    await OpenFileAsync(path, save: false, cancellationToken, remember: false)
+                        .ConfigureAwait(false);
+            }
+            else if (key.StartsWith("elastic:", StringComparison.Ordinal))
+                await OpenElasticSourceAsync(
+                        key[8..],
+                        save: false,
+                        cancellationToken,
+                        remember: false
+                    )
+                    .ConfigureAwait(false);
+        }
+        catch (ArgumentException) { }
+        catch (InvalidOperationException) { }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
+    /// <summary>Distinct, non-stream member tabs as definition members; colours of retained keys are kept. Under _gate.</summary>
+    private List<StreamMember> BuildMembers(
+        IReadOnlyList<FileTabState> tabs,
+        IReadOnlyList<StreamMember> existing
+    )
+    {
+        var keys = new List<string>();
+        foreach (var tab in tabs)
+        {
+            if (tab is null || !_files.Contains(tab))
+                throw new ArgumentException(
+                    "Every stream member must be an open source.",
+                    nameof(tabs)
+                );
+            var key = MemberKey(tab);
+            if (!keys.Contains(key))
+                keys.Add(key);
+        }
+        if (keys.Count < 2)
+            throw new ArgumentException(
+                "A stream needs at least two different sources.",
+                nameof(tabs)
+            );
+        var used = new HashSet<string>(
+            existing.Where(member => keys.Contains(member.Key)).Select(member => member.Color),
+            StringComparer.OrdinalIgnoreCase
+        );
+        var result = new List<StreamMember>(keys.Count);
+        foreach (var key in keys)
+        {
+            var color = existing.FirstOrDefault(member => member.Key == key)?.Color;
+            if (string.IsNullOrWhiteSpace(color))
+            {
+                color =
+                    StreamPalette.Colors.FirstOrDefault(candidate => !used.Contains(candidate))
+                    ?? StreamPalette.ColorAt(result.Count);
+                used.Add(color);
+            }
+            result.Add(new StreamMember(key, color));
+        }
+        return result;
+    }
+
+    /// <summary>Open File and Elastic tabs by member key. Under _gate.</summary>
+    private Dictionary<string, FileTabState> OpenMembersByKey()
+    {
+        var map = new Dictionary<string, FileTabState>(StringComparer.OrdinalIgnoreCase);
+        foreach (var tab in _files)
+            if (tab.Source.Kind != LogSourceKind.Stream)
+                map.TryAdd(MemberKey(tab), tab);
+        return map;
+    }
+
+    /// <summary>A stream's definition changed: re-point an open tab at it and re-merge. Under _gate.</summary>
+    private void ApplyDefinition(StreamSettings definition)
+    {
+        var tab = _streamTabs.FirstOrDefault(item => item.Stream!.Definition.Id == definition.Id);
+        if (tab is null)
+            return;
+        tab.Source = LogSourceDescriptor.Stream(definition);
+        tab.Stream!.SetMembers(definition, OpenMembersByKey());
+        ReindexStreams();
+        RebuildStream(tab);
+    }
+
+    /// <summary>Rebuilds the member-to-streams lookup the drain uses. Under _gate.</summary>
+    private void ReindexStreams()
+    {
+        var map = new Dictionary<string, List<StreamState>>(StringComparer.Ordinal);
+        foreach (var tab in _streamTabs)
+        foreach (var id in tab.Stream!.MemberIds)
+        {
+            if (!map.TryGetValue(id, out var list))
+                map[id] = list = [];
+            list.Add(tab.Stream);
+        }
+        _memberStreams = map.ToDictionary(pair => pair.Key, pair => pair.Value.ToArray());
+    }
+
+    /// <summary>A newly opened source joins every open stream that lists it, which then re-merges. Under _gate.</summary>
+    private void AttachToStreams(FileTabState member)
+    {
+        if (_streamTabs.Count == 0 || member.Source.Kind == LogSourceKind.Stream)
+            return;
+        var key = MemberKey(member);
+        var changed = false;
+        Dictionary<string, FileTabState>? open = null;
+        foreach (var tab in _streamTabs)
+        {
+            var state = tab.Stream!;
+            if (
+                state.MemberIds.Contains(member.Id)
+                || !state.Definition.Members.Any(item =>
+                    string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase)
+                )
+            )
+                continue;
+            state.SetMembers(state.Definition, open ??= OpenMembersByKey());
+            changed = true;
+        }
+        if (changed)
+            ReindexStreams();
+    }
+
+    /// <summary>
+    /// A tab left the session. A stream tab is forgotten; a member is detached from its streams, where it
+    /// shows as missing (the lines already merged stay; the stream is not rebuilt). Under _gate.
+    /// </summary>
+    private void ForgetStreamLinks(FileTabState tab)
+    {
+        if (tab.Stream is not null)
+        {
+            _streamTabs.Remove(tab);
+            ReindexStreams();
+            return;
+        }
+        if (_memberStreams.TryGetValue(tab.Id, out var streams))
+        {
+            foreach (var stream in streams)
+                stream.DetachMember(tab);
+            ReindexStreams();
+        }
+    }
+
+    /// <summary>The member's buffer was cleared outside the event loop: its streams must re-merge. Under _gate.</summary>
+    private void MarkStreamsForRebuild(string memberId)
+    {
+        if (_memberStreams.TryGetValue(memberId, out var streams))
+            foreach (var stream in streams)
+                stream.NeedsRebuild = true;
+    }
+
+    /// <summary>Clears the stream's buffer and re-merges every open member's current lines in one pass. Under _gate.</summary>
+    private static void RebuildStream(FileTabState tab)
+    {
+        var state = tab.Stream!;
+        state.NeedsRebuild = false;
+        state.Merger.Reset();
+        tab.Buffer.Clear();
+        foreach (var member in state.MemberTabs)
+            state.Merger.Add(member.Id, member.Buffer.Lines);
+        tab.Buffer.Append(state.Merger.FlushAll());
     }
 
     public Search AddSearch(
@@ -1098,7 +1617,19 @@ public sealed class AppState : IAsyncDisposable
                 if (!pendingLines.Remove(sourceId, out var lines) || lines.Count == 0)
                     return;
                 var tab = _files.FirstOrDefault(file => file.Id == sourceId);
-                tab?.Buffer.Append(lines);
+                if (tab is null)
+                    return;
+                tab.Buffer.Append(lines);
+                // Feed every open stream that merges this member (a stream awaiting a rebuild re-reads
+                // the member buffers instead, so it skips the incremental add).
+                if (_memberStreams.TryGetValue(sourceId, out var streams))
+                    foreach (var stream in streams)
+                    {
+                        if (stream.NoteDelivery(sourceId))
+                            stream.NeedsRebuild = true;
+                        if (!stream.NeedsRebuild)
+                            stream.Merger.Add(sourceId, lines);
+                    }
             }
 
             var remainingLines = MaxLinesPerDrain;
@@ -1158,6 +1689,7 @@ public sealed class AppState : IAsyncDisposable
                         FlushLines(sourceEvent.SourceId);
                         tab.Error = null;
                         tab.Buffer.Clear();
+                        MarkStreamsForRebuild(sourceEvent.SourceId);
                         break;
                     case SourceRangeLoaded loaded:
                         FlushLines(sourceEvent.SourceId);
@@ -1185,6 +1717,25 @@ public sealed class AppState : IAsyncDisposable
 
             foreach (var sourceId in pendingLines.Keys.ToArray())
                 FlushLines(sourceId);
+
+            // One release per open stream per drain, events or not, so the hold expires on idle ticks.
+            for (var index = 0; index < _streamTabs.Count; index++)
+            {
+                var streamTab = _streamTabs[index];
+                var state = streamTab.Stream!;
+                if (state.NeedsRebuild)
+                {
+                    RebuildStream(streamTab);
+                    changed = true;
+                    continue;
+                }
+                var released = state.Merger.Release();
+                if (released.Count > 0)
+                {
+                    streamTab.Buffer.Append(released);
+                    changed = true;
+                }
+            }
 
             if (changed)
                 NotifyChanged();
@@ -1272,6 +1823,39 @@ public sealed class AppState : IAsyncDisposable
                             .ToList(),
                     })
                     .ToList(),
+                Streams = [.. _streamDefs],
+                OpenStreams = _streamTabs
+                    .Select(tab => new PersistedStreamTab
+                    {
+                        StreamId = tab.Stream!.Definition.Id,
+                        FollowAll = tab.FollowAll,
+                        FollowSearches = tab
+                            .Searches.Select((search, index) => (search, index))
+                            .Where(item => !item.search.IsGlobalRule)
+                            .Select(item => tab.FollowSearches[item.index])
+                            .ToList(),
+                        Rules = [.. tab.Rules],
+                        Levels = tab.Levels,
+                        Columns = tab.Columns?.ToPersisted(),
+                        ComposedRows = tab.Columns?.ComposedRows ?? false,
+                        TimeDisplay = tab.Columns?.TimeDisplay ?? TimeDisplay.Absolute,
+                        HiddenSources = [.. tab.Stream.HiddenKeys],
+                        From = tab.Stream.RangeFrom,
+                        To = tab.Stream.RangeTo,
+                        Live = tab.Stream.Live,
+                        Searches = tab
+                            .Searches.Where(search => !search.IsGlobalRule)
+                            .Select(search => new PersistedSearch
+                            {
+                                Query = search.Query.Query,
+                                Mode = search.Query.Mode,
+                                CaseSensitive = search.Query.CaseSensitive,
+                                Color = search.Color,
+                            })
+                            .ToList(),
+                    })
+                    .ToList(),
+                SelectedStreamId = SelectedFile?.Stream?.Definition.Id,
                 SelectedFilePath =
                     SelectedFile is { Ephemeral: false } selected
                     && selected.Source.Kind == LogSourceKind.File
