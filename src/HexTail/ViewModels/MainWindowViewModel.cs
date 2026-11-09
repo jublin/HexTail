@@ -938,8 +938,18 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             );
     }
 
+    /// <summary>
+    /// Opens the stream editor for a new stream (null) or a saved one. When an editor for the same stream (or
+    /// another new-stream editor) is already open it is kept, with its unsaved changes, and only asked to take
+    /// focus; an editor for a different stream is replaced without a confirmation.
+    /// </summary>
     private void OpenStreamEditor(string? streamId)
     {
+        if (StreamEditor is { } open && open.StreamId == streamId)
+        {
+            open.RequestFocus();
+            return;
+        }
         StreamSettings? existing = null;
         if (streamId is not null)
         {
@@ -976,6 +986,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 DismissNarrowSidebar();
                 SetFileError(null);
             }
+            else
+                SetFileError("The stream no longer exists.");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -1079,6 +1091,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             ? null
             : Files.FirstOrDefault(item => ReferenceEquals(item.Model, _state.SelectedFile));
         SyncStreamRows();
+        _streamEditor?.RefreshChoices();
         Settings.Sync(_state.Settings);
         FilterBar.Sync();
         Inspector.Sync();

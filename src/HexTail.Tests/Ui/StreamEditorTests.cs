@@ -2,6 +2,7 @@ using System.Reactive.Linq;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using HexTail.Application;
+using HexTail.Persistence;
 using HexTail.Tests.Support;
 using HexTail.ViewModels;
 
@@ -229,9 +230,14 @@ public sealed class StreamEditorTests
             // Saving untouched keeps the missing member in the definition.
             await editor.SaveCommand.Execute();
             await UiWait.Until(() => viewModel.StreamEditor is null);
+            // The definition keeps its saved order and colours (the missing member stays in the middle).
             Assert.Equal(
-                new[] { $"file:{paths[0]}", $"file:{paths[2]}", $"file:{paths[1]}" }.Order(),
-                viewModel.State.Streams[0].Members.Select(member => member.Key).Order()
+                [$"file:{paths[0]}", $"file:{paths[1]}", $"file:{paths[2]}"],
+                viewModel.State.Streams[0].Members.Select(member => member.Key)
+            );
+            Assert.Equal(
+                made.Members.Select(member => member.Color),
+                viewModel.State.Streams[0].Members.Select(member => member.Color)
             );
 
             // Unchecking it removes it.
@@ -340,6 +346,154 @@ public sealed class StreamEditorTests
 
             Assert.Null(viewModel.StreamEditor);
             Assert.Empty(viewModel.State.Streams);
+            window.Close();
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task SavingAfterAMemberWasClosedMarksItClosedAndExplainsInsteadOfFailingOpaquely()
+    {
+        var directory = Directory.CreateTempSubdirectory("hextail-editor-").FullName;
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            window.Show();
+            await OpenFilesAsync(viewModel, 3, directory);
+            await viewModel.NewStreamCommand.Execute();
+            var editor = viewModel.StreamEditor!;
+            editor.Choices[0].IsChecked = true;
+            editor.Choices[1].IsChecked = true;
+            await viewModel.State.CloseFileAsync(viewModel.State.Files[1], Ct);
+
+            await editor.SaveCommand.Execute();
+
+            var closed = editor.Choices[1];
+            Assert.Equal("source-1.log (closed)", closed.Label);
+            Assert.Equal("source-1.log was closed. Reopen it or untick it.", editor.Error);
+            Assert.Same(editor, viewModel.StreamEditor);
+            Assert.Empty(viewModel.State.Streams);
+
+            // Unticking the closed one (and ticking another) lets the save through.
+            closed.IsChecked = false;
+            editor.Choices[2].IsChecked = true;
+            await editor.SaveCommand.Execute();
+            await UiWait.Until(() => viewModel.State.Streams.Count == 1);
+            Assert.Null(editor.Error);
+            window.Close();
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task SourcesOpenedWhileTheEditorIsOpenAppearUncheckedAndCheckedStateIsKept()
+    {
+        var directory = Directory.CreateTempSubdirectory("hextail-editor-").FullName;
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            window.Show();
+            await OpenFilesAsync(viewModel, 2, directory);
+            await viewModel.NewStreamCommand.Execute();
+            var editor = viewModel.StreamEditor!;
+            editor.Choices[0].IsChecked = true;
+            var extra = Path.Combine(directory, "extra.log");
+            File.WriteAllLines(extra, ["2026-01-01 10:00:09 INFO extra"]);
+
+            await viewModel.OpenPathsCommand.Execute([extra]);
+            Dispatcher.UIThread.RunJobs();
+
+            await UiWait.Until(() => editor.Choices.Count == 3);
+            Assert.Equal("extra.log", editor.Choices[2].DisplayName);
+            Assert.Equal([true, false, false], editor.Choices.Select(choice => choice.IsChecked));
+            Assert.Same(viewModel.State.Files[0], editor.Choices[0].Tab);
+            window.Close();
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task OpeningTheEditorForTheSameStreamFocusesItAndADifferentOneReplacesIt()
+    {
+        var directory = Directory.CreateTempSubdirectory("hextail-editor-").FullName;
+        try
+        {
+            var window = TestWindow.Create(out var viewModel);
+            window.Show();
+            await OpenFilesAsync(viewModel, 3, directory);
+            var files = viewModel.State.Files.ToArray();
+            var alpha = await viewModel.State.CreateStreamAsync("Alpha", [files[0], files[1]], Ct);
+            var beta = await viewModel.State.CreateStreamAsync("Beta", [files[1], files[2]], Ct);
+
+            await viewModel.NewStreamCommand.Execute();
+            var fresh = viewModel.StreamEditor!;
+            fresh.Name = "Unsaved";
+            var focusRequests = 0;
+            fresh.FocusRequested += () => focusRequests++;
+            await viewModel.NewStreamCommand.Execute();
+            Assert.Same(fresh, viewModel.StreamEditor);
+            Assert.Equal("Unsaved", fresh.Name);
+            Assert.Equal(1, focusRequests);
+
+            await viewModel.EditStreamCommand.Execute(alpha.Id);
+            var editingAlpha = viewModel.StreamEditor!;
+            Assert.NotSame(fresh, editingAlpha);
+            Assert.Equal(alpha.Id, editingAlpha.StreamId);
+            editingAlpha.Name = "Changed";
+            focusRequests = 0;
+            editingAlpha.FocusRequested += () => focusRequests++;
+            await viewModel.EditStreamCommand.Execute(alpha.Id);
+            Assert.Same(editingAlpha, viewModel.StreamEditor);
+            Assert.Equal("Changed", editingAlpha.Name);
+            Assert.Equal(1, focusRequests);
+
+            await viewModel.EditStreamCommand.Execute(beta.Id);
+            Assert.Equal(beta.Id, viewModel.StreamEditor!.StreamId);
+            Assert.Equal("Beta", viewModel.StreamEditor.Name);
+            window.Close();
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task ADeleteFailureLandsOnTheEditorsErrorLineAndHidesTheConfirmation()
+    {
+        var directory = Directory.CreateTempSubdirectory("hextail-editor-").FullName;
+        try
+        {
+            var persistence = new TestPersistence();
+            var window = TestWindow.Create(persistence, out var viewModel);
+            window.Show();
+            await OpenFilesAsync(viewModel, 2, directory);
+            var made = await viewModel.State.CreateStreamAsync(
+                "Doomed",
+                viewModel.State.Files.ToArray(),
+                Ct
+            );
+            await viewModel.EditStreamCommand.Execute(made.Id);
+            var editor = viewModel.StreamEditor!;
+            await editor.DeleteCommand.Execute();
+            persistence.SaveError = new IOException("disk full");
+
+            await editor.ConfirmDeleteCommand.Execute();
+
+            Assert.Equal("disk full", editor.Error);
+            Assert.False(editor.IsConfirmingDelete);
+            Assert.Same(editor, viewModel.StreamEditor);
+            Assert.Single(viewModel.State.Streams);
+            persistence.SaveError = null;
             window.Close();
         }
         finally

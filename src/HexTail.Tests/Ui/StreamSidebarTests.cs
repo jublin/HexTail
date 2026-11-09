@@ -2,7 +2,9 @@ using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using HexTail.Application;
@@ -337,5 +339,187 @@ public sealed class StreamSidebarTests
         );
         foreach (var button in controls.OfType<Button>().Where(b => b.Content is string))
             Assert.Contains((string)button.Content!, AutomationProperties.GetName(button));
+    }
+
+    private static IInputElement? Focused(Window window) =>
+        window.FocusManager?.GetFocusedElement();
+
+    private static void PressEscape(Window window, out bool handled)
+    {
+        var seen = false;
+        void Watch(object? sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+                seen = e.Handled;
+        }
+        window.AddHandler(InputElement.KeyDownEvent, Watch, handledEventsToo: true);
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        window.RemoveHandler(InputElement.KeyDownEvent, Watch);
+        Dispatcher.UIThread.RunJobs();
+        handled = seen;
+    }
+
+    [AvaloniaFact]
+    public async Task OpeningTheEditorFocusesAndSelectsTheNameThenCancelReturnsToThePlusButton()
+    {
+        using var fixture = new Fixture();
+        await fixture.OpenSourcesAsync();
+        Dispatcher.UIThread.RunJobs();
+        var sidebar = Sidebar(fixture.Window);
+
+        NamedButton(fixture.Window, "New stream").Command!.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        var name = sidebar.FindControl<TextBox>("StreamNameBox")!;
+        await UiWait.Until(() => ReferenceEquals(Focused(fixture.Window), name));
+        Assert.Equal(0, name.SelectionStart);
+        Assert.Equal(name.Text!.Length, name.SelectionEnd);
+
+        sidebar.FindControl<Button>("StreamCancelButton")!.Command!.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        var plus = NamedButton(fixture.Window, "New stream");
+        await UiWait.Until(() => ReferenceEquals(Focused(fixture.Window), plus));
+    }
+
+    [AvaloniaFact]
+    public async Task SavingAnEditReturnsFocusToThatStreamsEditButton()
+    {
+        using var fixture = new Fixture();
+        await fixture.OpenSourcesAsync();
+        var viewModel = fixture.ViewModel;
+        var files = viewModel.State.Files.ToArray();
+        await viewModel.State.CreateStreamAsync("Alpha", [files[0], files[1]], Ct);
+        var beta = await viewModel.State.CreateStreamAsync("Beta", [files[1], files[2]], Ct);
+        await UiWait.Until(() => viewModel.StreamRows.Count == 2);
+        Dispatcher.UIThread.RunJobs();
+
+        var edit = NamedButton(fixture.Window, "Edit Beta");
+        edit.Command!.Execute(edit.CommandParameter);
+        Dispatcher.UIThread.RunJobs();
+        var name = Sidebar(fixture.Window).FindControl<TextBox>("StreamNameBox")!;
+        await UiWait.Until(() => ReferenceEquals(Focused(fixture.Window), name));
+
+        viewModel.StreamEditor!.Name = "Beta renamed";
+        await viewModel.StreamEditor.SaveCommand.Execute();
+        await UiWait.Until(() => viewModel.StreamEditor is null);
+        Dispatcher.UIThread.RunJobs();
+
+        await UiWait.Until(() =>
+            ReferenceEquals(
+                Focused(fixture.Window),
+                NamedButton(fixture.Window, "Edit Beta renamed")
+            )
+        );
+        Assert.Equal(beta.Id, NamedButton(fixture.Window, "Edit Beta renamed").CommandParameter);
+    }
+
+    [AvaloniaFact]
+    public async Task DeletingTheStreamBeingEditedFocusesThePlusButton()
+    {
+        using var fixture = new Fixture();
+        await fixture.OpenSourcesAsync();
+        var viewModel = fixture.ViewModel;
+        var files = viewModel.State.Files.ToArray();
+        await viewModel.State.CreateStreamAsync("Alpha", [files[0], files[1]], Ct);
+        await UiWait.Until(() => viewModel.StreamRows.Count == 1);
+        Dispatcher.UIThread.RunJobs();
+        var edit = NamedButton(fixture.Window, "Edit Alpha");
+        edit.Command!.Execute(edit.CommandParameter);
+        Dispatcher.UIThread.RunJobs();
+
+        await viewModel.StreamEditor!.DeleteCommand.Execute();
+        await viewModel.StreamEditor.ConfirmDeleteCommand.Execute();
+        await UiWait.Until(() => viewModel.StreamEditor is null);
+        Dispatcher.UIThread.RunJobs();
+
+        await UiWait.Until(() =>
+            ReferenceEquals(Focused(fixture.Window), NamedButton(fixture.Window, "New stream"))
+        );
+    }
+
+    [AvaloniaFact]
+    public async Task EscapeInsideTheEditorCancelsItAndIsMarkedHandled()
+    {
+        using var fixture = new Fixture();
+        await fixture.OpenSourcesAsync();
+        Dispatcher.UIThread.RunJobs();
+        NamedButton(fixture.Window, "New stream").Command!.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var name = Sidebar(fixture.Window).FindControl<TextBox>("StreamNameBox")!;
+        await UiWait.Until(() => ReferenceEquals(Focused(fixture.Window), name));
+
+        PressEscape(fixture.Window, out var handled);
+
+        Assert.True(handled);
+        Assert.Null(fixture.ViewModel.StreamEditor);
+        var plus = NamedButton(fixture.Window, "New stream");
+        await UiWait.Until(() => ReferenceEquals(Focused(fixture.Window), plus));
+    }
+
+    [AvaloniaFact]
+    public async Task EscapeWhileConfirmingADeleteCancelsOnlyTheConfirmation()
+    {
+        using var fixture = new Fixture();
+        await fixture.OpenSourcesAsync();
+        var viewModel = fixture.ViewModel;
+        var files = viewModel.State.Files.ToArray();
+        await viewModel.State.CreateStreamAsync("Alpha", [files[0], files[1]], Ct);
+        await UiWait.Until(() => viewModel.StreamRows.Count == 1);
+        Dispatcher.UIThread.RunJobs();
+        var edit = NamedButton(fixture.Window, "Edit Alpha");
+        edit.Command!.Execute(edit.CommandParameter);
+        Dispatcher.UIThread.RunJobs();
+        var sidebar = Sidebar(fixture.Window);
+        var name = sidebar.FindControl<TextBox>("StreamNameBox")!;
+        await UiWait.Until(() => ReferenceEquals(Focused(fixture.Window), name));
+        await viewModel.StreamEditor!.DeleteCommand.Execute();
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(viewModel.StreamEditor.IsConfirmingDelete);
+
+        PressEscape(fixture.Window, out var handled);
+
+        Assert.True(handled);
+        Assert.NotNull(viewModel.StreamEditor);
+        Assert.False(viewModel.StreamEditor!.IsConfirmingDelete);
+        Assert.Single(viewModel.State.Streams);
+
+        PressEscape(fixture.Window, out _);
+        Assert.Null(viewModel.StreamEditor);
+        Assert.Single(viewModel.State.Streams);
+    }
+
+    [AvaloniaFact]
+    public async Task OpeningAVanishedStreamShowsAnError()
+    {
+        using var fixture = new Fixture();
+        await fixture.OpenSourcesAsync();
+
+        await fixture.ViewModel.OpenStreamCommand.Execute("no-such-stream");
+
+        Assert.Equal("The stream no longer exists.", fixture.ViewModel.FileError);
+    }
+
+    [AvaloniaFact]
+    public async Task OpeningAStreamWithAnUnavailableMemberShowsItsChipAsMissing()
+    {
+        using var fixture = new Fixture();
+        await fixture.OpenSourcesAsync();
+        var viewModel = fixture.ViewModel;
+        var files = viewModel.State.Files.ToArray();
+        var made = await viewModel.State.CreateStreamAsync("Alpha", [files[0], files[1]], Ct);
+        await viewModel.CloseFileCommand.Execute(viewModel.FileTabs[1]);
+        await UiWait.Until(() => viewModel.FileTabs.Count == 2);
+        File.Delete(fixture.Paths[1]);
+
+        await viewModel.OpenStreamCommand.Execute(made.Id);
+        await UiWait.Until(() => viewModel.SelectedFile?.DisplayName == "Alpha");
+        viewModel.FilterBar.Sync();
+
+        var chips = viewModel.FilterBar.SourceChips;
+        Assert.Equal(2, chips.Count);
+        Assert.False(chips[0].IsMissing);
+        Assert.True(chips[1].IsMissing);
+        Assert.Contains("(missing)", chips[1].Label);
     }
 }

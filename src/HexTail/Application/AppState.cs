@@ -1065,14 +1065,18 @@ public sealed class AppState : IAsyncDisposable
         catch (UnauthorizedAccessException) { }
     }
 
-    /// <summary>Distinct, non-stream member tabs as definition members; colours of retained keys are kept. Under _gate.</summary>
+    /// <summary>
+    /// Distinct, non-stream member tabs as definition members. Members of the existing definition keep their
+    /// position and colour (open ones when still ticked, missing ones when listed in <paramref name="keepMissingKeys"/>);
+    /// newly added sources are appended in the order given. Under _gate.
+    /// </summary>
     private List<StreamMember> BuildMembers(
         IReadOnlyList<FileTabState> tabs,
         IReadOnlyList<StreamMember> existing,
         IReadOnlyCollection<string>? keepMissingKeys = null
     )
     {
-        var keys = new List<string>();
+        var wanted = new List<string>();
         foreach (var tab in tabs)
         {
             if (tab is null || !_files.Contains(tab))
@@ -1081,32 +1085,34 @@ public sealed class AppState : IAsyncDisposable
                     nameof(tabs)
                 );
             var key = MemberKey(tab);
+            if (!wanted.Contains(key, StreamMember.KeyComparer))
+                wanted.Add(key);
+        }
+        var kept = existing
+            .Where(member =>
+                wanted.Contains(member.Key, StreamMember.KeyComparer)
+                || keepMissingKeys?.Contains(member.Key, StreamMember.KeyComparer) == true
+            )
+            .ToList();
+        var keys = kept.Select(member => member.Key).ToList();
+        foreach (var key in wanted)
             if (!keys.Contains(key, StreamMember.KeyComparer))
                 keys.Add(key);
-        }
-        foreach (var member in existing)
-            if (
-                keepMissingKeys?.Contains(member.Key, StreamMember.KeyComparer) == true
-                && !keys.Contains(member.Key, StreamMember.KeyComparer)
-            )
-                keys.Add(member.Key);
         if (keys.Count < 2)
             throw new ArgumentException(
                 "A stream needs at least two different sources.",
                 nameof(tabs)
             );
         var used = new HashSet<string>(
-            existing
-                .Where(member => keys.Contains(member.Key, StreamMember.KeyComparer))
-                .Select(member => member.Color),
+            kept.Select(member => member.Color),
             StringComparer.OrdinalIgnoreCase
         );
         var result = new List<StreamMember>(keys.Count);
         foreach (var key in keys)
         {
-            var color = existing
-                .FirstOrDefault(member => StreamMember.KeyComparer.Equals(member.Key, key))
-                ?.Color;
+            var color = kept.FirstOrDefault(member =>
+                StreamMember.KeyComparer.Equals(member.Key, key)
+            )?.Color;
             if (string.IsNullOrWhiteSpace(color))
             {
                 color =
