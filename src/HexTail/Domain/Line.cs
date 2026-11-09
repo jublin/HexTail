@@ -17,4 +17,10 @@ public sealed record Line(string Raw, IReadOnlyDictionary<string, string>? Parse
     public DateTimeOffset? Timestamp { get; init; }
 
     public bool TimestampInherited { get; init; }
+
+    /// <summary>
+    /// Id of the source (file tab or Elastic source) the line came from, or <c>null</c> when it
+    /// has not been stamped. Merged streams use it to tell interleaved lines apart.
+    /// </summary>
+    public string? SourceId { get; init; }
 }

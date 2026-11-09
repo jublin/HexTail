@@ -515,7 +515,8 @@ public sealed class AppState : IAsyncDisposable
                 var buffer = new FileBuffer(_settings.MaxLines);
                 ILogParser parser = new TimestampingParser(
                     LogParserSelector.ForPath(fullPath),
-                    () => NaiveZone(_settings.TimeZoneMode)
+                    () => NaiveZone(_settings.TimeZoneMode),
+                    sourceId: id
                 );
                 var tailer = _tailers.StartFile(id, fullPath, parser);
                 tab = new FileTabState(id, fullPath, buffer, parser, tailer)

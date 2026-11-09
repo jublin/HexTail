@@ -88,6 +88,42 @@ public sealed class TimestampingParserTests
     }
 
     [Fact]
+    public void SourceId_IsStampedOnTimestampedInheritedAndUntimestampedLines()
+    {
+        var parser = new TimestampingParser(
+            new PlainTextParser(),
+            () => TimeZoneInfo.Utc,
+            () => Now,
+            sourceId: "a"
+        );
+
+        var before = parser.Parse("no time yet");
+        var stamped = parser.Parse("2026-11-07T10:11:12Z first");
+        var next = parser.Parse("2026-11-07T10:11:13Z second");
+        var inherited = parser.Parse("  at Stack.Frame()");
+
+        Assert.Null(before.Timestamp);
+        Assert.False(stamped.TimestampInherited);
+        Assert.False(next.TimestampInherited);
+        Assert.True(inherited.TimestampInherited);
+        Assert.All([before, stamped, next, inherited], line => Assert.Equal("a", line.SourceId));
+    }
+
+    [Fact]
+    public void SourceId_IsNullWithoutASourceId()
+    {
+        var parser = new TimestampingParser(
+            new PlainTextParser(),
+            () => TimeZoneInfo.Utc,
+            () => Now
+        );
+
+        Assert.Null(parser.Parse("no time yet").SourceId);
+        Assert.Null(parser.Parse("2026-11-07T10:11:12Z first").SourceId);
+        Assert.Null(parser.Parse("continuation").SourceId);
+    }
+
+    [Fact]
     public void Inner_IsExposed()
     {
         var inner = new JsonlParser();

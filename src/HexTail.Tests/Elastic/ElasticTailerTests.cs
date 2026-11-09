@@ -44,6 +44,39 @@ public sealed class ElasticTailerTests
     }
 
     [Fact]
+    public async Task PollOnce_StampsEmittedLinesWithTheSourceId()
+    {
+        var client = new FakeElasticApiClient();
+        using var sortDocument = JsonDocument.Parse("[1]");
+        client.Pages.Enqueue(
+            new ElasticSearchPage(
+                "pit-2",
+                [Hit("a", "2026-08-20T10:00:00Z", [sortDocument.RootElement[0].Clone()])]
+            )
+        );
+        var channel = Channel.CreateUnbounded<SourceEvent>();
+        var connection = Connection();
+        await using var tailer = new ElasticTailer(
+            connection,
+            connection.Views[0],
+            connection.Views[0].Sources[0],
+            "secret",
+            client,
+            channel.Writer,
+            () => new DateTimeOffset(2026, 8, 20, 10, 5, 0, TimeSpan.Zero),
+            (_, _) => Task.CompletedTask
+        );
+
+        await tailer.PollOnceAsync(CancellationToken.None);
+
+        var lines = Assert.IsType<SourceLines>(
+            await channel.Reader.ReadAsync(TestContext.Current.CancellationToken)
+        );
+        Assert.Equal(connection.Views[0].Sources[0].Id, tailer.SourceId);
+        Assert.Equal(tailer.SourceId, Assert.Single(lines.Lines).SourceId);
+    }
+
+    [Fact]
     public async Task PollOnce_LimitsInitialBatchToNewestTenThousandLines()
     {
         using var sortDocument = JsonDocument.Parse("[1]");
@@ -266,7 +299,7 @@ public sealed class ElasticTailerTests
             Assert.InRange(batch.Lines.Count, 1, ElasticTailer.PageSize);
             actual.AddRange(batch.Lines);
         }
-        Assert.Equal(hits.Select(hit => hit.Line), actual);
+        Assert.Equal(hits.Select(hit => hit.Line with { SourceId = tailer.SourceId }), actual);
         client.Pages.Enqueue(new ElasticSearchPage("pit-1", [hits[^1]]));
         await tailer.PollOnceAsync(TestContext.Current.CancellationToken);
         Assert.False(channel.Reader.TryRead(out _));
@@ -314,8 +347,11 @@ public sealed class ElasticTailerTests
         client.Pages.Enqueue(new ElasticSearchPage("pit-1", hits));
         client.Pages.Enqueue(new ElasticSearchPage("pit-1", [last]));
         await tailer.PollOnceAsync(TestContext.Current.CancellationToken);
-        Assert.Same(
-            last.Line,
+        Assert.Equal(
+            last.Line with
+            {
+                SourceId = tailer.SourceId,
+            },
             Assert.Single(
                 Assert
                     .IsType<SourceLines>(
