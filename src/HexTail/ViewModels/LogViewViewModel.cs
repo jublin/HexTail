@@ -38,10 +38,14 @@ internal sealed class LogViewViewModel : ReactiveObject
         SelectLineCommand = ReactiveCommand.Create<Line>(line => _file.SelectLine(line));
         JumpToLatestCommand = ReactiveCommand.Create(JumpToLatest, owner.Scheduler);
         ColumnHeader = new ColumnHeaderViewModel(this);
+        Overview = new LogOverviewViewModel(owner, this);
     }
 
     /// <summary>The header above the rows: column titles, resize thumbs and the Columns menu.</summary>
     public ColumnHeaderViewModel ColumnHeader { get; }
+
+    /// <summary>The timeline histogram and overview ruler data for this view.</summary>
+    internal LogOverviewViewModel Overview { get; }
 
     public Search? Search { get; }
     public MainWindowViewModel Workspace => _owner;
@@ -201,6 +205,13 @@ internal sealed class LogViewViewModel : ReactiveObject
         }
     }
 
+    /// <summary>Selects the displayed row at an index; out-of-range indices do nothing.</summary>
+    internal void SelectRowAt(int index)
+    {
+        if (index >= 0 && index < Lines.Count)
+            SelectRow(Lines[index]);
+    }
+
     private void SelectRow(LogLineViewModel row)
     {
         _file.SelectLine(row.Line);
@@ -325,6 +336,7 @@ internal sealed class LogViewViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(InitialLimitMessage));
             this.RaisePropertyChanged(nameof(HasInitialLimitMessage));
         }
+        Overview.Invalidate();
     }
 
     private static void InvalidateRows(AvaloniaList<LogLineViewModel> rows)

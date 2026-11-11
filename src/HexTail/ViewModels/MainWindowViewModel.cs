@@ -1383,7 +1383,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             tab.Stream is { } stream
                 ? new HistogramPrior(stream.RangeFrom, stream.RangeTo, stream.Live)
             : tab.Source.Kind == LogSourceKind.Elastic
-                ? new HistogramPrior(tab.ElasticFrom, tab.ElasticTo, false)
+                ? new HistogramPrior(tab.ElasticFrom, tab.ElasticTo, false, tab.ElasticInputZone)
             : tab.TimeWindow is { } window
                 ? new HistogramPrior(Iso(window.From), Iso(window.To), false)
             : new HistogramPrior(string.Empty, string.Empty, true);
@@ -1432,6 +1432,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 if (prior is null)
                     return;
                 _state.SetElasticTimeRange(tab, prior.From, prior.To);
+                if (prior.Zone is { } zone)
+                    tab.ElasticInputZone = zone;
             }
             else
                 _state.SetFileTimeWindow(

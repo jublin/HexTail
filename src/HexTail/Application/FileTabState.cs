@@ -7,8 +7,16 @@ namespace HexTail.Application;
 /// <summary>A file tab's histogram time window: rows outside it are hidden (session only, never saved).</summary>
 public readonly record struct TimeWindow(DateTimeOffset From, DateTimeOffset To);
 
-/// <summary>The range in place before the first histogram drag, restored by a double-click.</summary>
-public sealed record HistogramPrior(string From, string To, bool Live);
+/// <summary>
+/// The range in place before the first histogram drag, restored by a double-click. <paramref name="Zone"/>
+/// is the zone an Elastic tab's absolute bounds were typed in (null for other sources).
+/// </summary>
+public sealed record HistogramPrior(
+    string From,
+    string To,
+    bool Live,
+    AppTimeZoneMode? Zone = null
+);
 
 public sealed class FileTabState : IAsyncDisposable
 {
