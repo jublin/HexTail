@@ -42,8 +42,12 @@ public sealed class FileTabState : IAsyncDisposable
         Parser = parser;
         Tailer = tailer;
         ElasticLoading = source.Kind == LogSourceKind.Elastic;
+        FileLoading = source.Kind == LogSourceKind.File;
         Buffer.Changed += OnBufferChanged;
     }
+
+    /// <summary>Non-null only for stream tabs: the merge state behind this tab.</summary>
+    public StreamState? Stream { get; internal init; }
 
     public LogSourceDescriptor Source { get; internal set; }
     public string Id => Source.Id;
@@ -93,6 +97,15 @@ public sealed class FileTabState : IAsyncDisposable
     public string ElasticFrom { get; set; } = "now-5m";
     public string ElasticTo { get; set; } = "now";
     public bool ElasticLoading { get; internal set; }
+
+    /// <summary>
+    /// True for a file source until its initial read (or the reload after a reset) is complete, which its
+    /// tailer reports with a SourceLoaded event, whether it delivered lines or found none. A stream re-merges once when a member's load completes.
+    /// </summary>
+    internal bool FileLoading { get; set; }
+
+    /// <summary>The source is still loading: an Elastic range or a file's initial read or reload.</summary>
+    internal bool IsLoading => ElasticLoading || FileLoading;
     public int? ElasticInitialLimitReached { get; internal set; }
     public DateTimeOffset? ElasticResolvedFrom { get; internal set; }
     public DateTimeOffset? ElasticResolvedTo { get; internal set; }
@@ -145,9 +158,13 @@ public sealed class FileTabState : IAsyncDisposable
         double fontSize = ColumnLayout.DefaultFontSize
     ) => Columns ?? ColumnLayout.DefaultFor(Source, elasticOutputFields, fontSize);
 
-    /// <summary>True when lines carry parsed fields: JSONL and logfmt files, and every Elastic source.</summary>
+    /// <summary>
+    /// True when rows render as columns: JSONL and logfmt files, every Elastic source, and every stream
+    /// (the Source column keeps members distinguishable by text, not only colour; a plain line shows its
+    /// raw text as the message).
+    /// </summary>
     public bool IsStructured =>
-        Source.Kind == LogSourceKind.Elastic
+        Source.Kind is LogSourceKind.Elastic or LogSourceKind.Stream
         || (Parser is TimestampingParser wrapped ? wrapped.Inner : Parser)
             is JsonlParser
                 or LogfmtParser;

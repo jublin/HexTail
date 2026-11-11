@@ -148,12 +148,18 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
 
     public bool HasError => !string.IsNullOrWhiteSpace(_error);
 
+    /// <summary>
+    /// False for a stream, which always renders columns: the Source cell is what tells the members
+    /// apart by text. A composed layout saved for a stream is ignored, and the option is not offered.
+    /// </summary>
+    public bool ComposedRowsAvailable => _owner.File.Stream is null;
+
     public bool ComposedRows
     {
-        get => CurrentLayout().ComposedRows;
+        get => ComposedRowsAvailable && CurrentLayout().ComposedRows;
         set
         {
-            if (CurrentLayout().ComposedRows == value)
+            if (!ComposedRowsAvailable || CurrentLayout().ComposedRows == value)
                 return;
             _ = ApplyAsync(layout => layout with { ComposedRows = value });
         }
@@ -194,6 +200,7 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
         key switch
         {
             ColumnLayout.Time => "Time",
+            ColumnLayout.Source => "Source",
             ColumnLayout.Level => "Level",
             ColumnLayout.Message => "Message",
             _ => key,
@@ -206,9 +213,13 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
     internal static string MenuTitleOf(string key) =>
         IsPseudo(key) ? $"{TitleOf(key)} (detected)" : key;
 
-    /// <summary>The Time, Level and Message pseudo-columns; any other key, <c>@timestamp</c> too, is a field.</summary>
+    /// <summary>The Time, Source, Level and Message pseudo-columns; any other key, <c>@timestamp</c> too, is a field.</summary>
     private static bool IsPseudo(string key) =>
-        key is ColumnLayout.Time or ColumnLayout.Level or ColumnLayout.Message;
+        key
+            is ColumnLayout.Time
+                or ColumnLayout.Source
+                or ColumnLayout.Level
+                or ColumnLayout.Message;
 
     private ColumnLayout CurrentLayout() => _owner.ComputeLayout();
 
@@ -223,7 +234,7 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
             var layoutChanged = !ReferenceEquals(layout, _lastLayout);
             _lastLayout = layout;
             _isStructured = structured;
-            var visible = structured && !layout.ComposedRows;
+            var visible = structured && !(ComposedRowsAvailable && layout.ComposedRows);
             if (visible != _isVisible)
             {
                 _isVisible = visible;
@@ -298,7 +309,12 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
         foreach (var column in layout.Columns)
             if (!IsPseudo(column.Key) && !fields.Contains(column.Key))
                 fields.Add(column.Key);
-        var keys = new List<string> { ColumnLayout.Time, ColumnLayout.Level, ColumnLayout.Message };
+        // Only a stream has a source column to offer.
+        var keys = new List<string> { ColumnLayout.Time };
+        if (_owner.File.Source.Kind == LogSourceKind.Stream)
+            keys.Add(ColumnLayout.Source);
+        keys.Add(ColumnLayout.Level);
+        keys.Add(ColumnLayout.Message);
         keys.AddRange(fields.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
 
         if (!Choices.Select(choice => choice.Key).SequenceEqual(keys))
@@ -348,7 +364,9 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
         );
 
     internal Task ToggleComposedAsync() =>
-        ApplyAsync(layout => layout with { ComposedRows = !layout.ComposedRows });
+        ComposedRowsAvailable
+            ? ApplyAsync(layout => layout with { ComposedRows = !layout.ComposedRows })
+            : Task.CompletedTask;
 
     private Task ResetAsync() =>
         ApplyAsync(layout =>

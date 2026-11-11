@@ -14,6 +14,7 @@ public sealed class TimestampingParser : ILogParser, IResettableParser
     private readonly ILogParser _inner;
     private readonly Func<TimeZoneInfo> _naiveZone;
     private readonly Func<DateTimeOffset>? _now;
+    private readonly string? _sourceId;
     private readonly object _gate = new();
     private TimestampStrategy? _strategy;
     private DateTimeOffset? _last;
@@ -22,9 +23,11 @@ public sealed class TimestampingParser : ILogParser, IResettableParser
     public TimestampingParser(
         ILogParser inner,
         Func<TimeZoneInfo> naiveZone,
-        Func<DateTimeOffset>? now = null
+        Func<DateTimeOffset>? now = null,
+        string? sourceId = null
     )
     {
+        _sourceId = sourceId;
         _inner = inner;
         _naiveZone = naiveZone;
         _now = now;
@@ -70,7 +73,7 @@ public sealed class TimestampingParser : ILogParser, IResettableParser
                 {
                     _misses = 0;
                     _last = found;
-                    return line with { Timestamp = found };
+                    return line with { Timestamp = found, SourceId = _sourceId };
                 }
 
                 if (++_misses >= MissLimit)
@@ -84,7 +87,7 @@ public sealed class TimestampingParser : ILogParser, IResettableParser
                 _strategy = chosen;
                 _misses = 0;
                 _last = first;
-                return line with { Timestamp = first };
+                return line with { Timestamp = first, SourceId = _sourceId };
             }
 
             return _last is { } previous
@@ -92,8 +95,12 @@ public sealed class TimestampingParser : ILogParser, IResettableParser
                 {
                     Timestamp = previous,
                     TimestampInherited = true,
+                    SourceId = _sourceId,
                 }
-                : line;
+                : line with
+                {
+                    SourceId = _sourceId,
+                };
         }
     }
 

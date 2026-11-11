@@ -24,6 +24,26 @@ public sealed class ColumnLayoutTests
     );
 
     [Fact]
+    public void DefaultFor_Stream_IsTimeSourceLevelMessage()
+    {
+        var stream = new LogSourceDescriptor(
+            "stream:s1",
+            LogSourceKind.Stream,
+            "Both",
+            "a.log, b.log"
+        );
+
+        var layout = ColumnLayout.DefaultFor(stream, null);
+
+        Assert.Equal(["@time", "@source", "@level", "@message"], layout.Columns.Select(c => c.Key));
+        Assert.Equal(ColumnLayout.DefaultWidth("@source"), layout.Columns[1].Width);
+        Assert.DoesNotContain(
+            "@source",
+            ColumnLayout.DefaultFor(FileSource, null).Columns.Select(c => c.Key)
+        );
+    }
+
+    [Fact]
     public void DefaultFor_File_IsTimeLevelMessage()
     {
         var layout = ColumnLayout.DefaultFor(FileSource, null);

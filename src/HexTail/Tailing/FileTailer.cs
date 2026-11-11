@@ -25,6 +25,9 @@ internal sealed class FileTailer : ILogTailer
     private bool _rotationHint;
     private string? _lastError;
 
+    // True until the first read (and the first read after each reset) has finished: SourceLoaded follows it.
+    private bool _loadPending = true;
+
     public FileTailer(
         string sourceId,
         string path,
@@ -155,6 +158,11 @@ internal sealed class FileTailer : ILogTailer
         var initialRead = !_hasObservedFile;
         _hasObservedFile = true;
         await ReadAvailableBytesAsync(cancellationToken, initialRead).ConfigureAwait(false);
+        if (_loadPending)
+        {
+            _loadPending = false;
+            await WriteAsync(new SourceLoaded(SourceId), cancellationToken).ConfigureAwait(false);
+        }
         if (_lastError is not null)
         {
             _lastError = null;
@@ -293,6 +301,7 @@ internal sealed class FileTailer : ILogTailer
     private void ResetReadState()
     {
         _offset = 0;
+        _loadPending = true;
         _pendingBytes.Clear();
         // Runs on the tailer thread, the only one that parses for this tailer, so the first line of
         // the new content is not given the old file's timestamp.

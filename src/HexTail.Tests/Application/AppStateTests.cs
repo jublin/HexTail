@@ -623,6 +623,28 @@ public sealed class AppStateTests
     }
 
     [Fact]
+    public async Task OpenFile_StampsBufferLinesWithTheTabId()
+    {
+        var path = CreateTempFile("2026-11-07T10:11:12Z first\ncontinuation\n");
+        var persistence = new MemoryPersistence();
+        await using var tailers = NewTailers();
+        await using var state = new AppState(
+            tailers,
+            persistence,
+            credentials: new InMemoryCredentialVault()
+        );
+
+        var tab = await state.OpenFileAsync(
+            path,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        await DrainUntilAsync(state, () => tab.Buffer.Count == 2);
+
+        Assert.Equal(tab.Id, tab.Buffer[0].SourceId);
+        Assert.Equal(tab.Id, tab.Buffer[1].SourceId);
+    }
+
+    [Fact]
     public async Task SaveAndRestore_PreservesTabsSearchesAndViewSettings()
     {
         var path = CreateTempFile("error\n");

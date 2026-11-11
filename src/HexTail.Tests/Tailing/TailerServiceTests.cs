@@ -174,6 +174,7 @@ public sealed class TailerServiceTests
             e => e.Lines.Select(line => line.Raw).SequenceEqual(["first"])
         );
 
+        await ReadEventAsync<SourceLoaded>(service.Events);
         await File.AppendAllTextAsync(path, "partial");
         await AssertNoEventAsync(service.Events, TimeSpan.FromMilliseconds(50));
 
@@ -185,6 +186,48 @@ public sealed class TailerServiceTests
 
         Assert.Equal("file-1", initial.SourceId);
         Assert.Equal("file-1", appended.SourceId);
+    }
+
+    [Fact]
+    public async Task StartTailer_OnAnEmptyFile_ReportsTheInitialReadAsLoaded()
+    {
+        var path = CreateTempFile("");
+        await using var service = new LogSourceService(
+            new TailerOptions
+            {
+                PollInterval = TimeSpan.FromMilliseconds(10),
+                UseFileSystemWatcher = false,
+            }
+        );
+        await using var tailer = service.StartFile("file-1", path, new PlainTextParser());
+
+        var loaded = await ReadEventAsync<SourceLoaded>(service.Events);
+        Assert.Equal("file-1", loaded.SourceId);
+
+        // Loaded is reported once for the initial read, not on every poll.
+        await File.AppendAllTextAsync(path, "later\n", TestContext.Current.CancellationToken);
+        await ReadEventAsync<SourceLines>(service.Events);
+        await AssertNoEventAsync(service.Events, TimeSpan.FromMilliseconds(50));
+    }
+
+    [Fact]
+    public async Task StartTailer_ReportsTheReloadAfterATruncationAsLoaded()
+    {
+        var path = CreateTempFile("old content\n");
+        await using var service = new LogSourceService(
+            new TailerOptions
+            {
+                PollInterval = TimeSpan.FromMilliseconds(10),
+                UseFileSystemWatcher = false,
+            }
+        );
+        await using var tailer = service.StartFile("file-1", path, new PlainTextParser());
+        await ReadEventAsync<SourceLoaded>(service.Events);
+
+        await File.WriteAllTextAsync(path, "", TestContext.Current.CancellationToken);
+
+        await ReadEventAsync<SourceReset>(service.Events);
+        await ReadEventAsync<SourceLoaded>(service.Events);
     }
 
     [Fact]

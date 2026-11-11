@@ -2,7 +2,7 @@
 
 ## Start tailing
 
-Choose **Open file** (or press `Ctrl+O`) to tail a local log, or drop files onto the window. Open sources appear in the **sidebar**: local files under **Files** and Elastic servers with their sources under **Elastic**. The **+** next to each heading opens a file or the Elastic setup. Select a source to show it; each source has an **All** view plus one view per search.
+Choose **Open file** (or press `Ctrl+O`) to tail a local log, or drop files onto the window. Open sources appear in the **sidebar**: merged streams under **STREAMS** (above **Files**), local files under **Files** and Elastic servers with their sources under **Elastic**. The **+** next to each heading opens a file or the Elastic setup, or starts a new stream (see [Streams](#streams)). Select a source to show it; each source has an **All** view plus one view per search.
 
 With nothing open, the workspace shows:
 
@@ -12,11 +12,42 @@ With nothing open, the workspace shows:
 
 **Try a sample log** starts a generated log that grows about twice a second, so you can try Follow, Pause, and search without a real log. It lives in a per-process temporary directory, is removed when you close it or quit, and is never saved with the session or added to recents.
 
-The sidebar can be hidden with its toolbar button or `Ctrl+B`, and a wide window remembers that choice. Drag its right edge to resize it (the width is saved). Below 1000 px wide the sidebar is an overlay instead: it opens on top of the workspace and closes after you select a source. Each file row shows a status dot, its line count, and a close button; hovering shows the full path. Under **Elastic**, each connection has **+** (**Add source to** it) and a pencil (**Edit** it), and each source has its own pencil. The toolbar also has the command palette button, **Pause**, and **Settings**.
+The sidebar can be hidden with its toolbar button or `Ctrl+B`, and a wide window remembers that choice. Drag its right edge to resize it (the width is saved). Below 1000 px wide the sidebar is an overlay instead: it opens on top of the workspace and closes after you select a source. Each file row shows a status dot, its line count, and a close button; hovering shows the full path. Under **Elastic**, each connection has **+** (**Add source to** it) and a pencil (**Edit** it), and each source has its own pencil. A stream row shows one coloured dot per source, its name, a pencil (**Edit**) and, while it is open, a close button. The toolbar also has the command palette button, **Pause**, and **Settings**.
 
-The **command palette** (`Ctrl+K` or `Ctrl+Shift+P`) lists commands, the views of the selected source, open sources, and Elastic sources that are not open yet. Type to filter, use Up and Down to move, press Enter to run the highlighted item, and press `Esc` (or click outside) to close it; focus returns to where it was. Pressing `Ctrl+K` again does not close it. When an Elastic source is selected the palette also offers quick time ranges.
+The **command palette** (`Ctrl+K` or `Ctrl+Shift+P`) lists commands (including **New stream** and **Open stream** *name* for each saved stream), the views of the selected source, open sources, and Elastic sources that are not open yet. Type to filter, use Up and Down to move, press Enter to run the highlighted item, and press `Esc` (or click outside) to close it; focus returns to where it was. Pressing `Ctrl+K` again does not close it. When an Elastic source or a stream is selected the palette also offers quick time ranges.
 
-The status bar at the bottom shows how many sources are open, the selected view's row counts, and the **display time zone** picker. When **Pause** is on it also says **Paused — rows are buffering**.
+The status bar at the bottom shows how many sources are open (for example **3 sources open · 1 stream open**; a stream is not counted as a source), the selected view's row counts, and the **display time zone** picker. When **Pause** is on it also says **Paused — rows are buffering**.
+
+## Streams
+
+A **stream** merges two or more open sources, files and Elastic sources alike, into one list whose rows are interleaved by timestamp. Use it to follow one request across a web server log, a worker log and an Elastic index. A stream is a tab of its own: it has its own filter rules, levels, searches, columns, bookmarks and inspector, and a source's own rules do not apply inside it.
+
+**Create one.** Press **+** next to **STREAMS** at the top of the sidebar, or choose **New stream** in the command palette. An inline editor opens with the name prefilled (**Stream 1**, **Stream 2**, ...) and one checkbox per open source. Tick at least two, then **Save**; the stream opens and is selected. With fewer than two sources open the editor asks you to open more. `Esc` closes the editor without saving.
+
+**Edit, delete and reopen.** The pencil on a stream row opens the same editor with its sources ticked. A source that is no longer open is marked **(missing)** or closed; it stays ticked so you can untick it to remove it. **Delete** asks for an inline confirmation (the member sources stay open). Click a stream row, or choose **Open stream** *name* in the command palette, to open and select it; sources that are not open are opened first, and one that cannot be opened (a deleted file, an Elastic source that is no longer configured) is shown as missing. Closing a stream with its close button, or with `Ctrl+W` while it is selected (as for any source), keeps its definition in the sidebar and never closes the sources it merges. Closing a source that a stream merges does not rebuild the stream: that source's rows already in the stream stay until the next rebuild (see **Row order**), after which they are gone and the source shows as missing.
+
+**Row order.** Rows are ordered by their timestamps. Sources deliver at different times, so a source's new lines are held back until every active source has caught up to them, for at most 5 seconds; a slow or idle source can delay the others briefly but never blocks them. A line that still arrives after newer rows are already shown is not slotted into the past: it is appended and marked **late** with a small clock icon. The icon does not take the pointer, so a click on it still selects the row; hover the row's **Time** cell, which says **Arrived late from** *source*, or read the inspector's **Source** line, which reads *source* **· arrived late**. A line without a timestamp, such as a stack trace line, follows the previous line of its own source.
+
+**Rebuilds.** Sometimes the stream is rebuilt: every source's current lines are merged again in timestamp order, so rows that were late fall into place. A rebuild happens when:
+
+- a source resets (a truncation or rotation of a file), when the reset is seen and again once its lines have been reloaded;
+- an Elastic source is re-queried, or its range changes, and its rows have loaded;
+- the stream's sources are edited, or a source of the stream is closed and opened again;
+- a source finishes its initial load and delivered lines meanwhile (a source that is still loading when the stream opens, and a source that is reloading).
+
+Each rebuild clears the stream's row selection, its bookmarks and its late markers. A source that is simply quiet (an empty file, an Elastic window with no rows) does not trigger a rebuild when its first line arrives hours later; that line is merged like any other.
+
+**What it shows.** A stream always shows columns: **Time**, **Source**, **Level** and **Message**, and a plain-text line shows its raw text as the message. Each row has a coloured stripe at its left edge in its source's colour, the same colour as the dot on the stream's sidebar row and its source chip. The **Columns** menu works as for other sources, without **Composed row**, and also offers **Source**. The filter bar of a stream has one **chip per source**: click it to hide or show that source's rows (the choice is saved with the session). The inspector has a **Source** line with the source's name and colour. The selected row of a stream is saved with the session and restored once the stream's sources have loaded.
+
+**Time range.** The time pill in the top toolbar (**Stream time range**) is shown for a stream, and opens the same flyout as for Elastic sources (see [Set an Elastic log interval](#set-an-elastic-log-interval)). Applying a range:
+
+- sets that range on every open Elastic member of the stream, so their own pills change too, and reloads them;
+- filters the rows of file members by timestamp, since a file has no query to re-run. Rows without a timestamp stay visible;
+- with no Elastic member the pill only filters, and its tooltip says so (**Filters rows from files; no Elastic sources in this stream**).
+
+**Show all rows** in the flyout removes the file filter again: the pill then reads **All rows (no file filter)**, and every row of a file source shows. It does not touch Elastic sources: they keep the ranges they have, since an Elastic row only exists inside the window that was queried. This is different from the **Live** checkbox next to **To**, which only sets To to *now* so that newly arriving rows keep appending; a live range still filters the rows of file members by From. Relative ranges such as `now-15m` are resolved when the range is applied, when the session is restored and each time the stream is rebuilt, not on every new line.
+
+**Saved with the session.** Stream definitions (name and sources, with each source's colour), which streams are open and selected, the hidden sources and the applied range are all stored in `session.json`, and restored on the next launch after the files and Elastic sources they merge.
 
 ## Settings
 
@@ -121,11 +152,11 @@ A timestamp with no zone is read in the **display time zone** (the status bar pi
 - A **header** above the rows names each column. Drag the handle at a column's right edge to resize it; widths are saved per source and the last column fills the remaining space.
 - The **Columns** button at the right end of the header opens a menu with a checkbox for each field (including Time, Level and Message, which the menu labels "(detected)" so they are not confused with real fields of the same name), **Composed row**, **Time: Absolute** or **Relative**, and **Reset columns**. Fields come from the recent lines of the source, read when the menu opens, so the list stays still while you use it.
 - Once you change an Elastic source's columns (resize, toggle, **Reset columns**, time mode or composed row), its column list is kept even if you later change the view's output fields in Elastic setup; **Reset columns** picks up the current output fields.
-- **Composed row** turns the columns off and shows each line as one text row again, as for plain text; the header hides its titles but the Columns button stays.
+- **Composed row** turns the columns off and shows each line as one text row again, as for plain text; the header hides its titles but the Columns button stays. A stream always shows columns, so its menu has no **Composed row** and a composed layout saved for a stream is ignored.
 - **Absolute** time shows `HH:mm:ss.fff` in the display zone, with `MM-dd` in front when the date is not today. **Relative** shows the gap since the previous visible row, such as `+1.204 s`. In either mode the cell's tooltip gives the full time and that gap.
 - The **Level** column shows TRC, DBG, INF, WRN or ERR in a colour per level. Error rows are tinted, in column and composed mode alike.
 - Highlight, search and filter-chip colours apply per cell. **Hide** and **Show only** rules still match the whole line, not a single cell.
-- The command palette has **Toggle composed rows** and **Reset columns** while a structured source is selected.
+- The command palette has **Toggle composed rows** and **Reset columns** while a structured source is selected (a stream has only **Reset columns**).
 
 The layout belongs to the source and is kept in the saved session. A column you remove or add only affects that source.
 

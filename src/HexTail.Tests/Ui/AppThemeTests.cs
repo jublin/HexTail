@@ -128,6 +128,27 @@ public sealed class AppThemeTests
     }
 
     [AvaloniaFact]
+    public void EveryThemeDefinesAnAccentSoftBrush_InItsOwnAccentColour()
+    {
+        var app = Assert.IsType<App>(Avalonia.Application.Current);
+        try
+        {
+            foreach (var theme in ThemeCatalog.Names)
+            {
+                ThemeManager.Apply(theme);
+                var accent = Assert.IsType<SolidColorBrush>(app.Resources["AccentBrush"]).Color;
+                var soft = Assert.IsType<SolidColorBrush>(app.Resources["AccentSoftBrush"]).Color;
+                Assert.Equal((accent.R, accent.G, accent.B), (soft.R, soft.G, soft.B));
+                Assert.InRange(soft.A, 0x30, 0x50);
+            }
+        }
+        finally
+        {
+            ThemeManager.Apply("cyber-tail");
+        }
+    }
+
+    [AvaloniaFact]
     public void NativeAccentAndVisiblePlaceholderFollowThemeChanges()
     {
         var app = Assert.IsType<App>(Avalonia.Application.Current);

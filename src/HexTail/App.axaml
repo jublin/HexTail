@@ -16,6 +16,7 @@
     <SolidColorBrush x:Key="MutedBrush" Color="#91A0B5" />
     <SolidColorBrush x:Key="FaintTextBrush" Color="#65758D" />
     <SolidColorBrush x:Key="AccentBrush" Color="#28D7FE" />
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="#4028D7FE" />
     <SolidColorBrush x:Key="AccentMutedBrush" Color="#157B94" />
     <SolidColorBrush x:Key="AccentStrongBrush" Color="#7AEAFF" />
     <SolidColorBrush x:Key="SelectedTabBrush" Color="#28D7FE" />

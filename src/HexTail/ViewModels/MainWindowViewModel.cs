@@ -59,6 +59,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private bool _narrowShell;
     private bool _narrowPaneOpen;
     private double _sidebarWidth = 240;
+    private StreamEditorViewModel? _streamEditor;
 
     public MainWindowViewModel(
         AppState state,
@@ -117,12 +118,20 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         SelectFileCommand = ReactiveCommand.Create<FileTabViewModel>(SelectFile, _scheduler);
         ApplyElasticTimeRangeCommand = ReactiveCommand.Create(ApplyElasticTimeRange, _scheduler);
         ApplyRangePresetCommand = ReactiveCommand.Create<string>(ApplyRangePreset, _scheduler);
+        ClearStreamRangeCommand = ReactiveCommand.Create(ClearStreamRange, _scheduler);
         CloseFileCommand = ReactiveCommand.CreateFromTask<FileTabViewModel>(
             CloseFileAsync,
             _scheduler
         );
         RemoveSearchCommand = ReactiveCommand.CreateFromTask<LogViewViewModel>(
             RemoveSearchAsync,
+            _scheduler
+        );
+        NewStreamCommand = ReactiveCommand.Create(() => OpenStreamEditor(null), _scheduler);
+        EditStreamCommand = ReactiveCommand.Create<string>(OpenStreamEditor, _scheduler);
+        OpenStreamCommand = ReactiveCommand.CreateFromTask<string>(OpenStreamAsync, _scheduler);
+        CloseStreamCommand = ReactiveCommand.CreateFromTask<FileTabViewModel>(
+            CloseStreamAsync,
             _scheduler
         );
 
@@ -137,6 +146,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 .Subscribe(_ => QueueSyncFromState())
         );
         FileTabs.CollectionChanged += (_, _) => this.RaisePropertyChanged(nameof(HasFileTabs));
+        StreamRows.CollectionChanged += (_, _) => this.RaisePropertyChanged(nameof(HasStreams));
         SavedFilters.CollectionChanged += (_, _) =>
             this.RaisePropertyChanged(nameof(HasSavedFilters));
 
@@ -149,7 +159,11 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                     OpenSampleCommand.ThrownExceptions,
                     SaveCommand.ThrownExceptions,
                     CloseFileCommand.ThrownExceptions,
-                    RemoveSearchCommand.ThrownExceptions
+                    RemoveSearchCommand.ThrownExceptions,
+                    NewStreamCommand.ThrownExceptions,
+                    EditStreamCommand.ThrownExceptions,
+                    OpenStreamCommand.ThrownExceptions,
+                    CloseStreamCommand.ThrownExceptions
                 )
                 .Subscribe(ex => SetFileError(ex.Message))
         );
@@ -164,6 +178,23 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ObservableCollection<FileTabViewModel> Files { get; } = [];
     public ObservableCollection<FileTabViewModel> FileTabs { get; } = [];
     public bool HasFileTabs => FileTabs.Count > 0;
+
+    /// <summary>The STREAMS section: one row per saved stream, open or closed.</summary>
+    public ObservableCollection<StreamRowViewModel> StreamRows { get; } = [];
+    public bool HasStreams => StreamRows.Count > 0;
+
+    /// <summary>The open stream editor (new or edit), or null.</summary>
+    public StreamEditorViewModel? StreamEditor
+    {
+        get => _streamEditor;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _streamEditor, value);
+            this.RaisePropertyChanged(nameof(IsStreamEditorOpen));
+        }
+    }
+
+    public bool IsStreamEditorOpen => _streamEditor is not null;
     public ObservableCollection<SavedFilterViewModel> SavedFilters { get; } = [];
     public bool HasSavedFilters => SavedFilters.Count > 0;
     public ObservableCollection<ElasticSourceOptionViewModel> ElasticSources { get; } = [];
@@ -194,8 +225,21 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<FileTabViewModel, Unit> SelectFileCommand { get; }
     public ReactiveCommand<Unit, Unit> ApplyElasticTimeRangeCommand { get; }
     public ReactiveCommand<string, Unit> ApplyRangePresetCommand { get; }
+
+    /// <summary>Stream tabs only: Show all rows, which removes the time filter from the stream's file rows.</summary>
+    public ReactiveCommand<Unit, Unit> ClearStreamRangeCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> CloseFileCommand { get; }
     public ReactiveCommand<LogViewViewModel, Unit> RemoveSearchCommand { get; }
+    public ReactiveCommand<Unit, Unit> NewStreamCommand { get; }
+
+    /// <summary>Opens the editor on a saved stream; the parameter is the stream's id.</summary>
+    public ReactiveCommand<string, Unit> EditStreamCommand { get; }
+
+    /// <summary>Opens a saved stream's tab (or selects it when it is open); the parameter is the stream's id.</summary>
+    public ReactiveCommand<string, Unit> OpenStreamCommand { get; }
+
+    /// <summary>Closes a stream's tab. The saved definition and the member sources stay.</summary>
+    public ReactiveCommand<FileTabViewModel, Unit> CloseStreamCommand { get; }
 
     public FileTabViewModel? SelectedFile
     {
@@ -208,6 +252,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             var previous = _selectedFile;
             this.RaiseAndSetIfChanged(ref _selectedFile, value);
             this.RaisePropertyChanged(nameof(IsElasticSelected));
+            this.RaisePropertyChanged(nameof(IsStreamSelected));
+            this.RaisePropertyChanged(nameof(IsTimeRangeSelected));
             previous?.RaiseSelectionChanged();
             if (value is not null)
                 LoadRangeInputs(value.Model);
@@ -238,14 +284,26 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
     internal static string DescribeSources(IReadOnlyCollection<FileTabState> files)
     {
-        if (files.Count == 0)
-            return "No sources open";
-        var text = files.Count == 1 ? "1 source open" : $"{files.Count} sources open";
+        var streams = files.Count(file => file.Source.Kind == LogSourceKind.Stream);
+        var sources = files.Count - streams;
+        // A stream merges sources, it is not one, so it never counts toward the sources.
+        var text = sources switch
+        {
+            0 => "No sources open",
+            1 => "1 source open",
+            _ => $"{sources} sources open",
+        };
+        if (streams > 0)
+            text += streams == 1 ? " · 1 stream open" : $" · {streams} streams open";
         var failing = files.Count(file => file.Error is not null);
         return failing == 0 ? text : $"{text} · {failing} with errors";
     }
 
     public bool IsElasticSelected => SelectedFile?.Model.Source.Kind == LogSourceKind.Elastic;
+    public bool IsStreamSelected => SelectedFile?.Model.Stream is not null;
+
+    /// <summary>The top-bar time pill shows for Elastic tabs and for streams.</summary>
+    public bool IsTimeRangeSelected => IsElasticSelected || IsStreamSelected;
     public string RangeFromText
     {
         get => _rangeFromText;
@@ -316,9 +374,17 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         ElasticRangeDirty ? "Unapplied — press Enter or Apply" : string.Empty;
 
     public string ElasticRangePill =>
-        SelectedFile?.Model is not { } tab || !IsElasticSelected
-            ? string.Empty
-            : $"{TimeRangeLabel.Describe(tab.ElasticFrom, tab.ElasticTo, DisplayZone)} · {RangeState(tab)}";
+        SelectedFile?.Model is not { } tab ? string.Empty
+        : tab.Stream is { } stream
+            ? stream.Live ? "All rows (no file filter)"
+                : $"{TimeRangeLabel.Describe(stream.RangeFrom, stream.RangeTo, DisplayZone)} · {(stream.OpenElasticMemberCount > 0 ? "all sources" : "files only")}"
+        : !IsElasticSelected ? string.Empty
+        : $"{TimeRangeLabel.Describe(tab.ElasticFrom, tab.ElasticTo, DisplayZone)} · {RangeState(tab)}";
+
+    /// <summary>The pill's accessible name: an Elastic tab's range, or a stream's.</summary>
+    public string TimeRangeButtonName =>
+        IsStreamSelected ? "Stream time range" : "Elastic log time range";
+
     public string ElasticAppliedRange
     {
         get
@@ -326,6 +392,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             var tab = SelectedFile?.Model;
             if (tab is null)
                 return string.Empty;
+            if (tab.Stream is { } stream)
+                return StreamRangeTip(stream);
             string Display(DateTimeOffset? time, string expression) =>
                 time is null
                     ? expression
@@ -337,6 +405,18 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             return $"Applied: {Display(tab.ElasticResolvedFrom, tab.ElasticFrom)} → {Display(tab.ElasticResolvedTo, tab.ElasticTo)}";
         }
     }
+
+    private string StreamRangeTip(StreamState stream)
+    {
+        var elastic = stream.OpenElasticMemberCount;
+        if (elastic == 0)
+            return "Filters rows from files; no Elastic sources in this stream";
+        var sources = elastic == 1 ? "1 Elastic source" : $"{elastic} Elastic sources";
+        return stream.Live
+            ? $"All rows: file rows are not filtered. Applying a range sets it on {sources} and filters rows from files."
+            : $"Applied to {sources}; also filters rows from files by timestamp ({TimeRangeLabel.Describe(stream.RangeFrom, stream.RangeTo, DisplayZone)}).";
+    }
+
     public string ElasticRangeStatus =>
         SelectedFile?.Model is not { } tab ? string.Empty
         : tab.Error is not null ? $"Failed: {tab.Error}"
@@ -363,12 +443,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
     private void LoadRangeInputs(FileTabState tab)
     {
+        var from = tab.Stream?.RangeFrom ?? tab.ElasticFrom;
+        var to = tab.Stream?.RangeTo ?? tab.ElasticTo;
         _syncingRange = true;
-        RangeFromText = TimeExpression.FormatForInput(tab.ElasticFrom, DisplayZone);
-        ElasticToNow = string.Equals(tab.ElasticTo, "now", StringComparison.OrdinalIgnoreCase);
-        RangeToText = ElasticToNow
-            ? "now"
-            : TimeExpression.FormatForInput(tab.ElasticTo, DisplayZone);
+        RangeFromText = TimeExpression.FormatForInput(from, DisplayZone);
+        ElasticToNow = string.Equals(to, "now", StringComparison.OrdinalIgnoreCase);
+        RangeToText = ElasticToNow ? "now" : TimeExpression.FormatForInput(to, DisplayZone);
         _syncingRange = false;
         ElasticRangeDirty = false;
         RangeError = null;
@@ -733,6 +813,22 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     {
         yield return new("Open files…", "File", "Ctrl+O", async () => await OpenCommand.Execute());
         yield return new(
+            "New stream",
+            "Streams",
+            null,
+            async () => await NewStreamCommand.Execute()
+        );
+        foreach (var stream in _state.Streams)
+        {
+            var id = stream.Id;
+            yield return new(
+                $"Open stream {stream.Name}",
+                "Streams",
+                null,
+                async () => await OpenStreamCommand.Execute(id)
+            );
+        }
+        yield return new(
             "Set up Elastic",
             "Elastic",
             null,
@@ -787,12 +883,14 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             );
             if (file.Model.IsStructured)
             {
-                yield return new(
-                    "Toggle composed rows",
-                    "View",
-                    null,
-                    () => file.SelectedView.ColumnHeader.ToggleComposedAsync()
-                );
+                // A stream always renders columns, so it has no composed rows to toggle.
+                if (file.Model.Stream is null)
+                    yield return new(
+                        "Toggle composed rows",
+                        "View",
+                        null,
+                        () => file.SelectedView.ColumnHeader.ToggleComposedAsync()
+                    );
                 yield return new(
                     "Reset columns",
                     "View",
@@ -839,7 +937,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                     }
                 );
         }
-        if (IsElasticSelected)
+        if (IsTimeRangeSelected)
             foreach (
                 var (label, expression) in new[]
                 {
@@ -850,7 +948,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             )
                 yield return new(
                     $"Time range: {label}",
-                    "Elastic",
+                    IsStreamSelected ? "Stream" : "Elastic",
                     null,
                     async () => await ApplyRangePresetCommand.Execute(expression)
                 );
@@ -872,6 +970,87 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 null,
                 async () => await option.ActivateCommand.Execute()
             );
+    }
+
+    /// <summary>
+    /// Opens the stream editor for a new stream (null) or a saved one. When an editor for the same stream (or
+    /// another new-stream editor) is already open it is kept, with its unsaved changes, and only asked to take
+    /// focus; an editor for a different stream is replaced without a confirmation.
+    /// </summary>
+    private void OpenStreamEditor(string? streamId)
+    {
+        if (StreamEditor is { } open && open.StreamId == streamId)
+        {
+            open.RequestFocus();
+            return;
+        }
+        StreamSettings? existing = null;
+        if (streamId is not null)
+        {
+            existing = _state.Streams.FirstOrDefault(item => item.Id == streamId);
+            if (existing is null)
+            {
+                SetFileError("The stream no longer exists.");
+                return;
+            }
+        }
+        try
+        {
+            StreamEditor = new StreamEditorViewModel(this, existing);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            SetFileError(ex.Message);
+        }
+    }
+
+    internal void CloseStreamEditor(StreamEditorViewModel editor)
+    {
+        if (ReferenceEquals(StreamEditor, editor))
+            StreamEditor = null;
+    }
+
+    internal async Task OpenStreamAsync(string streamId)
+    {
+        try
+        {
+            if (await _state.OpenStreamAsync(streamId) is not null)
+            {
+                SelectedViewIndex = 0;
+                DismissNarrowSidebar();
+                SetFileError(null);
+            }
+            else
+                SetFileError("The stream no longer exists.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            SetFileError(ex.Message);
+        }
+    }
+
+    private async Task CloseStreamAsync(FileTabViewModel tab)
+    {
+        if (tab.Model.Source.Kind != LogSourceKind.Stream)
+            return;
+        await CloseFileAsync(tab);
+    }
+
+    /// <summary>The key of a stream member as text: the file's path, or the Elastic source id.</summary>
+    internal static string DescribeMemberKey(string key) =>
+        key.StartsWith("file:", StringComparison.Ordinal) ? key[5..]
+        : key.StartsWith("elastic:", StringComparison.Ordinal) ? key[8..]
+        : key;
+
+    /// <summary>A short name for a saved member that is not open: the file name, or the Elastic source's name.</summary>
+    internal string DescribeMissingMember(string key)
+    {
+        var text = DescribeMemberKey(key);
+        if (key.StartsWith("elastic:", StringComparison.Ordinal))
+            return ElasticSources.FirstOrDefault(option => option.SourceId == text)?.DisplayName
+                ?? text;
+        var name = System.IO.Path.GetFileName(text);
+        return string.IsNullOrEmpty(name) ? text : name;
     }
 
     internal void SelectFile(FileTabViewModel file)
@@ -945,6 +1124,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         SelectedFile = _state.SelectedFile is null
             ? null
             : Files.FirstOrDefault(item => ReferenceEquals(item.Model, _state.SelectedFile));
+        SyncStreamRows();
+        _streamEditor?.RefreshChoices();
         Settings.Sync(_state.Settings);
         FilterBar.Sync();
         Inspector.Sync();
@@ -1013,6 +1194,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         if (SelectedFile is not null && !ElasticRangeDirty)
             LoadRangeInputs(SelectedFile.Model);
         this.RaisePropertyChanged(nameof(ElasticRangePill));
+        this.RaisePropertyChanged(nameof(TimeRangeButtonName));
         this.RaisePropertyChanged(nameof(RangeFromPreview));
         this.RaisePropertyChanged(nameof(RangeToPreview));
         this.RaisePropertyChanged(nameof(RangeZoneHint));
@@ -1035,6 +1217,33 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             this.RaisePropertyChanged(nameof(HasElasticWarning));
         if (previous.ElasticSourceIcon != current.ElasticSourceIcon)
             this.RaisePropertyChanged(nameof(ElasticSourceIcon));
+    }
+
+    private void SyncStreamRows()
+    {
+        var definitions = _state.Streams;
+        for (var index = StreamRows.Count - 1; index >= 0; index--)
+            if (!definitions.Any(definition => definition.Id == StreamRows[index].Id))
+                StreamRows.RemoveAt(index);
+        for (var index = 0; index < definitions.Count; index++)
+        {
+            var definition = definitions[index];
+            var row = StreamRows.FirstOrDefault(item => item.Id == definition.Id);
+            var tab = Files.FirstOrDefault(file =>
+                file.Model.Stream?.Definition.Id == definition.Id
+            );
+            var selected = tab is not null && ReferenceEquals(tab, SelectedFile);
+            if (row is null)
+            {
+                row = new StreamRowViewModel(definition.Id);
+                row.Sync(definition, tab, selected);
+                StreamRows.Insert(index, row);
+                continue;
+            }
+            row.Sync(definition, tab, selected);
+            if (StreamRows.IndexOf(row) is var current && current != index)
+                StreamRows.Move(current, index);
+        }
     }
 
     private void SyncSavedFilters()
@@ -1094,7 +1303,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
     private void ApplyElasticTimeRange()
     {
-        if (!IsElasticSelected || SelectedFile is null)
+        if (!IsTimeRangeSelected || SelectedFile is null)
             return;
         var now = DateTimeOffset.UtcNow;
         if (
@@ -1130,11 +1339,38 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         }
         try
         {
-            _state.SetElasticTimeRange(SelectedFile.Model, from.Expression, to);
-            SelectedFile.Model.ElasticInputZone = DisplayZone;
+            if (SelectedFile.Model.Stream is not null)
+                _state.SetStreamTimeRange(
+                    SelectedFile.Model,
+                    from.Expression,
+                    to,
+                    live: false,
+                    DisplayZone
+                );
+            else
+            {
+                _state.SetElasticTimeRange(SelectedFile.Model, from.Expression, to);
+                SelectedFile.Model.ElasticInputZone = DisplayZone;
+            }
             ElasticRangeDirty = false;
             RangeError = null;
             SetFileError(null);
+        }
+        catch (ArgumentException exception)
+        {
+            RangeError = exception.Message;
+        }
+    }
+
+    private void ClearStreamRange()
+    {
+        if (SelectedFile?.Model is not { Stream: { } stream } tab)
+            return;
+        try
+        {
+            _state.SetStreamTimeRange(tab, stream.RangeFrom, stream.RangeTo, live: true);
+            LoadRangeInputs(tab);
+            RangeError = null;
         }
         catch (ArgumentException exception)
         {

@@ -25,6 +25,10 @@ connections.
   rules, solid for one source) that you click to edit, middle-click to disable
   or remove; literal or regex, optional case sensitivity, an automatic color.
 - A T/D/I/W/E log level control per source.
+- Merged streams: combine two or more open sources (files and Elastic) into a
+  named stream whose rows are interleaved by timestamp, with a Source column,
+  a colour stripe per source, per-source toggles, and one time range for the
+  whole stream.
 - Named saved filters, applied from the sidebar or the command palette.
 - Search tabs (Pin as tab) with a separate highlight color for each search.
 - Independent follow-tail toggles for the All view and each search view.
@@ -44,8 +48,8 @@ connections.
   sources** switch.
 - Display density, log font size, and theme settings, plus **Limits** for the
   line cap per source, context lines and the initial Elastic fetch.
-- Session persistence for open files, searches, settings, window geometry, and
-  the inspector's open state and width.
+- Session persistence for open files, streams, searches, settings, window
+  geometry, and the inspector's open state and width.
 
 ## Quick start
 
@@ -103,7 +107,8 @@ dotnet run --project src/HexTail.LogGenerator -- --format jsonl --output /tmp/he
    and Elastic sources, **Connect to Elastic**, and **Try a sample log**, a
    generated log that is kept out of the saved session and the recents list.
 2. Pick a source in the sidebar, which lists open files and Elastic sources.
-   Each source has an **All** view with the complete buffered tail. Toggle the
+   Each source has an **All** view with the complete buffered tail. The
+   **STREAMS** section above **Files** lists merged streams (see below). Toggle the
    sidebar with the toolbar button or `Ctrl+B`; below 1000 px wide it becomes an
    overlay that closes after a selection.
 3. Type in the filter bar under the view tabs: Enter highlights matches,
@@ -124,7 +129,16 @@ dotnet run --project src/HexTail.LogGenerator -- --format jsonl --output /tmp/he
    (**Local** or **Utc**). For an Elastic source, the clock pill in the top
    toolbar (for example **Last 5 min · live**) opens the time range: quick
    presets, or typed **From** and **To** times.
-6. Press `Ctrl+K` for the command palette. **Set up Elastic** (the sidebar's
+6. To merge sources, press **+** next to **STREAMS** in the sidebar, name the
+   stream, tick at least two open sources and **Save**. The stream opens as a tab
+   of its own whose rows from all its sources are interleaved by timestamp, each
+   with a Source column and a coloured stripe. A chip per source in its filter
+   bar hides or shows that source, and the time pill applies one range to the
+   whole stream. The pencil next to a stream edits or deletes it; closing a
+   stream keeps its definition. See the
+   [user guide](docs/user-guide.md#streams) for ordering, late rows and the
+   time range.
+7. Press `Ctrl+K` for the command palette. **Set up Elastic** (the sidebar's
    Elastic **+**, **Connect to Elastic**, or the palette) walks through the
    connection, data view, filter, columns and name; **Settings** holds display
    preferences and limits, and filter rules live in each source's filter bar.
@@ -148,7 +162,7 @@ dotnet run --project src/HexTail.LogGenerator -- --format jsonl --output /tmp/he
 | `Alt+Up` / `Alt+Down` | Move the focused file up or down in the sidebar |
 | `Alt+Left` / `Alt+Right` | Move the focused view tab left or right |
 | `Ctrl+S` / `Cmd+S` | Save the session now (it also saves automatically) |
-| `Esc` | Close Settings, the command palette or the Elastic setup page (with a delete question showing, it takes the question back first) |
+| `Esc` | Close Settings, the command palette, the Elastic setup page or the stream editor (with a delete question showing, it takes the question back first) |
 
 The single-key shortcuts (`/`, `F`, `Space`, `g`, `Shift+G`, `j`, `k`, `n`, `N`) do not fire while a
 text box has focus. While the palette or Settings is open, the other shortcuts
@@ -194,8 +208,8 @@ hand-edited session file are clamped to that range on load.
 
 HexTail saves session state as `HexTailSharp/session.json` under the operating
 system application-data directory. The file is written atomically and stores
-open paths, searches, settings, window geometry, and the inspector's open
-state and width. Remove
+open paths, stream definitions and open streams, searches, settings, window
+geometry, and the inspector's open state and width. Remove
 that file when a clean first-launch session is needed.
 
 The first launch of this version migrates `session.json` to the rule-based

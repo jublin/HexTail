@@ -113,7 +113,10 @@ internal sealed class ElasticTailer : ILogTailer
             );
             await _events
                 .WriteAsync(
-                    new SourceLines(SourceId, accepted.Select(hit => hit.Line).ToArray())
+                    new SourceLines(
+                        SourceId,
+                        accepted.Select(hit => hit.Line with { SourceId = SourceId }).ToArray()
+                    )
                     {
                         Generation = generation,
                         InstanceId = InstanceId,
