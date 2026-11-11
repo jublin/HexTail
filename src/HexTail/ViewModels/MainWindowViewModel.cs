@@ -9,7 +9,9 @@ using Avalonia.Threading;
 using HexTail;
 using HexTail.Application;
 using HexTail.Domain;
+using HexTail.Elastic;
 using HexTail.Persistence;
+using HexTail.Tailing;
 using ReactiveUI;
 using ReactiveUI.Reactive;
 
@@ -1376,6 +1378,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 SelectedFile.Model.ElasticInputZone = DisplayZone;
             }
             SelectedFile.Model.HistogramPrior = null;
+            ClearMemberPriors(SelectedFile.Model);
             ElasticRangeDirty = false;
             RangeError = null;
             SetFileError(null);
@@ -1385,6 +1388,29 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             RangeError = exception.Message;
         }
     }
+
+    // A stream-wide range replaces whatever the members' own tabs had dragged: their baselines are stale.
+    private static void ClearMemberPriors(FileTabState tab)
+    {
+        if (tab.Stream is not { } stream)
+            return;
+        foreach (var member in stream.MemberTabs)
+            member.HistogramPrior = null;
+    }
+
+    private static IReadOnlyList<MemberRange> CaptureMembers(StreamState stream) =>
+        [
+            .. stream
+                .MemberTabs.Where(member =>
+                    member.Source.Kind == LogSourceKind.Elastic && member.Tailer is ElasticTailer
+                )
+                .Select(member => new MemberRange(
+                    member,
+                    member.ElasticFrom,
+                    member.ElasticTo,
+                    member.ElasticInputZone
+                )),
+        ];
 
     private static string Iso(DateTimeOffset time) =>
         time.ToString("O", CultureInfo.InvariantCulture);
@@ -1404,7 +1430,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         var before = tab.HistogramPrior;
         tab.HistogramPrior ??=
             tab.Stream is { } stream
-                ? new HistogramPrior(stream.RangeFrom, stream.RangeTo, stream.Live)
+                ? new HistogramPrior(
+                    stream.RangeFrom,
+                    stream.RangeTo,
+                    stream.Live,
+                    Members: CaptureMembers(stream)
+                )
             : tab.Source.Kind == LogSourceKind.Elastic
                 ? new HistogramPrior(tab.ElasticFrom, tab.ElasticTo, false, tab.ElasticInputZone)
             : tab.TimeWindow is { } window
@@ -1413,7 +1444,10 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         try
         {
             if (tab.Stream is not null)
+            {
                 _state.SetStreamTimeRange(tab, Iso(from), Iso(to), live: false, DisplayZone);
+                ClearMemberPriors(tab);
+            }
             else if (tab.Source.Kind == LogSourceKind.Elastic)
             {
                 _state.SetElasticTimeRange(tab, Iso(from), Iso(to));
@@ -1448,7 +1482,11 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 if (prior is null)
                     _state.SetStreamTimeRange(tab, stream.RangeFrom, stream.RangeTo, live: true);
                 else
+                {
                     _state.SetStreamTimeRange(tab, prior.From, prior.To, prior.Live);
+                    RestoreMembers(stream, prior);
+                }
+                ClearMemberPriors(tab);
             }
             else if (tab.Source.Kind == LogSourceKind.Elastic)
             {
@@ -1474,6 +1512,23 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         }
     }
 
+    // The drag re-queried every Elastic member; put each one that is still open back on the range (and
+    // zone) it had. A non-live reset already re-queried them with the stream's range, so only members
+    // that differ from it are queried again.
+    private void RestoreMembers(StreamState stream, HistogramPrior prior)
+    {
+        if (prior.Members is not { } members)
+            return;
+        foreach (var saved in members)
+        {
+            if (!stream.MemberTabs.Contains(saved.Tab))
+                continue;
+            if (saved.Tab.ElasticFrom != saved.From || saved.Tab.ElasticTo != saved.To)
+                _state.SetElasticTimeRange(saved.Tab, saved.From, saved.To);
+            saved.Tab.ElasticInputZone = saved.Zone;
+        }
+    }
+
     private void ClearStreamRange()
     {
         if (SelectedFile?.Model is not { Stream: { } stream } tab)
@@ -1482,6 +1537,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         {
             _state.SetStreamTimeRange(tab, stream.RangeFrom, stream.RangeTo, live: true);
             tab.HistogramPrior = null;
+            ClearMemberPriors(tab);
             LoadRangeInputs(tab);
             RangeError = null;
         }
