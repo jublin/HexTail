@@ -133,7 +133,10 @@ public sealed class TimelineHistogramTests
         Assert.True(f.Histogram.Bounds.Width > 100);
         Assert.Equal(5, histogram.Buckets.Sum(bucket => bucket.Total));
         var list = f.Find<ListBox>("LogList");
-        Assert.True(f.Histogram.TranslatePoint(default, f.LogView)!.Value.Y < list.Bounds.Y);
+        Assert.True(
+            f.Histogram.TranslatePoint(default, f.LogView)!.Value.Y
+                < list.TranslatePoint(default, f.LogView)!.Value.Y
+        );
         Assert.Equal(
             "Timeline histogram",
             Avalonia.Automation.AutomationProperties.GetName(f.Histogram)

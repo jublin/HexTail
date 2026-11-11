@@ -73,35 +73,42 @@
       Grid.Row="1"
       DataContext="{Binding ColumnHeader}"
     />
-    <ListBox
-      x:Name="LogList"
-      Grid.Row="2"
-      Background="{DynamicResource SurfaceBrush}"
-      BorderThickness="0"
-      ItemsSource="{Binding Lines}"
-    >
-      <ListBox.ItemsPanel>
-        <ItemsPanelTemplate>
-          <VirtualizingStackPanel />
-        </ItemsPanelTemplate>
-      </ListBox.ItemsPanel>
-      <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="vm:LogLineViewModel">
-          <views:LogLineView />
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
-    <Button
-      x:Name="JumpToLatestButton"
-      Grid.Row="2"
-      Classes="primary"
-      HorizontalAlignment="Center"
-      VerticalAlignment="Bottom"
-      Margin="0,0,0,12"
-      IsVisible="{Binding HasUnseen}"
-      Content="{Binding UnseenLabel}"
-      Command="{Binding JumpToLatestCommand}"
-      AutomationProperties.Name="Jump to latest log lines"
-    />
+    <Grid x:Name="LogBody" Grid.Row="2" ColumnDefinitions="*,10">
+      <ListBox
+        x:Name="LogList"
+        Background="{DynamicResource SurfaceBrush}"
+        BorderThickness="0"
+        ItemsSource="{Binding Lines}"
+      >
+        <ListBox.ItemsPanel>
+          <ItemsPanelTemplate>
+            <VirtualizingStackPanel />
+          </ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:LogLineViewModel">
+            <views:LogLineView />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <Button
+        x:Name="JumpToLatestButton"
+        Classes="primary"
+        HorizontalAlignment="Center"
+        VerticalAlignment="Bottom"
+        Margin="0,0,0,12"
+        IsVisible="{Binding HasUnseen}"
+        Content="{Binding UnseenLabel}"
+        Command="{Binding JumpToLatestCommand}"
+        AutomationProperties.Name="Jump to latest log lines"
+      />
+      <views:OverviewRuler
+        x:Name="Ruler"
+        Grid.Column="1"
+        View="{Binding}"
+        IsVisible="{Binding Overview.HasRows}"
+        AutomationProperties.Name="Overview ruler"
+      />
+    </Grid>
   </Grid>
 </UserControl>
