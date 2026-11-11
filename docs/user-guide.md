@@ -162,17 +162,18 @@ The layout belongs to the source and is kept in the saved session. A column you 
 
 ## Timeline and overview ruler
 
-**Timeline.** A histogram sits above each log view, between the filter bar and the column header. It shows how many of the rows the view displays fall into each stretch of time. It is drawn from the rows after every filter, level and search is applied, so hiding or filtering rows changes the bars. Each bar is one time bucket (at least 4 px wide, on a round interval such as 5 s, 1 m or 1 h, aligned in the display time zone), stacked by level from the bottom: Error, Warn, Info, Debug (Trace counts as Debug) and rows with no level. The first and last time of the range are written in the strip above the bars. The histogram is hidden when no displayed row has a timestamp, and rows without one are not counted.
+**Timeline.** A histogram sits above each log view, between the filter bar and the column header. It shows how many of the rows the view displays fall into each stretch of time. It is drawn from the rows after every filter, level and search is applied, so hiding or filtering rows changes the bars. Each bar is one time bucket (at least 4 px wide, on a round interval such as 5 s, 1 m or 1 h, aligned in the display time zone), stacked by level from the bottom: Error, Warn, Info, Debug (Trace counts as Debug) and rows with no level. The first and last time of the range are written in the strip above the bars. The histogram is hidden when no displayed row has a timestamp, and rows without one are not counted. While a dragged range is in place (or an Elastic source is loading) the panel stays, so you can always reset the range.
 
 - **Hover** a bar for a tooltip with the bucket's time span, its row count and the count for each level.
 - **Click** a bar to select the first displayed row in that bucket and scroll it into view.
 - **Drag** across the bars (4 px or more) to restrict the view to a time range, from the start of the first bucket you cover to the end of the last. What this does depends on the source:
   - A **file** tab hides rows outside the range. A **Time** chip with the range appears in the filter bar; use its **Clear time window** button to drop it. Rows with no timestamp always stay visible. The time window lasts for the session and is not saved.
   - An **Elastic** source runs its query again for that range, as if you had typed it into the time pill.
-  - A **stream** takes it as the stream's time range, as with the time pill.
-- **Double-click** the bars to go back to the range the tab had before your first drag. With nothing to go back to, a file tab clears its time window and a stream shows all rows again; an Elastic tab is left as it is. A range you apply from the time pill (or **Show all rows** on a stream) becomes the new starting point, so a later double-click returns to it.
+  - A **stream** takes it as the stream's time range, as with the time pill. Resetting also puts every Elastic member back on the range it had before your first drag.
+  - A drag over buckets with no rows does nothing.
+- **Double-click** the bars to go back to the range the tab had before your first drag. With nothing to go back to, a file tab clears its time window and a stream shows all rows again; an Elastic tab is left as it is. A range you apply from the time pill (or **Show all rows** on a stream) becomes the new starting point, so a later double-click returns to it. The **Clear time window** button on a file tab's chip also makes the cleared state the new starting point.
 
-Because the bars show only the displayed rows, they show just the chosen range after a drag; double-click to get the full picture back.
+Because the bars show only the displayed rows, they show just the chosen range after a drag; double-click to get the full picture back. If a range leaves no rows at all (for example an Elastic query that returns nothing), the panel reads "No rows in range – double-click to reset"; double-click it to go back.
 
 The **chevron** at the top right of the histogram (**Collapse timeline**) shrinks it to a thin strip with a **Timeline** button (**Expand timeline**). **Toggle timeline** in the command palette does the same. The choice applies to every view and is remembered between sessions.
 

@@ -140,13 +140,27 @@ flowchart LR
   `EffectiveRules`; colours looked up through the rules are cached per `Line`
   and discarded when the `RuleSet` instance changes. It also holds bucket
   descriptions and jumps (`JumpToBucket`, `JumpToFraction` select a row through
-  `LogViewViewModel.SelectRowAt`). The histogram's collapsed state is
+  `LogViewViewModel.SelectRowOf`; a bucket click selects the row the histogram was
+  built for, by reference, so a build up to 250 ms old cannot jump to the wrong
+  row while tailing). The histogram's collapsed state is
   `MainWindowViewModel.TimelineOpen`, saved as `AppWindowState.HistogramCollapsed`.
+  `LogViewViewModel.Sync` calls `LogOverviewViewModel.Refresh`, which bumps
+  `Version` only when something a build reads changed (the displayed rows, the
+  effective `RuleSet` instance, the searches' result counts and colours, the time
+  zone, `HistogramPrior`, `TimeWindow`, `ElasticLoading`), so a sync that changes
+  nothing does not make the controls rebuild. `HasTimeline` (the panel's
+  visibility) is true when a displayed row has a timestamp, while the tab has a
+  `HistogramPrior`, or while an Elastic tab loads, so a range with no rows still
+  leaves the panel up to double-click and reset.
 - Both controls watch `Version` and rebuild through `CoalescedRebuild`: a request
   starts a 250 ms timer, and when it fires the rebuild runs only if the control
-  is visible and laid out. A request that arrives while it is hidden stays dirty
-  and runs when the control becomes visible, so a collapsed timeline or a view
-  in a background tab costs no work while rows stream in.
+  is visible and laid out (and, for the histogram, not mid-drag). A request that
+  arrives while it cannot run stays dirty; Avalonia 12 has no public change
+  notification for `IsEffectivelyVisible`, so each control calls
+  `CoalescedRebuild.Poke` after every layout pass (and at the end of a drag), and
+  the pending rebuild is scheduled once the control can draw. A collapsed
+  timeline or a view in a background tab costs no work while rows stream in, and
+  a detached control starts no timer.
 - A range chosen on the histogram goes through
   `MainWindowViewModel.ApplyHistogramRange`, which routes it by source kind and
   sends the bounds as round-trip ISO strings. A stream gets
@@ -158,11 +172,15 @@ flowchart LR
   a timestamp pass); the filter bar shows it as a chip with
   `ClearTimeWindowCommand`. Before the first drag, the range in place is stored
   once as `FileTabState.HistogramPrior` (from, to, live, and for Elastic the input
-  zone). `ResetHistogramRange` restores it (a file tab with no prior clears its
+  zone; for a stream, also each open Elastic member's own range and zone as
+  `MemberRange`, because a drag re-queries every member and a live stream does
+  not touch them on reset). `ResetHistogramRange` restores it (a file tab with no prior clears its
   window, a stream goes live with all rows, an Elastic tab does nothing) and
   clears it. Applying a range from the time pill, **Show all rows**, or the time
   window chip's clear button also clears `HistogramPrior`, making the new range
-  the baseline.
+  the baseline; a stream-wide range (pill, drag, show all rows, reset) also
+  clears the member tabs' own priors. A drag whose buckets hold no rows is
+  ignored.
 - Search results are buffer-relative. When old lines roll out, result indices
   are rebased with the buffer.
 - Filter rules (`ViewRule`) have an action (highlight, show only, hide) and a
