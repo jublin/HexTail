@@ -118,6 +118,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         SelectFileCommand = ReactiveCommand.Create<FileTabViewModel>(SelectFile, _scheduler);
         ApplyElasticTimeRangeCommand = ReactiveCommand.Create(ApplyElasticTimeRange, _scheduler);
         ApplyRangePresetCommand = ReactiveCommand.Create<string>(ApplyRangePreset, _scheduler);
+        ClearStreamRangeCommand = ReactiveCommand.Create(ClearStreamRange, _scheduler);
         CloseFileCommand = ReactiveCommand.CreateFromTask<FileTabViewModel>(
             CloseFileAsync,
             _scheduler
@@ -224,6 +225,9 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<FileTabViewModel, Unit> SelectFileCommand { get; }
     public ReactiveCommand<Unit, Unit> ApplyElasticTimeRangeCommand { get; }
     public ReactiveCommand<string, Unit> ApplyRangePresetCommand { get; }
+
+    /// <summary>Stream tabs only: back to Live, which removes the time filter from the stream's file rows.</summary>
+    public ReactiveCommand<Unit, Unit> ClearStreamRangeCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> CloseFileCommand { get; }
     public ReactiveCommand<LogViewViewModel, Unit> RemoveSearchCommand { get; }
     public ReactiveCommand<Unit, Unit> NewStreamCommand { get; }
@@ -248,6 +252,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             var previous = _selectedFile;
             this.RaiseAndSetIfChanged(ref _selectedFile, value);
             this.RaisePropertyChanged(nameof(IsElasticSelected));
+            this.RaisePropertyChanged(nameof(IsStreamSelected));
+            this.RaisePropertyChanged(nameof(IsTimeRangeSelected));
             previous?.RaiseSelectionChanged();
             if (value is not null)
                 LoadRangeInputs(value.Model);
@@ -294,6 +300,10 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     }
 
     public bool IsElasticSelected => SelectedFile?.Model.Source.Kind == LogSourceKind.Elastic;
+    public bool IsStreamSelected => SelectedFile?.Model.Stream is not null;
+
+    /// <summary>The top-bar time pill shows for Elastic tabs and for streams.</summary>
+    public bool IsTimeRangeSelected => IsElasticSelected || IsStreamSelected;
     public string RangeFromText
     {
         get => _rangeFromText;
@@ -364,9 +374,17 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         ElasticRangeDirty ? "Unapplied — press Enter or Apply" : string.Empty;
 
     public string ElasticRangePill =>
-        SelectedFile?.Model is not { } tab || !IsElasticSelected
-            ? string.Empty
-            : $"{TimeRangeLabel.Describe(tab.ElasticFrom, tab.ElasticTo, DisplayZone)} · {RangeState(tab)}";
+        SelectedFile?.Model is not { } tab ? string.Empty
+        : tab.Stream is { } stream
+            ? stream.Live ? "Live · all rows"
+                : $"{TimeRangeLabel.Describe(stream.RangeFrom, stream.RangeTo, DisplayZone)} · {(stream.OpenElasticMemberCount > 0 ? "all sources" : "files only")}"
+        : !IsElasticSelected ? string.Empty
+        : $"{TimeRangeLabel.Describe(tab.ElasticFrom, tab.ElasticTo, DisplayZone)} · {RangeState(tab)}";
+
+    /// <summary>The pill's accessible name: an Elastic tab's range, or a stream's.</summary>
+    public string TimeRangeButtonName =>
+        IsStreamSelected ? "Stream time range" : "Elastic log time range";
+
     public string ElasticAppliedRange
     {
         get
@@ -374,6 +392,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             var tab = SelectedFile?.Model;
             if (tab is null)
                 return string.Empty;
+            if (tab.Stream is { } stream)
+                return StreamRangeTip(stream);
             string Display(DateTimeOffset? time, string expression) =>
                 time is null
                     ? expression
@@ -385,6 +405,18 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             return $"Applied: {Display(tab.ElasticResolvedFrom, tab.ElasticFrom)} → {Display(tab.ElasticResolvedTo, tab.ElasticTo)}";
         }
     }
+
+    private string StreamRangeTip(StreamState stream)
+    {
+        var elastic = stream.OpenElasticMemberCount;
+        if (elastic == 0)
+            return "Filters rows from files; no Elastic sources in this stream";
+        var sources = elastic == 1 ? "1 Elastic source" : $"{elastic} Elastic sources";
+        return stream.Live
+            ? $"Live: file rows are not filtered. Applying a range sets it on {sources} and filters rows from files."
+            : $"Applied to {sources}; also filters rows from files by timestamp ({TimeRangeLabel.Describe(stream.RangeFrom, stream.RangeTo, DisplayZone)}).";
+    }
+
     public string ElasticRangeStatus =>
         SelectedFile?.Model is not { } tab ? string.Empty
         : tab.Error is not null ? $"Failed: {tab.Error}"
@@ -411,12 +443,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
     private void LoadRangeInputs(FileTabState tab)
     {
+        var from = tab.Stream?.RangeFrom ?? tab.ElasticFrom;
+        var to = tab.Stream?.RangeTo ?? tab.ElasticTo;
         _syncingRange = true;
-        RangeFromText = TimeExpression.FormatForInput(tab.ElasticFrom, DisplayZone);
-        ElasticToNow = string.Equals(tab.ElasticTo, "now", StringComparison.OrdinalIgnoreCase);
-        RangeToText = ElasticToNow
-            ? "now"
-            : TimeExpression.FormatForInput(tab.ElasticTo, DisplayZone);
+        RangeFromText = TimeExpression.FormatForInput(from, DisplayZone);
+        ElasticToNow = string.Equals(to, "now", StringComparison.OrdinalIgnoreCase);
+        RangeToText = ElasticToNow ? "now" : TimeExpression.FormatForInput(to, DisplayZone);
         _syncingRange = false;
         ElasticRangeDirty = false;
         RangeError = null;
@@ -903,7 +935,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                     }
                 );
         }
-        if (IsElasticSelected)
+        if (IsTimeRangeSelected)
             foreach (
                 var (label, expression) in new[]
                 {
@@ -914,7 +946,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             )
                 yield return new(
                     $"Time range: {label}",
-                    "Elastic",
+                    IsStreamSelected ? "Stream" : "Elastic",
                     null,
                     async () => await ApplyRangePresetCommand.Execute(expression)
                 );
@@ -1160,6 +1192,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         if (SelectedFile is not null && !ElasticRangeDirty)
             LoadRangeInputs(SelectedFile.Model);
         this.RaisePropertyChanged(nameof(ElasticRangePill));
+        this.RaisePropertyChanged(nameof(TimeRangeButtonName));
         this.RaisePropertyChanged(nameof(RangeFromPreview));
         this.RaisePropertyChanged(nameof(RangeToPreview));
         this.RaisePropertyChanged(nameof(RangeZoneHint));
@@ -1268,7 +1301,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
 
     private void ApplyElasticTimeRange()
     {
-        if (!IsElasticSelected || SelectedFile is null)
+        if (!IsTimeRangeSelected || SelectedFile is null)
             return;
         var now = DateTimeOffset.UtcNow;
         if (
@@ -1304,11 +1337,38 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         }
         try
         {
-            _state.SetElasticTimeRange(SelectedFile.Model, from.Expression, to);
-            SelectedFile.Model.ElasticInputZone = DisplayZone;
+            if (SelectedFile.Model.Stream is not null)
+                _state.SetStreamTimeRange(
+                    SelectedFile.Model,
+                    from.Expression,
+                    to,
+                    live: false,
+                    DisplayZone
+                );
+            else
+            {
+                _state.SetElasticTimeRange(SelectedFile.Model, from.Expression, to);
+                SelectedFile.Model.ElasticInputZone = DisplayZone;
+            }
             ElasticRangeDirty = false;
             RangeError = null;
             SetFileError(null);
+        }
+        catch (ArgumentException exception)
+        {
+            RangeError = exception.Message;
+        }
+    }
+
+    private void ClearStreamRange()
+    {
+        if (SelectedFile?.Model is not { Stream: { } stream } tab)
+            return;
+        try
+        {
+            _state.SetStreamTimeRange(tab, stream.RangeFrom, stream.RangeTo, live: true);
+            LoadRangeInputs(tab);
+            RangeError = null;
         }
         catch (ArgumentException exception)
         {

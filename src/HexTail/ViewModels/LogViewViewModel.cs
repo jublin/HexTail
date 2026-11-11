@@ -541,9 +541,13 @@ internal sealed class LogViewViewModel : ReactiveObject
         // The snapshot is replaced, never mutated, so one read serves the whole pass.
         var hidden = _file.Model.Stream?.HiddenSources;
         var filterSources = hidden is { Count: > 0 };
-        if (!rules.HasVisibilityRules && !filterLevels && !filterSources)
+        // The stream's time range, resolved once for the pass (null for ordinary tabs and Live streams).
+        var inRange = _file.Model.Stream?.CreateRangePredicate();
+        if (!rules.HasVisibilityRules && !filterLevels && !filterSources && inRange is null)
             return lines as IReadOnlyList<Line> ?? lines.ToList();
         var result = lines;
+        if (inRange is not null)
+            result = result.Where(inRange);
         if (filterSources)
             result = result.Where(line =>
                 line.SourceId is null || !hidden!.Contains(line.SourceId)

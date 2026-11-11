@@ -1,4 +1,5 @@
 using HexTail.Domain;
+using HexTail.Elastic;
 using HexTail.Persistence;
 
 namespace HexTail.Application;
@@ -58,9 +59,96 @@ public sealed class StreamState
     /// <summary>Tab ids whose rows are hidden by the per-source toggles. Replaced, never mutated.</summary>
     public IReadOnlySet<string> HiddenSources => _snapshot.HiddenIds;
 
-    public string RangeFrom { get; internal set; } = "now-15m";
-    public string RangeTo { get; internal set; } = "now";
-    public bool Live { get; internal set; } = true;
+    /// <summary>The stream's one time range: its expressions (<c>now-15m</c>, <c>now</c> or ISO timestamps).</summary>
+    public string RangeFrom { get; private set; } = "now-15m";
+
+    public string RangeTo { get; private set; } = "now";
+
+    /// <summary>True (the default) when the range does not filter the rows of file members.</summary>
+    public bool Live { get; private set; } = true;
+
+    // The range resolved to instants for the per-line comparison; null when the range does not filter.
+    // Replaced whole, so a filter pass reads it once. Relative expressions are resolved when the range is
+    // applied or restored and again on every stream rebuild (a member reset), not on every drain.
+    private volatile ResolvedRange? _resolved;
+
+    /// <summary>
+    /// Stores the stream's range and resolves it. <paramref name="live"/> drops the file filter (the
+    /// expressions are kept so the editor still shows the last range).
+    /// </summary>
+    internal void SetRange(string from, string to, bool live)
+    {
+        RangeFrom = string.IsNullOrWhiteSpace(from) ? "now-15m" : from.Trim();
+        RangeTo = string.IsNullOrWhiteSpace(to) ? "now" : to.Trim();
+        Live = live;
+        ResolveRange();
+    }
+
+    /// <summary>Re-resolves relative bounds against the clock. Called on apply, restore and rebuild.</summary>
+    internal void ResolveRange()
+    {
+        if (Live)
+        {
+            _resolved = null;
+            return;
+        }
+        try
+        {
+            var now = _clock();
+            var from = ElasticTailer.ParseTime(RangeFrom, now);
+            // "now" is an open end: rows that arrive after the range was applied keep showing.
+            DateTimeOffset? to = RangeTo.Equals("now", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : ElasticTailer.ParseTime(RangeTo, now);
+            _resolved = new ResolvedRange(from, to);
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
+        {
+            // A damaged saved range filters nothing rather than hiding every row.
+            _resolved = null;
+        }
+    }
+
+    /// <summary>
+    /// The per-line test that keeps a row visible under the stream's range, or null when nothing is
+    /// filtered. Rows without a timestamp and rows of Elastic members (which already come from the queried
+    /// window) always pass. Built once per filter pass; the hot path is two comparisons per timestamped line.
+    /// </summary>
+    internal Func<Line, bool>? CreateRangePredicate()
+    {
+        var range = _resolved;
+        if (range is null)
+            return null;
+        HashSet<string>? elastic = null;
+        foreach (var (id, seen) in _everSeen)
+            if (seen.Tab?.Source.Kind == LogSourceKind.Elastic)
+                (elastic ??= new HashSet<string>(StringComparer.Ordinal)).Add(id);
+        var from = range.From;
+        var to = range.To;
+        return line =>
+        {
+            if (line.Timestamp is not { } time)
+                return true;
+            if (time >= from && (to is not { } end || time <= end))
+                return true;
+            return elastic is not null && line.SourceId is { } id && elastic.Contains(id);
+        };
+    }
+
+    /// <summary>The number of Elastic members that are open right now.</summary>
+    public int OpenElasticMemberCount
+    {
+        get
+        {
+            var count = 0;
+            foreach (var tab in _snapshot.Tabs)
+                if (tab.Source.Kind == LogSourceKind.Elastic)
+                    count++;
+            return count;
+        }
+    }
+
+    private sealed record ResolvedRange(DateTimeOffset From, DateTimeOffset? To);
 
     /// <summary>True when any open member carries parsed fields, so the stream offers column mode.</summary>
     public bool AnyMemberStructured

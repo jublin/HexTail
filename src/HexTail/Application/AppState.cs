@@ -556,11 +556,7 @@ public sealed class AppState : IAsyncDisposable
         lock (_gate)
         {
             stream.SetHiddenKeys(persisted.HiddenSources ?? []);
-            stream.RangeFrom = string.IsNullOrWhiteSpace(persisted.From)
-                ? "now-15m"
-                : persisted.From;
-            stream.RangeTo = string.IsNullOrWhiteSpace(persisted.To) ? "now" : persisted.To;
-            stream.Live = persisted.Live;
+            stream.SetRange(persisted.From, persisted.To, persisted.Live);
         }
         tab.FollowAll = persisted.FollowAll;
         tab.SetRules(NormalizeRules(persisted.Rules, RuleScope.Source));
@@ -747,6 +743,49 @@ public sealed class AppState : IAsyncDisposable
         tab.ElasticInitialLimitReached = null;
         tab.ElasticResolvedFrom = null;
         tab.ElasticResolvedTo = null;
+        NotifyChanged();
+    }
+
+    /// <summary>
+    /// Applies one time range to a whole stream: it is stored on the stream (and saved with the session),
+    /// sent through <see cref="SetElasticTimeRange"/> to every open Elastic member, and filters the rows of
+    /// file members by timestamp. <paramref name="live"/> removes the file filter and leaves the members'
+    /// own ranges alone. Throws <see cref="ArgumentException"/> (changing nothing) when From is after To.
+    /// </summary>
+    internal void SetStreamTimeRange(
+        FileTabState stream,
+        string from,
+        string to,
+        bool live,
+        AppTimeZoneMode? inputZone = null
+    )
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        if (stream.Stream is not { } state)
+            throw new ArgumentException("The selected tab is not a stream.", nameof(stream));
+        from = from.Trim();
+        to = to.Trim();
+        var now = StreamClock();
+        if (ElasticTailer.ParseTime(from, now) > ElasticTailer.ParseTime(to, now))
+            throw new ArgumentException("From must be at or before To.");
+        FileTabState[] elastic;
+        lock (_gate)
+        {
+            state.SetRange(from, to, live);
+            elastic =
+            [
+                .. state.MemberTabs.Where(member =>
+                    member.Source.Kind == LogSourceKind.Elastic && member.Tailer is ElasticTailer
+                ),
+            ];
+        }
+        if (!live)
+            foreach (var member in elastic)
+            {
+                SetElasticTimeRange(member, from, to);
+                if (inputZone is { } zone)
+                    member.ElasticInputZone = zone;
+            }
         NotifyChanged();
     }
 
@@ -1228,6 +1267,7 @@ public sealed class AppState : IAsyncDisposable
     {
         var state = tab.Stream!;
         state.NeedsRebuild = false;
+        state.ResolveRange();
         state.Merger.Reset();
         tab.Buffer.Clear();
         foreach (var member in state.MemberTabs)
