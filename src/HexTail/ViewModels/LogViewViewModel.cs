@@ -212,6 +212,17 @@ internal sealed class LogViewViewModel : ReactiveObject
             SelectRow(Lines[index]);
     }
 
+    /// <summary>Selects the displayed row for a line; does nothing when that line is not displayed.</summary>
+    internal void SelectRowOf(Line line)
+    {
+        for (var index = 0; index < Lines.Count; index++)
+            if (ReferenceEquals(Lines[index].Line, line))
+            {
+                SelectRow(Lines[index]);
+                return;
+            }
+    }
+
     private void SelectRow(LogLineViewModel row)
     {
         _file.SelectLine(row.Line);
@@ -336,7 +347,7 @@ internal sealed class LogViewViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(InitialLimitMessage));
             this.RaisePropertyChanged(nameof(HasInitialLimitMessage));
         }
-        Overview.Invalidate();
+        Overview.Refresh();
     }
 
     private static void InvalidateRows(AvaloniaList<LogLineViewModel> rows)

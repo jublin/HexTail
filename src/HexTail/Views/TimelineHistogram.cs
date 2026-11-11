@@ -22,6 +22,7 @@ internal sealed class TimelineHistogram : Control
     private const double CollapseButtonWidth = 16;
     private const double DragThreshold = 4;
     private const double LabelSize = 10;
+    private const double HintSize = 11;
 
     public static readonly StyledProperty<LogViewViewModel?> ViewProperty =
         AvaloniaProperty.Register<TimelineHistogram, LogViewViewModel?>(nameof(View));
@@ -30,13 +31,17 @@ internal sealed class TimelineHistogram : Control
     private LogOverviewViewModel? _subscribed;
     private TimeHistogram? _histogram;
     private bool _dragging;
+    private bool _noRows;
     private double _startX;
     private double _currentX;
 
     public TimelineHistogram()
     {
         ClipToBounds = true;
-        _rebuild = new CoalescedRebuild(() => IsEffectivelyVisible && Bounds.Width > 0, Rebuild);
+        _rebuild = new CoalescedRebuild(
+            () => IsEffectivelyVisible && Bounds.Width > 0 && !_dragging,
+            Rebuild
+        );
         ResourcesChanged += (_, _) => InvalidateVisual();
         ActualThemeVariantChanged += (_, _) => InvalidateVisual();
     }
@@ -50,16 +55,27 @@ internal sealed class TimelineHistogram : Control
     /// <summary>The histogram the control last built (null until then, or when no row has a time).</summary>
     internal TimeHistogram? CurrentHistogram => _histogram;
 
+    /// <summary>A rebuild is scheduled (the coalescing timer is running).</summary>
+    internal bool RebuildScheduled => _rebuild.IsScheduled;
+
+    /// <summary>Shown over the empty panel when a built view has no rows left in the range.</summary>
+    internal const string NoRowsText = "No rows in range – double-click to reset";
+
+    /// <summary>The panel is showing <see cref="NoRowsText"/> instead of bars.</summary>
+    internal bool ShowsNoRowsHint => _noRows && View?.File.ElasticLoading != true;
+
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
         Subscribe();
+        LayoutUpdated += OnLayoutUpdated;
         _rebuild.Request();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
+        LayoutUpdated -= OnLayoutUpdated;
         _rebuild.Stop();
         Unsubscribe();
     }
@@ -70,27 +86,32 @@ internal sealed class TimelineHistogram : Control
         if (change.Property == ViewProperty)
         {
             _histogram = null;
+            _noRows = false;
             _dragging = false;
             if (VisualRoot is not null)
             {
                 Unsubscribe();
                 Subscribe();
-            }
-            _rebuild.Request();
-            InvalidateVisual();
-        }
-        else if (change.Property.Name == nameof(IsEffectivelyVisible))
-        {
-            if (IsEffectivelyVisible && _rebuild.IsDirty)
                 _rebuild.Request();
+            }
+            else
+                _rebuild.MarkDirty();
+            InvalidateVisual();
         }
         else if (change.Property == BoundsProperty)
         {
             var width = ((Rect)change.OldValue!).Width;
             if (Math.Abs(width - Bounds.Width) > 0.5)
-                _rebuild.Request();
+            {
+                _rebuild.MarkDirty();
+                if (VisualRoot is not null)
+                    _rebuild.Request();
+            }
         }
     }
+
+    // Becoming visible (an expand) is followed by a layout pass: a rebuild that came due while hidden runs then.
+    private void OnLayoutUpdated(object? sender, EventArgs e) => _rebuild.Poke();
 
     private void Subscribe()
     {
@@ -120,8 +141,7 @@ internal sealed class TimelineHistogram : Control
         if (View?.Overview is not { } overview)
             return;
         _histogram = overview.BuildHistogram(Math.Max(1, (int)(Bounds.Width / 4)));
-        if (_dragging && _histogram is null)
-            _dragging = false;
+        _noRows = _histogram is null;
         InvalidateVisual();
     }
 
@@ -136,6 +156,11 @@ internal sealed class TimelineHistogram : Control
         var width = Bounds.Width;
         var height = Bounds.Height;
         context.FillRectangle(Resolve("SurfaceAltBrush"), new Rect(0, 0, width, height));
+        if (ShowsNoRowsHint && width > 0)
+        {
+            var hint = Label(NoRowsText, Resolve("FaintTextBrush"), HintSize);
+            context.DrawText(hint, new Point((width - hint.Width) / 2, (height - hint.Height) / 2));
+        }
         if (_histogram is not { } histogram || width <= 0 || histogram.Buckets.Count == 0)
             return;
 
@@ -184,8 +209,8 @@ internal sealed class TimelineHistogram : Control
         if (View?.Overview is { } overview)
         {
             var faint = Resolve("FaintTextBrush");
-            var start = Label(overview.FormatTime(histogram, histogram.Start), faint);
-            var end = Label(overview.FormatTime(histogram, histogram.End), faint);
+            var start = Label(overview.FormatTime(histogram, histogram.Start), faint, LabelSize);
+            var end = Label(overview.FormatTime(histogram, histogram.End), faint, LabelSize);
             context.DrawText(start, new Point(4, 0));
             var endX = width - 4 - CollapseButtonWidth - end.Width;
             if (endX > 4 + start.Width + 8)
@@ -193,13 +218,13 @@ internal sealed class TimelineHistogram : Control
         }
     }
 
-    private static FormattedText Label(string text, IBrush brush) =>
+    private static FormattedText Label(string text, IBrush brush, double size) =>
         new(
             text,
             CultureInfo.InvariantCulture,
             FlowDirection.LeftToRight,
             Typeface.Default,
-            LabelSize,
+            size,
             brush
         );
 
@@ -213,11 +238,12 @@ internal sealed class TimelineHistogram : Control
         base.OnPointerPressed(e);
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             return;
-        if (PressAt(e.GetPosition(this).X, e.ClickCount))
-        {
+        var began = PressAt(e.GetPosition(this).X, e.ClickCount);
+        if (began)
             e.Pointer.Capture(this);
+        // A double-click was a reset: nothing else should act on it.
+        if (began || e.ClickCount == 2)
             e.Handled = true;
-        }
     }
 
     protected override void OnPointerMoved(PointerEventArgs e)
@@ -244,6 +270,7 @@ internal sealed class TimelineHistogram : Control
         {
             _dragging = false;
             InvalidateVisual();
+            _rebuild.Poke();
         }
     }
 
@@ -282,13 +309,20 @@ internal sealed class TimelineHistogram : Control
         _dragging = false;
         _currentX = x;
         InvalidateVisual();
+        // A rebuild skipped during the drag runs now.
+        _rebuild.Poke();
         if (_histogram is not { } histogram || View?.Overview is not { } overview)
             return;
         if (Math.Abs(x - _startX) >= DragThreshold)
         {
             var first = BucketAt(Math.Min(_startX, x));
             var last = BucketAt(Math.Max(_startX, x));
-            overview.ApplyRange(histogram.Buckets[first].Start, histogram.Buckets[last].End);
+            var rows = 0;
+            for (var index = first; index <= last; index++)
+                rows += histogram.Buckets[index].Total;
+            // A range with no rows would only hide the panel's own bars: ignore it.
+            if (rows > 0)
+                overview.ApplyRange(histogram.Buckets[first].Start, histogram.Buckets[last].End);
         }
         else
             overview.JumpToBucket(histogram, BucketAt(x));

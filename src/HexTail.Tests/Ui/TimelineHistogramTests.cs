@@ -306,6 +306,118 @@ public sealed class TimelineHistogramTests
         });
     }
 
+    private static async Task Settle(int milliseconds)
+    {
+        var until = DateTime.UtcNow.AddMilliseconds(milliseconds);
+        while (DateTime.UtcNow < until)
+        {
+            Dispatcher.UIThread.RunJobs();
+            await Task.Delay(10, Ct);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Histogram_RebuildsOnExpand_WhenTheViewChangedWhileCollapsed()
+    {
+        await using var f = await Fixture.CreateAsync(TimestampedRows);
+        var before = await f.BuiltAsync();
+        f.Workspace.TimelineOpen = false;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(f.Histogram.IsEffectivelyVisible);
+
+        f.Workspace.ApplyHistogramRange(before.Buckets[0].Start, before.Buckets[0].End);
+        f.Tab.SelectedView.Sync();
+        await Settle(600);
+        Assert.Same(before, f.Histogram.CurrentHistogram);
+
+        f.Workspace.TimelineOpen = true;
+
+        await UiWait.Until(() =>
+            f.Histogram.CurrentHistogram is { } now
+            && !ReferenceEquals(now, before)
+            && now.Buckets.Sum(bucket => bucket.Total) == f.Tab.SelectedView.Lines.Count
+        );
+    }
+
+    [AvaloniaFact]
+    public async Task Drag_OverBucketsWithNoRows_DoesNothing()
+    {
+        await using var f = await Fixture.CreateAsync([
+            "2026-01-01T10:00:00Z INFO first",
+            "2026-01-01T10:10:00Z INFO last",
+        ]);
+        var histogram = await f.BuiltAsync();
+        Assert.All(histogram.Buckets.Skip(10).Take(11), bucket => Assert.Equal(0, bucket.Total));
+
+        f.Histogram.PressAt(f.XOf(histogram, 10), 1);
+        f.Histogram.ReleaseAt(f.XOf(histogram, 20));
+
+        Assert.Null(f.Tab.Model.TimeWindow);
+        Assert.Null(f.Tab.Model.HistogramPrior);
+        Assert.Null(f.Tab.Model.SelectedLine);
+    }
+
+    [AvaloniaFact]
+    public async Task EmptyRange_KeepsThePanel_ShowsTheHint_AndDoubleClickResets()
+    {
+        await using var f = await Fixture.CreateAsync(TimestampedRows);
+        var histogram = await f.BuiltAsync();
+        f.Workspace.ApplyHistogramRange(histogram.End.AddMinutes(1), histogram.End.AddMinutes(2));
+
+        await UiWait.Until(() =>
+        {
+            f.Tab.SelectedView.Sync();
+            return f.Histogram.CurrentHistogram is null && f.Histogram.ShowsNoRowsHint;
+        });
+        Assert.Equal(0, f.Tab.SelectedView.Lines.Count);
+        Assert.True(f.Panel.IsVisible);
+        Assert.Equal("No rows in range – double-click to reset", TimelineHistogram.NoRowsText);
+
+        Assert.False(f.Histogram.PressAt(10, 2));
+
+        Assert.Null(f.Tab.Model.TimeWindow);
+        await UiWait.Until(() =>
+        {
+            f.Tab.SelectedView.Sync();
+            return f.Histogram.CurrentHistogram is not null && !f.Histogram.ShowsNoRowsHint;
+        });
+    }
+
+    [AvaloniaFact]
+    public async Task Rebuild_IsSkippedMidDrag_AndRunsAfterTheRelease()
+    {
+        await using var f = await Fixture.CreateAsync(TimestampedRows);
+        var before = await f.BuiltAsync();
+        Assert.True(f.Histogram.PressAt(f.XOf(before, 10), 1));
+        f.Histogram.MoveTo(f.XOf(before, 12));
+
+        await File.AppendAllLinesAsync(f.Path!, ["2026-01-01T10:00:50Z INFO late"], Ct);
+        await UiWait.Until(() =>
+        {
+            f.Workspace.State.DrainTailerEvents();
+            f.Tab.SyncViews();
+            f.Tab.SelectedView.Sync();
+            return f.Tab.SelectedView.Lines.Count == 6;
+        });
+        await Settle(600);
+        Assert.Same(before, f.Histogram.CurrentHistogram);
+
+        f.Histogram.ReleaseAt(f.XOf(before, 10));
+
+        await UiWait.Until(() =>
+            f.Histogram.CurrentHistogram is { } now && !ReferenceEquals(now, before)
+        );
+    }
+
+    [AvaloniaFact]
+    public void DetachedControl_DoesNotStartItsTimer_WhenTheViewIsSet()
+    {
+        var control = new TimelineHistogram();
+
+        control.View = null;
+        Assert.False(control.RebuildScheduled);
+    }
+
     [AvaloniaFact]
     public void WarnBrush_IsDefinedInEveryTheme()
     {

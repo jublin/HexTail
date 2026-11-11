@@ -21,11 +21,26 @@ internal sealed class LogOverviewViewModel : ReactiveObject
     private bool _hasTimeline;
     private RuleSet? _cachedRules;
     private Dictionary<Line, string?> _ruleColors = new(ReferenceEqualityComparer.Instance);
+    private bool _linesChanged = true;
+    private BuildInputs? _lastInputs;
+    private TimeHistogram? _builtHistogram;
+    private Line?[] _builtFirstLines = [];
+
+    /// <summary>Everything besides the displayed rows that a histogram or marker build depends on.</summary>
+    private readonly record struct BuildInputs(
+        RuleSet Rules,
+        int SearchHash,
+        AppTimeZoneMode Zone,
+        HistogramPrior? Prior,
+        TimeWindow? Window,
+        bool ElasticLoading
+    );
 
     internal LogOverviewViewModel(MainWindowViewModel owner, LogViewViewModel view)
     {
         _owner = owner;
         _view = view;
+        view.Lines.CollectionChanged += (_, _) => _linesChanged = true;
     }
 
     /// <summary>Raised on <see cref="Invalidate"/>; the controls rebuild when it changes.</summary>
@@ -41,13 +56,54 @@ internal sealed class LogOverviewViewModel : ReactiveObject
         private set => this.RaiseAndSetIfChanged(ref _hasTimeline, value);
     }
 
+    /// <summary>
+    /// Called on every view sync: bumps <see cref="Version"/> only when something a build depends on
+    /// changed (the displayed rows, the rules, the searches, the zone, the range state), so syncs that
+    /// change nothing (a paused view, another tab's traffic) do not make the controls rebuild.
+    /// </summary>
+    internal void Refresh()
+    {
+        var inputs = CurrentInputs();
+        if (!_linesChanged && _lastInputs is { } last && last.Equals(inputs))
+            return;
+        _linesChanged = false;
+        _lastInputs = inputs;
+        Invalidate();
+    }
+
+    private BuildInputs CurrentInputs()
+    {
+        var file = _view.File;
+        var hash = new HashCode();
+        foreach (var search in file.Searches)
+        {
+            hash.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(search));
+            hash.Add(search.Results.Count);
+            hash.Add(search.Color);
+        }
+        return new BuildInputs(
+            file.EffectiveRules(_view.Settings),
+            hash.ToHashCode(),
+            Zone,
+            file.HistogramPrior,
+            file.TimeWindow,
+            file.ElasticLoading
+        );
+    }
+
     internal void Invalidate()
     {
         _version++;
-        HasTimeline = AnyTimestamp();
+        HasTimeline = AnyTimestamp() || KeepsPanel;
         this.RaisePropertyChanged(nameof(Version));
         this.RaisePropertyChanged(nameof(HasRows));
     }
+
+    // The panel stays up while a dragged range is in place (so a double-click can reset it) and while an
+    // Elastic source reloads, even when no displayed row has a time.
+    private bool KeepsPanel =>
+        _view.File.HistogramPrior is not null
+        || (_view.File.Source.Kind == LogSourceKind.Elastic && _view.File.ElasticLoading);
 
     private bool AnyTimestamp()
     {
@@ -70,7 +126,14 @@ internal sealed class LogOverviewViewModel : ReactiveObject
         for (var index = 0; index < lines.Length; index++)
             lines[index] = rows[index].Line;
         var histogram = TimeHistogram.Build(lines, maxBuckets, OffsetAt);
-        HasTimeline = histogram is not null;
+        HasTimeline = histogram is not null || KeepsPanel;
+        // A click is resolved against the rows this build saw, not whatever the view shows by then.
+        var first = new Line?[histogram?.Buckets.Count ?? 0];
+        for (var bucket = 0; bucket < first.Length; bucket++)
+            if (histogram!.Buckets[bucket].FirstRow is var row and >= 0)
+                first[bucket] = lines[row];
+        _builtHistogram = histogram;
+        _builtFirstLines = first;
         return histogram;
     }
 
@@ -158,6 +221,13 @@ internal sealed class LogOverviewViewModel : ReactiveObject
     {
         if (index < 0 || index >= histogram.Buckets.Count)
             return;
+        if (ReferenceEquals(histogram, _builtHistogram))
+        {
+            // The row may have scrolled away or been filtered out since the build: then there is nothing to select.
+            if (_builtFirstLines[index] is { } line)
+                _view.SelectRowOf(line);
+            return;
+        }
         var row = histogram.Buckets[index].FirstRow;
         if (row >= 0)
             _view.SelectRowAt(row);

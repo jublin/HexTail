@@ -135,7 +135,7 @@ public sealed class OverviewRulerTests
         var rows = Enumerable.Range(0, 400).Select(index => $"INFO row {index}").ToArray();
         await using var f = await Fixture.CreateAsync(rows);
 
-        f.Ruler.ClickAt(f.Ruler.Bounds.Height * 0.75);
+        f.Ruler.ClickAt((300 + 0.5) * f.Ruler.Bounds.Height / rows.Length);
 
         await UiWait.Until(() =>
         {
@@ -145,6 +145,40 @@ public sealed class OverviewRulerTests
         });
         var selected = Assert.IsType<LogLineViewModel>(f.List.SelectedItem);
         Assert.Equal("INFO row 300", selected.Line.Raw);
+    }
+
+    [AvaloniaFact]
+    public async Task Ruler_RebuildsWhenItBecomesVisible_AfterTheViewChangedWhileHidden()
+    {
+        await using var f = await Fixture.CreateAsync(Rows);
+        await UiWait.Until(() => f.Ruler.CurrentMarkers.Count == 1);
+        // The ruler's own IsVisible is bound to HasRows and would be set back; hide what holds it.
+        var host = (Control)f.Ruler.Parent!;
+        host.IsVisible = false;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(f.Ruler.IsEffectivelyVisible);
+
+        await f.Workspace.State.AddRuleAsync(
+            f.Tab.Model,
+            TestRules.Highlight("INFO", "#445566") with
+            {
+                Scope = RuleScope.Source,
+            }
+        );
+        f.Workspace.State.DrainTailerEvents();
+        f.Tab.SyncViews();
+        f.Tab.SelectedView.Sync();
+        var until = DateTime.UtcNow.AddMilliseconds(600);
+        while (DateTime.UtcNow < until)
+        {
+            Dispatcher.UIThread.RunJobs();
+            await Task.Delay(10, Ct);
+        }
+        Assert.Single(f.Ruler.CurrentMarkers);
+
+        host.IsVisible = true;
+
+        await UiWait.Until(() => f.Ruler.CurrentMarkers.Count == 5);
     }
 
     private static IEnumerable<LogLineViewModel> RealizedRows(Fixture f) =>

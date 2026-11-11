@@ -52,16 +52,21 @@ internal sealed class OverviewRuler : Control
     /// <summary>The markers the control last built (empty until then).</summary>
     internal IReadOnlyList<ScrollMarker> CurrentMarkers => _markers;
 
+    /// <summary>A rebuild is scheduled (the coalescing timer is running).</summary>
+    internal bool RebuildScheduled => _rebuild.IsScheduled;
+
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
         Subscribe();
+        LayoutUpdated += OnLayoutUpdated;
         _rebuild.Request();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
+        LayoutUpdated -= OnLayoutUpdated;
         _rebuild.Stop();
         Unsubscribe();
     }
@@ -77,26 +82,26 @@ internal sealed class OverviewRuler : Control
             {
                 Unsubscribe();
                 Subscribe();
-            }
-            _rebuild.Request();
-            InvalidateVisual();
-        }
-        else if (change.Property.Name == nameof(IsEffectivelyVisible))
-        {
-            if (IsEffectivelyVisible && _rebuild.IsDirty)
                 _rebuild.Request();
+            }
+            else
+                _rebuild.MarkDirty();
+            InvalidateVisual();
         }
         else if (change.Property == BoundsProperty)
         {
             var height = ((Rect)change.OldValue!).Height;
             if (Math.Abs(height - Bounds.Height) > 0.5)
             {
-                if (_markers.Count == 0)
+                if (_rebuild.IsDirty && VisualRoot is not null)
                     _rebuild.Request();
                 InvalidateVisual();
             }
         }
     }
+
+    // Becoming visible is followed by a layout pass: a rebuild that came due while hidden runs then.
+    private void OnLayoutUpdated(object? sender, EventArgs e) => _rebuild.Poke();
 
     private void Subscribe()
     {

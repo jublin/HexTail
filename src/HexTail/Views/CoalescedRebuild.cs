@@ -27,11 +27,28 @@ internal sealed class CoalescedRebuild
     /// <summary>A rebuild is wanted and has not run yet.</summary>
     public bool IsDirty => _dirty;
 
+    /// <summary>The timer is running: a rebuild is scheduled.</summary>
+    public bool IsScheduled => _timer.IsEnabled;
+
+    /// <summary>Marks the build dirty without scheduling it (for an owner that is not attached).</summary>
+    public void MarkDirty() => _dirty = true;
+
     /// <summary>Marks the build dirty and schedules one rebuild after the interval.</summary>
     public void Request()
     {
         _dirty = true;
         if (!_timer.IsEnabled)
+            _timer.Start();
+    }
+
+    /// <summary>
+    /// Schedules a pending rebuild that has become runnable since it was requested (for example the owner
+    /// turned visible). Cheap enough to call after every layout pass: Avalonia 12 exposes no public change
+    /// notification for <c>IsEffectivelyVisible</c>.
+    /// </summary>
+    public void Poke()
+    {
+        if (_dirty && !_timer.IsEnabled && _canRun())
             _timer.Start();
     }
 
