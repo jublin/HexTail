@@ -160,6 +160,26 @@ A timestamp with no zone is read in the **display time zone** (the status bar pi
 
 The layout belongs to the source and is kept in the saved session. A column you remove or add only affects that source.
 
+## Timeline and overview ruler
+
+**Timeline.** A histogram sits above each log view, between the filter bar and the column header. It shows how many of the rows the view displays fall into each stretch of time. It is drawn from the rows after every filter, level and search is applied, so hiding or filtering rows changes the bars. Each bar is one time bucket (at least 4 px wide, on a round interval such as 5 s, 1 m or 1 h, aligned in the display time zone), stacked by level from the bottom: Error, Warn, Info, Debug (Trace counts as Debug) and rows with no level. The first and last time of the range are written in the strip above the bars. The histogram is hidden when no displayed row has a timestamp, and rows without one are not counted.
+
+- **Hover** a bar for a tooltip with the bucket's time span, its row count and the count for each level.
+- **Click** a bar to select the first displayed row in that bucket and scroll it into view.
+- **Drag** across the bars (4 px or more) to restrict the view to a time range, from the start of the first bucket you cover to the end of the last. What this does depends on the source:
+  - A **file** tab hides rows outside the range. A **Time** chip with the range appears in the filter bar; use its **Clear time window** button to drop it. Rows with no timestamp always stay visible. The time window lasts for the session and is not saved.
+  - An **Elastic** source runs its query again for that range, as if you had typed it into the time pill.
+  - A **stream** takes it as the stream's time range, as with the time pill.
+- **Double-click** the bars to go back to the range the tab had before your first drag. With nothing to go back to, a file tab clears its time window and a stream shows all rows again; an Elastic tab is left as it is. A range you apply from the time pill (or **Show all rows** on a stream) becomes the new starting point, so a later double-click returns to it.
+
+Because the bars show only the displayed rows, they show just the chosen range after a drag; double-click to get the full picture back.
+
+The **chevron** at the top right of the histogram (**Collapse timeline**) shrinks it to a thin strip with a **Timeline** button (**Expand timeline**). **Toggle timeline** in the command palette does the same. The choice applies to every view and is remembered between sessions.
+
+The histogram and the ruler below redraw at most every quarter of a second while rows arrive, and not at all while the view is hidden.
+
+**Overview ruler.** A narrow column to the right of the log list represents the whole list from top to bottom, so you can see where the interesting rows are without scrolling. It has two lanes. The left lane marks rows that match a highlight rule or a search, in that rule's or search's colour (a search view leaves out its own search). The right lane marks error rows in red. **Click** the ruler to select the row at that height and scroll it into view. The ruler is hidden when the view has no rows. It gives context for `n` and `N`, which step through the same highlighted rows.
+
 ## Inspect a row
 
 The inspector is a panel on the right of the log that shows the selected row in detail. Open it with `Ctrl+I` (which also closes it), by pressing Enter on a focused row, by double-clicking a row, or with **Inspect** in the row menu; the last three open it on that row. Drag the handle on its left edge to resize it (260 to 640 px). Whether it is open and how wide it is are saved with the session.
@@ -182,7 +202,7 @@ Keyboard shortcuts for navigating views and rows (they do not fire while a text 
 - `Ctrl+W` closes the selected search view, or the source when **All** is selected.
 - `F` toggles **Follow**, `g` jumps to the first line, and `Shift+G` jumps to the newest line and follows. `/` or `Ctrl+F` focuses the filter input.
 - `Ctrl+I` toggles the inspector, and works while a text box has focus. `m` toggles a bookmark on the selected row, and `]` and `[` jump to the next and previous bookmarked row. `]` and `[` behave like the other row keys and stop following; `m` does not move the selection.
-- `j` and `k` select the next and previous row in the current view. `n` and `N` select the next and previous row that has at least one highlight in the current view (a match of a highlight rule or search). They stop at the ends of the list rather than wrapping, and `j`, `k`, `n` and `N` do nothing while a text box has focus.
+- `j` and `k` select the next and previous row in the current view. `n` and `N` select the next and previous row that has at least one highlight in the current view (a match of a highlight rule or search). They stop at the ends of the list rather than wrapping, and `j`, `k`, `n` and `N` do nothing while a text box has focus. The left lane of the overview ruler marks those highlighted rows, so you can see how many there are and where `n` and `N` will go; see [Timeline and overview ruler](#timeline-and-overview-ruler).
 
 **Follow** is a toggle on each view's toolbar. Follow keeps the newest row (or match) in view; scrolling up, pressing `g`, turning Follow off, or using a row key such as `j`, `k`, `[` or `]` stops it. While a view is not following and new lines arrive, a **↓ N new lines** pill appears at the bottom of the list; click it to jump to the newest line and resume following.
 

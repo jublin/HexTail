@@ -38,6 +38,13 @@ connections.
 - Columns for structured sources (JSONL, logfmt, Elastic): Time, Level and
   Message by default, with a resizable header, a **Columns** menu for more
   fields, absolute or relative time, level colours and a tinted error row.
+- A timeline histogram above each log view: row counts over time, stacked by
+  level. Hover for a bucket's counts, click to jump to its first row, drag to
+  restrict the view to a time range (a time window on a file, a new query on an
+  Elastic source, the range of a stream), double-click to restore the previous
+  range. Collapsible from the strip or **Toggle timeline**.
+- An overview ruler beside the log list that marks rule and search matches (in
+  their colour) and errors along the whole list; click it to jump to a row.
 - A row inspector (`Ctrl+I`): raw text, parsed fields you can turn into
   show-only, hide or highlight rules, copy, or add as a column, **Copy raw**
   and **Copy JSON**, an optional **Show context** list of neighbouring rows,
