@@ -22,6 +22,7 @@
     <SolidColorBrush x:Key="SelectedTabBrush" Color="#28D7FE" />
     <SolidColorBrush x:Key="SuccessBrush" Color="#39E58C" />
     <SolidColorBrush x:Key="ErrorBrush" Color="#FF667A" />
+    <SolidColorBrush x:Key="WarnBrush" Color="#F5B942" />
     <SolidColorBrush x:Key="ErrorRowBrush" Color="#26FF667A" />
     <SolidColorBrush x:Key="ErrorBackgroundBrush" Color="#2A1118" />
     <SolidColorBrush x:Key="ErrorTextBrush" Color="#FFD5DC" />

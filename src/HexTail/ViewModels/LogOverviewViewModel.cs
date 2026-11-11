@@ -34,7 +34,7 @@ internal sealed class LogOverviewViewModel : ReactiveObject
     /// <summary>The view has at least one row (the ruler is hidden otherwise).</summary>
     public bool HasRows => _view.Lines.Count > 0;
 
-    /// <summary>The last <see cref="BuildHistogram"/> found rows with timestamps.</summary>
+    /// <summary>Some displayed row has a timestamp (checked on every sync and by <see cref="BuildHistogram"/>).</summary>
     public bool HasTimeline
     {
         get => _hasTimeline;
@@ -44,8 +44,18 @@ internal sealed class LogOverviewViewModel : ReactiveObject
     internal void Invalidate()
     {
         _version++;
+        HasTimeline = AnyTimestamp();
         this.RaisePropertyChanged(nameof(Version));
         this.RaisePropertyChanged(nameof(HasRows));
+    }
+
+    private bool AnyTimestamp()
+    {
+        var rows = _view.Lines;
+        for (var index = 0; index < rows.Count; index++)
+            if (rows[index].Line.Timestamp is not null)
+                return true;
+        return false;
     }
 
     private AppTimeZoneMode Zone => _view.Settings.TimeZoneMode;
@@ -106,13 +116,18 @@ internal sealed class LogOverviewViewModel : ReactiveObject
         return markers;
     }
 
+    /// <summary>A histogram instant in the display zone: HH:mm:ss under 24 h, else MM-dd HH:mm.</summary>
+    internal string FormatTime(TimeHistogram histogram, DateTimeOffset time)
+    {
+        var format =
+            histogram.End - histogram.Start < TimeSpan.FromHours(24) ? "HH:mm:ss" : "MM-dd HH:mm";
+        return time.ToOffset(OffsetAt(time)).ToString(format, CultureInfo.InvariantCulture);
+    }
+
     internal string DescribeBucket(TimeHistogram histogram, int index)
     {
         var bucket = histogram.Buckets[index];
-        var format =
-            histogram.End - histogram.Start < TimeSpan.FromHours(24) ? "HH:mm:ss" : "MM-dd HH:mm";
-        string Format(DateTimeOffset time) =>
-            time.ToOffset(OffsetAt(time)).ToString(format, CultureInfo.InvariantCulture);
+        string Format(DateTimeOffset time) => FormatTime(histogram, time);
 
         var text = new StringBuilder()
             .Append(Format(bucket.Start))

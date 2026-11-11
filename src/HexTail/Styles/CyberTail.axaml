@@ -20,6 +20,7 @@
     <SolidColorBrush x:Key="SelectedTabBrush" Color="#28D7FE" />
     <SolidColorBrush x:Key="SuccessBrush" Color="#39E58C" />
     <SolidColorBrush x:Key="ErrorBrush" Color="#FF667A" />
+    <SolidColorBrush x:Key="WarnBrush" Color="#F5B942" />
     <SolidColorBrush x:Key="ErrorRowBrush" Color="#26FF667A" />
     <SolidColorBrush x:Key="ScrimBrush" Color="#99000000" />
     <x:Double x:Key="ControlHeight">34</x:Double>
@@ -364,7 +365,7 @@
   <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
 </Style>
 <Style Selector=":is(TextBlock).cell.wrn">
-  <Setter Property="Foreground" Value="#F5B942" />
+  <Setter Property="Foreground" Value="{DynamicResource WarnBrush}" />
 </Style>
 <Style Selector=":is(TextBlock).cell.err">
   <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />

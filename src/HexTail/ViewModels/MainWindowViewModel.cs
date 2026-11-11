@@ -56,6 +56,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private string _rangeToText = "now";
     private string? _rangeError;
     private bool _sidebarOpen = true;
+    private bool _timelineOpen = true;
     private bool _narrowShell;
     private bool _narrowPaneOpen;
     private double _sidebarWidth = 240;
@@ -108,6 +109,13 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             _scheduler
         );
         ToggleInspectorCommand = ReactiveCommand.Create(() => Inspector.Toggle(), _scheduler);
+        ToggleTimelineCommand = ReactiveCommand.Create(
+            () =>
+            {
+                TimelineOpen = !TimelineOpen;
+            },
+            _scheduler
+        );
         TogglePauseCommand = ReactiveCommand.Create(
             () =>
             {
@@ -220,6 +228,14 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<Unit, Unit> ToggleSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSidebarCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleInspectorCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleTimelineCommand { get; }
+
+    /// <summary>The timeline histogram is expanded (app-wide; false shows only its thin strip).</summary>
+    public bool TimelineOpen
+    {
+        get => _timelineOpen;
+        set => this.RaiseAndSetIfChanged(ref _timelineOpen, value);
+    }
     public ReactiveCommand<Unit, Unit> TogglePauseCommand { get; }
     public ReactiveCommand<Unit, Unit> SetUpElasticCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> SelectFileCommand { get; }
@@ -576,6 +592,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             if (_state.Window.SidebarWidth > 0)
                 SidebarWidth = _state.Window.SidebarWidth;
             Inspector.IsOpen = _state.Window.InspectorOpen;
+            TimelineOpen = !_state.Window.HistogramCollapsed;
             Inspector.Width =
                 _state.Window.InspectorWidth > 0
                     ? _state.Window.InspectorWidth
@@ -862,6 +879,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             "View",
             "Ctrl+I",
             async () => await ToggleInspectorCommand.Execute()
+        );
+        yield return new(
+            "Toggle timeline",
+            "View",
+            null,
+            async () => await ToggleTimelineCommand.Execute()
         );
         yield return new(
             IsPaused ? "Resume view updates" : "Pause view updates",

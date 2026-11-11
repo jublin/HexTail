@@ -228,6 +228,7 @@ public partial class MainWindow : Window
                 SidebarWidth = ViewModel.SidebarWidth,
                 InspectorOpen = ViewModel.Inspector.IsOpen,
                 InspectorWidth = ViewModel.Inspector.Width,
+                HistogramCollapsed = !ViewModel.TimelineOpen,
             }
         );
         await ViewModel.DisposeAsync();

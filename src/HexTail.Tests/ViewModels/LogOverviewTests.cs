@@ -116,8 +116,6 @@ public sealed class LogOverviewTests
     {
         await using (var h = await Harness.CreateAsync(FiveRows))
         {
-            Assert.False(h.Overview.HasTimeline);
-
             var histogram = h.Overview.BuildHistogram(100);
 
             Assert.NotNull(histogram);
@@ -128,6 +126,22 @@ public sealed class LogOverviewTests
         await using var plain = await Harness.CreateAsync("plain a", "plain b");
         Assert.True(plain.Overview.HasRows);
         Assert.Null(plain.Overview.BuildHistogram(100));
+        Assert.False(plain.Overview.HasTimeline);
+    }
+
+    [AvaloniaFact]
+    public async Task HasTimeline_FollowsTheRowsOnSync_WithoutBuildingAHistogram()
+    {
+        await using var h = await Harness.CreateAsync(FiveRows);
+        var raised = new List<string?>();
+        h.Overview.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        Assert.True(h.Overview.HasTimeline);
+        Assert.True(h.Overview.HasRows);
+        h.Overview.Invalidate();
+        Assert.Contains(nameof(LogOverviewViewModel.HasRows), raised);
+
+        await using var plain = await Harness.CreateAsync("plain a", "plain b");
         Assert.False(plain.Overview.HasTimeline);
     }
 
