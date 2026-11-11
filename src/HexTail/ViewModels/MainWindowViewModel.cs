@@ -1352,9 +1352,96 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 _state.SetElasticTimeRange(SelectedFile.Model, from.Expression, to);
                 SelectedFile.Model.ElasticInputZone = DisplayZone;
             }
+            SelectedFile.Model.HistogramPrior = null;
             ElasticRangeDirty = false;
             RangeError = null;
             SetFileError(null);
+        }
+        catch (ArgumentException exception)
+        {
+            RangeError = exception.Message;
+        }
+    }
+
+    private static string Iso(DateTimeOffset time) =>
+        time.ToString("O", CultureInfo.InvariantCulture);
+
+    private static DateTimeOffset ParseIso(string value) =>
+        DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+
+    /// <summary>
+    /// Applies a range dragged on the timeline histogram to the selected tab, routed by source: a stream
+    /// takes it as its range, an Elastic tab re-queries, a file tab hides rows outside it. The range in
+    /// place before the first drag is kept so <see cref="ResetHistogramRange"/> can return to it.
+    /// </summary>
+    internal void ApplyHistogramRange(DateTimeOffset from, DateTimeOffset to)
+    {
+        if (SelectedFile?.Model is not { } tab)
+            return;
+        var before = tab.HistogramPrior;
+        tab.HistogramPrior ??=
+            tab.Stream is { } stream
+                ? new HistogramPrior(stream.RangeFrom, stream.RangeTo, stream.Live)
+            : tab.Source.Kind == LogSourceKind.Elastic
+                ? new HistogramPrior(tab.ElasticFrom, tab.ElasticTo, false)
+            : tab.TimeWindow is { } window
+                ? new HistogramPrior(Iso(window.From), Iso(window.To), false)
+            : new HistogramPrior(string.Empty, string.Empty, true);
+        try
+        {
+            if (tab.Stream is not null)
+                _state.SetStreamTimeRange(tab, Iso(from), Iso(to), live: false, DisplayZone);
+            else if (tab.Source.Kind == LogSourceKind.Elastic)
+            {
+                _state.SetElasticTimeRange(tab, Iso(from), Iso(to));
+                tab.ElasticInputZone = DisplayZone;
+            }
+            else
+                _state.SetFileTimeWindow(tab, new TimeWindow(from, to));
+            if (tab.Stream is not null || tab.Source.Kind == LogSourceKind.Elastic)
+                LoadRangeInputs(tab);
+            RangeError = null;
+        }
+        catch (ArgumentException exception)
+        {
+            tab.HistogramPrior = before;
+            RangeError = exception.Message;
+        }
+    }
+
+    /// <summary>
+    /// Returns the selected tab to the range it had before the first histogram drag. With nothing to
+    /// return to, a file tab drops its window, a stream shows all rows, and an Elastic tab is left alone.
+    /// </summary>
+    internal void ResetHistogramRange()
+    {
+        if (SelectedFile?.Model is not { } tab)
+            return;
+        var prior = tab.HistogramPrior;
+        try
+        {
+            if (tab.Stream is { } stream)
+            {
+                if (prior is null)
+                    _state.SetStreamTimeRange(tab, stream.RangeFrom, stream.RangeTo, live: true);
+                else
+                    _state.SetStreamTimeRange(tab, prior.From, prior.To, prior.Live);
+            }
+            else if (tab.Source.Kind == LogSourceKind.Elastic)
+            {
+                if (prior is null)
+                    return;
+                _state.SetElasticTimeRange(tab, prior.From, prior.To);
+            }
+            else
+                _state.SetFileTimeWindow(
+                    tab,
+                    prior is null || prior.Live
+                        ? null
+                        : new TimeWindow(ParseIso(prior.From), ParseIso(prior.To))
+                );
+            tab.HistogramPrior = null;
+            LoadRangeInputs(tab);
         }
         catch (ArgumentException exception)
         {
@@ -1369,6 +1456,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         try
         {
             _state.SetStreamTimeRange(tab, stream.RangeFrom, stream.RangeTo, live: true);
+            tab.HistogramPrior = null;
             LoadRangeInputs(tab);
             RangeError = null;
         }

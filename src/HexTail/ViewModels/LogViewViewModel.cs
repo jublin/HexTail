@@ -543,11 +543,20 @@ internal sealed class LogViewViewModel : ReactiveObject
         var filterSources = hidden is { Count: > 0 };
         // The stream's time range, resolved once for the pass (null for ordinary tabs and Live streams).
         var inRange = _file.Model.Stream?.CreateRangePredicate();
-        if (!rules.HasVisibilityRules && !filterLevels && !filterSources && inRange is null)
+        var inWindow = _file.Model.Stream is null ? _file.Model.CreateTimeWindowPredicate() : null;
+        if (
+            !rules.HasVisibilityRules
+            && !filterLevels
+            && !filterSources
+            && inRange is null
+            && inWindow is null
+        )
             return lines as IReadOnlyList<Line> ?? lines.ToList();
         var result = lines;
         if (inRange is not null)
             result = result.Where(inRange);
+        if (inWindow is not null)
+            result = result.Where(inWindow);
         if (filterSources)
             result = result.Where(line =>
                 line.SourceId is null || !hidden!.Contains(line.SourceId)

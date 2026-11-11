@@ -4,6 +4,12 @@ using HexTail.Tailing;
 
 namespace HexTail.Application;
 
+/// <summary>A file tab's histogram time window: rows outside it are hidden (session only, never saved).</summary>
+public readonly record struct TimeWindow(DateTimeOffset From, DateTimeOffset To);
+
+/// <summary>The range in place before the first histogram drag, restored by a double-click.</summary>
+public sealed record HistogramPrior(string From, string To, bool Live);
+
 public sealed class FileTabState : IAsyncDisposable
 {
     private IReadOnlyList<ViewRule>? _effectiveGlobal;
@@ -91,6 +97,18 @@ public sealed class FileTabState : IAsyncDisposable
                 Bookmarks.Add(index);
             BookmarksVersion++;
         }
+    }
+
+    public TimeWindow? TimeWindow { get; internal set; }
+    internal HistogramPrior? HistogramPrior { get; set; }
+
+    /// <summary>The time-window test for one filter pass, or null when no window is set.</summary>
+    internal Func<Line, bool>? CreateTimeWindowPredicate()
+    {
+        if (TimeWindow is not { } window)
+            return null;
+        var (from, to) = (window.From, window.To);
+        return line => line.Timestamp is not { } time || (time >= from && time <= to);
     }
 
     public AppTimeZoneMode ElasticInputZone { get; set; } = AppTimeZoneMode.Utc;
