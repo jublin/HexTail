@@ -99,8 +99,8 @@ public sealed class FileTabState : IAsyncDisposable
     public bool ElasticLoading { get; internal set; }
 
     /// <summary>
-    /// True for a file source until its initial read (or the reload after a reset) has delivered its lines
-    /// or found none. A stream merges a loading member's first lines by re-merging instead of adding them.
+    /// True for a file source until its initial read (or the reload after a reset) is complete, which its
+    /// tailer reports with a SourceLoaded event, whether it delivered lines or found none. A stream re-merges once when a member's load completes.
     /// </summary>
     internal bool FileLoading { get; set; }
 

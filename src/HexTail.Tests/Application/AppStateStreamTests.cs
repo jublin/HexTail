@@ -343,11 +343,12 @@ public sealed class AppStateStreamTests
                 )
             )
         );
+        Assert.True(h.Tailers.Publish(new SourceLoaded(a.Id)));
         h.State.DrainTailerEvents();
 
         AssertSortedAndOnTime(tab, "a1", "b2", "a3", "b4");
 
-        // The re-arm is consumed by that first delivery: later lines merge incrementally again.
+        // The re-arm is consumed by that load: later lines merge incrementally again.
         Assert.True(
             h.Tailers.Publish(new SourceLines(a.Id, [Stamped(a, "10:00:20", "a20", offset)]))
         );
@@ -1008,6 +1009,7 @@ public sealed class AppStateStreamTests
                 SourceId = a.Id,
             };
         Assert.True(h.Tailers.Publish(new SourceLines(a.Id, reload)));
+        Assert.True(h.Tailers.Publish(new SourceLoaded(a.Id)));
         h.State.DrainTailerEvents();
         h.State.DrainTailerEvents();
         h.Now += TimeSpan.FromSeconds(6);
@@ -1049,7 +1051,7 @@ public sealed class AppStateStreamTests
     }
 
     [Fact]
-    public async Task AFileMemberThatIsStillLoading_RebuildsTheStreamOnceWhenItsFirstLinesArrive()
+    public async Task AFileMemberThatIsStillLoading_RebuildsTheStreamOnceWhenItsLoadIsComplete()
     {
         await using var h = new Harness();
         var a = await h.OpenLoaded(h.Write("a.log", FirstLines), 2);
@@ -1071,6 +1073,7 @@ public sealed class AppStateStreamTests
                 )
             )
         );
+        Assert.True(h.Tailers.Publish(new SourceLoaded(c.Id)));
         h.State.DrainTailerEvents();
 
         AssertSortedAndOnTime(tab, "c0", "a1", "c2", "a3");
@@ -1113,10 +1116,91 @@ public sealed class AppStateStreamTests
                 )
             )
         );
+        Assert.True(h.Tailers.Publish(new SourceLoaded(c.Id)));
         h.State.DrainTailerEvents();
 
         Assert.Equal(4, tab.Buffer.Count);
         Assert.Equal(2, tab.SelectedLine);
         Assert.Null(tab.Stream.PendingSelection);
+    }
+
+    [Fact]
+    public async Task FileReloadArrivingInSeveralEventsAcrossDrains_IsMergedOnceItsLoadIsReported()
+    {
+        await using var h = new Harness();
+        var a = await h.OpenLoaded(h.Write("a.log", FirstLines), 2);
+        var b = await h.OpenLoaded(h.Write("b.log", SecondLines), 2);
+        await a.Tailer.DisposeAsync();
+        await b.Tailer.DisposeAsync();
+        var made = await h.State.CreateStreamAsync("Both", [a, b], Ct);
+        var tab = (await h.State.OpenStreamAsync(made.Id, Ct))!;
+        var offset = b.Buffer[0].Timestamp!.Value.Offset;
+        Assert.True(h.Tailers.Publish(new SourceReset(a.Id)));
+        h.State.DrainTailerEvents();
+        Assert.Equal(["b2", "b4"], Words(tab));
+
+        // The truncated file is read back in 1000-line events; each is drained on its own and time
+        // passes in between, all of it older than B's newest line.
+        Assert.True(
+            h.Tailers.Publish(new SourceLines(a.Id, [Stamped(a, "10:00:03", "a3", offset)]))
+        );
+        h.State.DrainTailerEvents();
+        h.Now += TimeSpan.FromSeconds(2);
+        Assert.True(
+            h.Tailers.Publish(new SourceLines(a.Id, [Stamped(a, "10:00:01", "a1", offset)]))
+        );
+        h.State.DrainTailerEvents();
+        h.Now += TimeSpan.FromSeconds(2);
+        Assert.True(
+            h.Tailers.Publish(new SourceLines(a.Id, [Stamped(a, "10:00:00", "a0", offset)]))
+        );
+        h.State.DrainTailerEvents();
+        Assert.True(h.Tailers.Publish(new SourceLoaded(a.Id)));
+        h.State.DrainTailerEvents();
+
+        AssertSortedAndOnTime(tab, "a0", "a1", "b2", "a3", "b4");
+
+        // Consumed by the load: later lines merge incrementally again.
+        Assert.True(
+            h.Tailers.Publish(new SourceLines(a.Id, [Stamped(a, "10:00:20", "a20", offset)]))
+        );
+        h.State.DrainTailerEvents();
+        Assert.False(tab.Stream!.NeedsRebuild);
+        Assert.False(tab.Stream.AnyMemberLoading);
+    }
+
+    [Fact]
+    public async Task AFileMemberWhoseLoadedEventNeverComes_StopsWaitingOnceItHasBeenQuietForTheHold()
+    {
+        await using var h = new Harness();
+        var a = await h.OpenLoaded(h.Write("a.log", FirstLines), 2);
+        var b = await h.OpenLoaded(h.Write("b.log", SecondLines), 2);
+        await a.Tailer.DisposeAsync();
+        await b.Tailer.DisposeAsync();
+        var made = await h.State.CreateStreamAsync("Both", [a, b], Ct);
+        var tab = (await h.State.OpenStreamAsync(made.Id, Ct))!;
+        var offset = b.Buffer[0].Timestamp!.Value.Offset;
+        Assert.True(h.Tailers.Publish(new SourceReset(a.Id)));
+        h.State.DrainTailerEvents();
+        Assert.True(
+            h.Tailers.Publish(
+                new SourceLines(
+                    a.Id,
+                    [Stamped(a, "10:00:01", "a1", offset), Stamped(a, "10:00:03", "a3", offset)]
+                )
+            )
+        );
+        h.State.DrainTailerEvents();
+        Assert.True(tab.Stream!.AnyMemberLoading);
+
+        // Within the hold it keeps waiting; afterwards the stream re-merges once and stops waiting.
+        h.Now += TimeSpan.FromSeconds(4);
+        h.State.DrainTailerEvents();
+        Assert.True(tab.Stream.AnyMemberLoading);
+        h.Now += TimeSpan.FromSeconds(2);
+        h.State.DrainTailerEvents();
+
+        Assert.False(tab.Stream.AnyMemberLoading);
+        AssertSortedAndOnTime(tab, "a1", "b2", "a3", "b4");
     }
 }

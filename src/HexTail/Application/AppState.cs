@@ -1762,17 +1762,12 @@ public sealed class AppState : IAsyncDisposable
                 if (tab is null)
                     return;
                 tab.Buffer.Append(lines);
-                // A batch split at MaxLinesPerDrain still has pieces to come: the member is not loaded yet.
-                var moreComing = _pendingBatch is { } pending && pending.SourceId == sourceId;
-                if (tab.FileLoading && !moreComing)
-                    tab.FileLoading = false;
                 // Feed every open stream that merges this member (a stream awaiting a rebuild re-reads
                 // the member buffers instead, so it skips the incremental add).
                 if (_memberStreams.TryGetValue(sourceId, out var streams))
                     foreach (var stream in streams)
                     {
-                        if (stream.NoteDelivery(sourceId, moreComing))
-                            stream.NeedsRebuild = true;
+                        stream.NoteDelivery(sourceId);
                         if (!stream.NeedsRebuild)
                             stream.Merger.Add(sourceId, lines);
                     }
@@ -1878,6 +1873,8 @@ public sealed class AppState : IAsyncDisposable
             {
                 var streamTab = _streamTabs[index];
                 var state = streamTab.Stream!;
+                if (state.ExpireStaleLoads())
+                    state.NeedsRebuild = true;
                 if (state.NeedsRebuild)
                 {
                     RebuildStream(streamTab);

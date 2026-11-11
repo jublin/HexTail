@@ -29,8 +29,18 @@ public sealed class StreamState
 
     // Members that are still loading (just opened, reset, or an Elastic range in flight): the lines they
     // deliver are merged by re-merging the stream once the load is complete, so a source that is still
-    // loading does not leave late rows behind. The value is true once a member delivered lines meanwhile.
-    private readonly Dictionary<string, bool> _loading = new(StringComparer.Ordinal);
+    // loading does not leave late rows behind. A member stays armed until its own loaded event (a file's
+    // SourceLoaded, an Elastic SourceRangeLoaded or SourceError), however many batches the load arrives in.
+    private readonly Dictionary<string, Load> _loading = new(StringComparer.Ordinal);
+
+    private struct Load
+    {
+        // Lines were delivered while loading and the stream has not re-merged them yet.
+        public bool Delivered;
+
+        // Clock ticks of the latest such delivery, for the file fallback in ExpireStaleLoads.
+        public long LastDelivery;
+    }
 
     internal StreamState(
         StreamSettings definition,
@@ -196,22 +206,40 @@ public sealed class StreamState
     internal IReadOnlyCollection<string> HiddenKeys => _hiddenKeys;
 
     /// <summary>
-    /// A loading member delivered lines. Returns true when the stream must re-merge now: a file member's
-    /// load is complete once the last piece of its batch is in (<paramref name="moreComing"/> is false); an
-    /// Elastic member keeps loading until its range-loaded event (<see cref="NoteLoaded"/>), because its
-    /// rows arrive as several pages. Until then the stream merges the lines as they come. Each arming is
-    /// consumed exactly once, so it re-arms only on a reset or a member change and never loops.
+    /// A loading member delivered lines. The stream keeps merging them as they come (nothing is hidden)
+    /// and re-merges once, when the member's loaded event arrives (<see cref="NoteLoaded"/>): a load can
+    /// span several batches and several drains, and rows older than what the other members already
+    /// released would otherwise be left late at the bottom. Each arming is consumed exactly once, so it
+    /// re-arms only on a reset or a member change and never loops.
     /// </summary>
-    internal bool NoteDelivery(string memberId, bool moreComing)
+    internal void NoteDelivery(string memberId)
     {
-        if (_loading.Count == 0 || !_loading.ContainsKey(memberId))
+        if (_loading.Count == 0 || !_loading.TryGetValue(memberId, out var load))
+            return;
+        load.Delivered = true;
+        load.LastDelivery = _clock().UtcTicks;
+        _loading[memberId] = load;
+    }
+
+    /// <summary>
+    /// Failsafe for a file member whose loaded event never comes: once it has delivered lines and then
+    /// been quiet for longer than the hold, it stops waiting, and the stream re-merges (returns true).
+    /// Elastic members wait for their range-loaded event or error, which the tailer always sends, and a
+    /// member that delivered nothing is not touched.
+    /// </summary>
+    internal bool ExpireStaleLoads()
+    {
+        if (_loading.Count == 0)
             return false;
-        if (moreComing || IsElastic(memberId))
-        {
-            _loading[memberId] = true;
+        List<string>? stale = null;
+        var now = _clock().UtcTicks;
+        foreach (var (id, load) in _loading)
+            if (load.Delivered && now - load.LastDelivery > _hold.Ticks && !IsElastic(id))
+                (stale ??= []).Add(id);
+        if (stale is null)
             return false;
-        }
-        _loading.Remove(memberId);
+        foreach (var id in stale)
+            _loading.Remove(id);
         return true;
     }
 
@@ -222,7 +250,7 @@ public sealed class StreamState
     /// ordinary incremental add.
     /// </summary>
     internal bool NoteLoaded(string memberId) =>
-        _loading.Remove(memberId, out var delivered) && delivered;
+        _loading.Remove(memberId, out var load) && load.Delivered;
 
     /// <summary>True while any member of this stream is still loading.</summary>
     internal bool AnyMemberLoading => _loading.Count > 0;
@@ -245,7 +273,7 @@ public sealed class StreamState
     internal void AwaitReload(string memberId)
     {
         if (_snapshot.MemberIds.Contains(memberId))
-            _loading[memberId] = false;
+            _loading[memberId] = default;
     }
 
     /// <summary>The key of the open member behind a tab id, or null.</summary>
@@ -297,7 +325,7 @@ public sealed class StreamState
         _loading.Clear();
         foreach (var tab in tabs)
             if (tab.IsLoading)
-                _loading[tab.Id] = false;
+                _loading[tab.Id] = default;
         _hiddenKeys.IntersectWith(definition.Members.Select(member => member.Key));
         _snapshot = new Snapshot(ids, keys, tabs, missing, HiddenIdsFor(ids, keys));
         Merger = new StreamMerger(ids, _hold, _clock);
