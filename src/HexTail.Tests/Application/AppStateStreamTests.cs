@@ -155,6 +155,24 @@ public sealed class AppStateStreamTests
     }
 
     [Fact]
+    public async Task Dispose_ReleasesOpenStreamTabs()
+    {
+        await using var h = new Harness();
+        var a = await h.OpenLoaded(h.Write("a.log", FirstLines), 2);
+        var b = await h.OpenLoaded(h.Write("b.log", SecondLines), 2);
+        var made = await h.State.CreateStreamAsync("S", [a, b], Ct);
+        var open = (await h.State.OpenStreamAsync(made.Id, Ct))!;
+        await Until(h.State, () => open.Buffer.Count >= 1);
+        open.ToggleBookmarkAt(0);
+
+        await h.State.DisposeAsync();
+        open.Buffer.Clear();
+
+        // A disposed tab no longer follows its buffer, so clearing it leaves the bookmark alone.
+        Assert.Contains(0, open.Bookmarks);
+    }
+
+    [Fact]
     public async Task OpenStream_ShowsBothFilesInTimestampOrder_AndSelectsTheStreamTab()
     {
         await using var h = new Harness();
