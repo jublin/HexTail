@@ -44,6 +44,11 @@ flowchart LR
 6. Virtualized `ListBox` controls render only the visible log rows, and a
    structured source's cells are computed only for those rows; the inspector's context list shows a small window of rows.
    Closing the window saves state and disposes the tailers.
+7. A merged stream is a tab with no tailer of its own. `AppState.DrainTailerEvents`
+   routes each member's drained lines to every open stream that merges that
+   member: `StreamMerger` releases them in timestamp order and the released
+   lines are appended to the stream tab's `FileBuffer`, from which the views,
+   filters and inspector work as for any other source (see below).
 
 ## Component map
 
@@ -52,11 +57,12 @@ flowchart LR
 | Application shell | `src/HexTail/MainWindow.axaml` | Commands, tabs, search controls, follow toggle, inspector and settings panes; the Elastic setup page is shown in the workspace area while open |
 | State | `src/HexTail/Application/AppState.cs` | Open files, selected file, settings, searches, persistence coordination |
 | File state | `src/HexTail/Application/FileTabState.cs` | One file buffer, derived views, follow state, selected line (`SelectedLine`), bookmarks (`Bookmarks`), the source's optional `ColumnLayout` |
+| Streams | `src/HexTail/Application/StreamState.cs`, `src/HexTail/Domain/StreamMerger.cs` | `StreamState`: a stream's definition, its merger, which members are open or missing, hidden sources and time range. `StreamMerger`: the pure watermark merge |
 | Columns | `src/HexTail/Application/ColumnLayout.cs` | `ColumnLayout` (columns, widths, composed rows, time display), per-source defaults and `MessageField` |
 | Domain | `src/HexTail/Domain/` | Lines, bounded buffers, parsers, `TimestampDetector` and `TimestampingParser`, search compilation, highlight ranges |
 | Tailing | `src/HexTail/Tailing/` | Background file monitoring and resilient tail events |
 | Views | `src/HexTail/Views/` | Native Avalonia log rows, search tabs, inspector panel, `ColumnHeaderBar` (column titles, resize handles, Columns menu), settings controls (Appearance and Limits only), and `ElasticSetupPage`, the five-step Elastic setup page shown in the workspace area while the sidebar and status bar stay |
-| View models | `src/HexTail/ViewModels/` | Window, settings and per-view state; `InspectorViewModel` owns the inspector (open state, width, fields, context list) and toggles bookmarks on the selected row; `ColumnHeaderViewModel` backs the column header and menu and `LogLineViewModel` builds a row's cells; `ElasticSetupViewModel` drives the Elastic setup flow (see below) |
+| View models | `src/HexTail/ViewModels/` | Window, settings and per-view state; `StreamEditorViewModel` is the sidebar's create/edit stream editor and `SourceChipViewModel` a per-source toggle in a stream's filter bar; `InspectorViewModel` owns the inspector (open state, width, fields, context list) and toggles bookmarks on the selected row; `ColumnHeaderViewModel` backs the column header and menu and `LogLineViewModel` builds a row's cells; `ElasticSetupViewModel` drives the Elastic setup flow (see below) |
 | Elastic | `src/HexTail/Elastic/` | Kibana and Elasticsearch clients (`IElasticApiClient`), tailer, health monitor, and the setup helpers `CloudId`, `Rison` and `DiscoverUrlImport` |
 | Persistence | `src/HexTail/Persistence/` | Atomic JSON session load/save and persisted configuration types |
 | Tests | `src/HexTail.Tests/` | Domain, tailing, persistence, view-model, and headless UI coverage |
@@ -87,6 +93,34 @@ flowchart LR
   realized; `ColumnHeaderViewModel` and `ColumnHeaderBar` drive the header,
   resize drags and the Columns menu, and the inspector's field menu can add a
   column.
+- Every `Line` carries an optional `SourceId` (the file tab or Elastic source it
+  came from): `TimestampingParser` stamps it for files and `ElasticTailer` for
+  Elastic hits. Nothing but merged streams reads it.
+- A stream (`StreamSettings`: id, name, ordered members keyed `file:{path}` or
+  `elastic:{source id}`, each with a colour) is a `FileTabState` whose
+  `LogSourceKind` is `Stream`, with a `NullTailer` and a `StreamState`. Its
+  members are the tabs that are open; the rest are listed as missing.
+  `StreamMerger` is a pure, single-threaded watermark merge: each member has a
+  FIFO queue, and a line is released when its timestamp is at or below the
+  smallest newest timestamp of the members that delivered recently, or when it
+  has waited longer than the 5 s hold (`StreamMerger.DefaultHold`). Release order is
+  (timestamp, member order, arrival). A line released older than one already
+  released goes into the merger's late set (`IsLate`), which the views read
+  for the clock marker, the Time-cell tooltip and the inspector's Source line.
+  A line without a timestamp takes its member's previous key. AppState's lock
+  guards every merger call. A member's `SourceReset` (truncation, rotation,
+  Elastic reload or range change) flags its streams for rebuild: the stream
+  buffer is cleared and every member's current buffer is merged again, which
+  also clears the stream's selection and bookmarks.
+- A stream renders as columns (`ColumnLayout.DefaultFor` gives Time | Source |
+  Level | Message) and has its own rules, level mask, searches and column
+  layout. Per-source hide toggles and the time range live on `StreamState`;
+  `AppState.SetStreamTimeRange` forwards the range to each open Elastic member
+  (`SetElasticTimeRange`) and filters file members' rows by timestamp in the
+  stream's view (rows without a timestamp and Elastic rows always pass).
+- Stream definitions persist as `AppConfig.Streams`, open streams as
+  `AppConfig.OpenStreams` (`PersistedStreamTab`: hidden sources and range) with
+  `SelectedStreamId`; streams are restored after the files and Elastic sources.
 - Search results are buffer-relative. When old lines roll out, result indices
   are rebased with the buffer.
 - Filter rules (`ViewRule`) have an action (highlight, show only, hide) and a
