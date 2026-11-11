@@ -27,9 +27,10 @@ public sealed class StreamState
     );
     private Snapshot _snapshot = Snapshot.Empty;
 
-    // Members that had no lines when the member set was last fixed: their first delivery re-merges the
-    // stream from the member buffers, so a source that is still loading does not leave late rows behind.
-    private readonly HashSet<string> _awaitingFirstLines = new(StringComparer.Ordinal);
+    // Members that are still loading (just opened, reset, or an Elastic range in flight): the lines they
+    // deliver are merged by re-merging the stream once the load is complete, so a source that is still
+    // loading does not leave late rows behind. The value is true once a member delivered lines meanwhile.
+    private readonly Dictionary<string, bool> _loading = new(StringComparer.Ordinal);
 
     internal StreamState(
         StreamSettings definition,
@@ -195,22 +196,56 @@ public sealed class StreamState
     internal IReadOnlyCollection<string> HiddenKeys => _hiddenKeys;
 
     /// <summary>
-    /// A member delivered lines. Returns true the first time for a member that was still empty when the
-    /// member set was fixed: the caller then re-merges the stream instead of adding incrementally.
+    /// A loading member delivered lines. Returns true when the stream must re-merge now: a file member's
+    /// load is complete once the last piece of its batch is in (<paramref name="moreComing"/> is false); an
+    /// Elastic member keeps loading until its range-loaded event (<see cref="NoteLoaded"/>), because its
+    /// rows arrive as several pages. Until then the stream merges the lines as they come. Each arming is
+    /// consumed exactly once, so it re-arms only on a reset or a member change and never loops.
     /// </summary>
-    internal bool NoteDelivery(string memberId) =>
-        _awaitingFirstLines.Count > 0 && _awaitingFirstLines.Remove(memberId);
+    internal bool NoteDelivery(string memberId, bool moreComing)
+    {
+        if (_loading.Count == 0 || !_loading.ContainsKey(memberId))
+            return false;
+        if (moreComing || IsElastic(memberId))
+        {
+            _loading[memberId] = true;
+            return false;
+        }
+        _loading.Remove(memberId);
+        return true;
+    }
 
     /// <summary>
-    /// A member was reset (its buffer cleared) and reloads asynchronously: its next delivery must re-merge
-    /// the stream, because the rebuild that follows the reset runs while the member is still empty and
-    /// releases the other members' lines past the ones about to be reloaded. Consumed by
-    /// <see cref="NoteDelivery"/>, so it re-arms only on a reset and never loops.
+    /// A loading member finished loading (a file's initial read or reload, an Elastic range or its error).
+    /// Returns true when the member delivered lines while loading, which the stream has not re-merged yet.
+    /// A member that loaded nothing is simply quiet: nothing to re-merge, and its first line later is an
+    /// ordinary incremental add.
     /// </summary>
-    internal void AwaitFirstLines(string memberId)
+    internal bool NoteLoaded(string memberId) =>
+        _loading.Remove(memberId, out var delivered) && delivered;
+
+    /// <summary>True while any member of this stream is still loading.</summary>
+    internal bool AnyMemberLoading => _loading.Count > 0;
+
+    /// <summary>
+    /// The row to select once the stream has settled after a restore (every member loaded and the stream
+    /// re-merged), because each rebuild clears the selection. Applied once; see AppState.
+    /// </summary>
+    internal int? PendingSelection { get; set; }
+
+    private bool IsElastic(string memberId) =>
+        _everSeen.TryGetValue(memberId, out var seen)
+        && seen.Tab?.Source.Kind == LogSourceKind.Elastic;
+
+    /// <summary>
+    /// A member was reset (its buffer cleared) and reloads asynchronously: the rebuild that follows the
+    /// reset runs while the member is still empty and releases the other members' lines past the ones about
+    /// to be reloaded, so the stream re-merges once the reload is in. Re-arms only on a reset.
+    /// </summary>
+    internal void AwaitReload(string memberId)
     {
         if (_snapshot.MemberIds.Contains(memberId))
-            _awaitingFirstLines.Add(memberId);
+            _loading[memberId] = false;
     }
 
     /// <summary>The key of the open member behind a tab id, or null.</summary>
@@ -257,10 +292,12 @@ public sealed class StreamState
                 missing.Add(member.Key);
         }
         _everSeen = seen;
-        _awaitingFirstLines.Clear();
+        // Only members that are loading are armed; a member that is simply quiet is not, so its first
+        // line much later does not rebuild the stream (which would clear selection, bookmarks, late marks).
+        _loading.Clear();
         foreach (var tab in tabs)
-            if (tab.Buffer.Count == 0)
-                _awaitingFirstLines.Add(tab.Id);
+            if (tab.IsLoading)
+                _loading[tab.Id] = false;
         _hiddenKeys.IntersectWith(definition.Members.Select(member => member.Key));
         _snapshot = new Snapshot(ids, keys, tabs, missing, HiddenIdsFor(ids, keys));
         Merger = new StreamMerger(ids, _hold, _clock);

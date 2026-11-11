@@ -215,12 +215,12 @@
                     </Grid>
                     <Button
                       x:Name="ClearStreamRangeButton"
-                      Content="Live (no time filter)"
+                      Content="Show all rows"
                       HorizontalAlignment="Stretch"
                       IsVisible="{Binding IsStreamSelected}"
                       Command="{Binding ClearStreamRangeCommand}"
                       ToolTip.Tip="Show every row of the stream's file sources again"
-                      AutomationProperties.Name="Live (no time filter)"
+                      AutomationProperties.Name="Show all rows"
                     />
                   </StackPanel>
                 </Flyout>

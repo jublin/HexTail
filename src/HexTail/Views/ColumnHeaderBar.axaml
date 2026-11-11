@@ -115,6 +115,7 @@
                 x:Name="ComposedRowsToggle"
                 Content="Composed row"
                 IsChecked="{Binding ComposedRows, Mode=TwoWay}"
+                IsVisible="{Binding ComposedRowsAvailable}"
                 AutomationProperties.Name="Composed row"
               />
               <TextBlock Classes="sidebar-heading" Text="TIME" />

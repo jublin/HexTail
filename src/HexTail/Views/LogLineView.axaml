@@ -114,6 +114,7 @@
       IsVisible="{Binding IsStreamRow}"
       IsHitTestVisible="False"
     />
+    <!-- Not hit-testable, so a click on it still selects the row; the message shows in the row's Time cell tooltip and the inspector. -->
     <ic:Icon
       x:Name="LateMarker"
       Value="mdi-clock-alert-outline"
@@ -125,7 +126,6 @@
       Foreground="{DynamicResource MutedBrush}"
       IsVisible="{Binding IsLate}"
       IsHitTestVisible="False"
-      ToolTip.Tip="{Binding LateToolTip}"
       AutomationProperties.Name="{Binding LateToolTip}"
     />
   </Grid>

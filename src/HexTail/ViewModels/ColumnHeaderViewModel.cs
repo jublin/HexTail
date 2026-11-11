@@ -148,12 +148,18 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
 
     public bool HasError => !string.IsNullOrWhiteSpace(_error);
 
+    /// <summary>
+    /// False for a stream, which always renders columns: the Source cell is what tells the members
+    /// apart by text. A composed layout saved for a stream is ignored, and the option is not offered.
+    /// </summary>
+    public bool ComposedRowsAvailable => _owner.File.Stream is null;
+
     public bool ComposedRows
     {
-        get => CurrentLayout().ComposedRows;
+        get => ComposedRowsAvailable && CurrentLayout().ComposedRows;
         set
         {
-            if (CurrentLayout().ComposedRows == value)
+            if (!ComposedRowsAvailable || CurrentLayout().ComposedRows == value)
                 return;
             _ = ApplyAsync(layout => layout with { ComposedRows = value });
         }
@@ -228,7 +234,7 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
             var layoutChanged = !ReferenceEquals(layout, _lastLayout);
             _lastLayout = layout;
             _isStructured = structured;
-            var visible = structured && !layout.ComposedRows;
+            var visible = structured && !(ComposedRowsAvailable && layout.ComposedRows);
             if (visible != _isVisible)
             {
                 _isVisible = visible;
@@ -358,7 +364,9 @@ internal sealed class ColumnHeaderViewModel : ReactiveObject
         );
 
     internal Task ToggleComposedAsync() =>
-        ApplyAsync(layout => layout with { ComposedRows = !layout.ComposedRows });
+        ComposedRowsAvailable
+            ? ApplyAsync(layout => layout with { ComposedRows = !layout.ComposedRows })
+            : Task.CompletedTask;
 
     private Task ResetAsync() =>
         ApplyAsync(layout =>

@@ -163,7 +163,9 @@ internal sealed class LogLineViewModel : ReactiveObject
         var settings = _owner.Settings;
         var rules = _file.Model.EffectiveRules(settings);
         var layout = _owner.Layout;
-        var usesColumns = _file.Model.IsStructured && !layout.ComposedRows;
+        // A stream always renders columns, whatever composed layout was saved for it.
+        var usesColumns =
+            _file.Model.IsStructured && (_file.Model.Stream is not null || !layout.ComposedRows);
         ParsedFieldsText = Line.ParsedFields is { Count: > 0 }
             ? string.Join("  ", Line.ParsedFields.Select(field => $"{field.Key}={field.Value}"))
             : string.Empty;

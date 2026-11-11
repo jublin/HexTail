@@ -182,7 +182,7 @@ public sealed class StreamRenderingTests
     }
 
     [AvaloniaFact]
-    public async Task StreamRows_CarryAStripeInTheMemberColour_InColumnAndComposedModes()
+    public async Task StreamRows_CarryAStripeInTheMemberColour_AndStayColumnsEvenWithAComposedLayoutSaved()
     {
         await using var h = await Harness.CreateAsync(structured: true);
         var first = Assert.IsAssignableFrom<ISolidColorBrush>(h.Row(0).StripeBrush);
@@ -203,11 +203,29 @@ public sealed class StreamRenderingTests
         );
         h.View.Sync();
 
-        var composed = h.Row(1);
-        Assert.False(composed.UsesColumns);
-        Assert.True(composed.IsStreamRow);
-        Assert.Equal(Color.Parse(h.ColorOf(h.B)), ((ISolidColorBrush)composed.StripeBrush!).Color);
-        Assert.Equal(h.B.DisplayName, composed.SourceName);
+        // A saved composed layout is ignored for a stream: it always renders columns, with the stripe.
+        var row = h.Row(1);
+        Assert.True(row.UsesColumns);
+        Assert.True(row.IsStreamRow);
+        Assert.Equal(Color.Parse(h.ColorOf(h.B)), ((ISolidColorBrush)row.StripeBrush!).Color);
+        Assert.Equal(h.B.DisplayName, row.SourceName);
+        Assert.Equal(h.B.DisplayName, row.Cells.Single(c => c.Key == "@source").Text);
+        Assert.True(h.View.ColumnHeader.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task ComposedRows_IsNotOfferedForAStream_NeitherInTheMenuNorInThePalette()
+    {
+        await using var h = await Harness.CreateAsync(structured: true);
+
+        Assert.False(h.View.ColumnHeader.ComposedRowsAvailable);
+        await h.View.ColumnHeader.ToggleComposedAsync();
+        h.View.Sync();
+        Assert.False(h.View.Layout.ComposedRows);
+        Assert.True(h.Row(0).UsesColumns);
+        var titles = h.Workspace.BuildPaletteItems().Select(item => item.Title).ToList();
+        Assert.DoesNotContain("Toggle composed rows", titles);
+        Assert.Contains("Reset columns", titles);
     }
 
     [AvaloniaFact]
@@ -298,9 +316,11 @@ public sealed class StreamRenderingTests
         Assert.False(RowView(0).FindControl<Control>("LateMarker")!.IsVisible);
         var marker = RowView(4).FindControl<Control>("LateMarker")!;
         await UiWait.Until(() => marker.IsVisible);
-        Assert.Equal($"Arrived late from {h.A.DisplayName}", ToolTip.GetTip(marker));
         Assert.Contains("Arrived late", AutomationProperties.GetName(marker));
+        // The icon never takes the pointer (rows stay clickable), so it carries no tooltip of its own: the
+        // message is on the row's Time cell and in the inspector.
         Assert.False(marker.IsHitTestVisible);
+        Assert.Null(ToolTip.GetTip(marker));
     }
 
     [AvaloniaFact]

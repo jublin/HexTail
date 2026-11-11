@@ -359,14 +359,14 @@ public sealed class AppStateStreamTests
         Assert.False(tab.Stream!.NeedsRebuild);
     }
 
-    [Fact]
-    public async Task ElasticMemberRangeChangedToAnEarlierWindow_LeavesTheStreamSortedWithNoLateRows()
+    // A file member (b.log) and an Elastic member (s1) whose own tailers are stopped, so the tests feed
+    // their events by hand.
+    private static async Task<(
+        FileTabState File,
+        FileTabState Elastic,
+        TimeSpan Offset
+    )> OpenFileAndElastic(Harness h)
     {
-        var client = new FakeElasticApiClient
-        {
-            SearchHandler = _ => Task.FromResult(new ElasticSearchPage("pit", [])),
-        };
-        await using var h = new Harness(elastic: client);
         await h.State.UpdateSettingsAsync(
             new AppSettings
             {
@@ -410,17 +410,41 @@ public sealed class AppStateStreamTests
         );
         await file.Tailer.DisposeAsync();
         await elastic.Tailer.DisposeAsync();
-        var tailer = (ElasticTailer)elastic.Tailer;
         // File lines are read in the session's naive zone; give the Elastic rows the same offset.
-        var offset = file.Buffer[0].Timestamp!.Value.Offset;
+        return (file, elastic, file.Buffer[0].Timestamp!.Value.Offset);
+    }
+
+    private static SourceLines ElasticPage(FileTabState elastic, params Line[] lines)
+    {
+        var tailer = (ElasticTailer)elastic.Tailer;
+        return new SourceLines(elastic.Id, lines)
+        {
+            Generation = tailer.Generation,
+            InstanceId = tailer.InstanceId,
+        };
+    }
+
+    private static SourceRangeLoaded ElasticLoaded(FileTabState elastic)
+    {
+        var tailer = (ElasticTailer)elastic.Tailer;
+        var now = DateTimeOffset.UtcNow;
+        return new SourceRangeLoaded(elastic.Id, now.AddHours(-1), now, false, true)
+        {
+            Generation = tailer.Generation,
+            InstanceId = tailer.InstanceId,
+        };
+    }
+
+    [Fact]
+    public async Task ElasticMemberRangeChangedToAnEarlierWindow_LeavesTheStreamSortedWithNoLateRows()
+    {
+        await using var h = new Harness(elastic: EmptyElasticClient());
+        var (file, elastic, offset) = await OpenFileAndElastic(h);
         Line Row(string time, string word) => Stamped(elastic, time, word, offset);
-        SourceLines Page(params Line[] lines) =>
-            new(elastic.Id, lines)
-            {
-                Generation = tailer.Generation,
-                InstanceId = tailer.InstanceId,
-            };
-        Assert.True(h.Tailers.Publish(Page(Row("10:00:05", "e5"), Row("10:00:06", "e6"))));
+        Assert.True(
+            h.Tailers.Publish(ElasticPage(elastic, Row("10:00:05", "e5"), Row("10:00:06", "e6")))
+        );
+        Assert.True(h.Tailers.Publish(ElasticLoaded(elastic)));
         h.State.DrainTailerEvents();
         var made = await h.State.CreateStreamAsync("Mixed", [file, elastic], Ct);
         var tab = (await h.State.OpenStreamAsync(made.Id, Ct))!;
@@ -430,11 +454,49 @@ public sealed class AppStateStreamTests
         h.State.SetElasticTimeRange(elastic, "now-2h", "now-1h");
         h.State.DrainTailerEvents();
         Assert.Equal(["b2", "b4"], Words(tab));
-        Assert.True(h.Tailers.Publish(Page(Row("10:00:01", "e1"), Row("10:00:03", "e3"))));
+        Assert.True(
+            h.Tailers.Publish(ElasticPage(elastic, Row("10:00:01", "e1"), Row("10:00:03", "e3")))
+        );
+        Assert.True(h.Tailers.Publish(ElasticLoaded(elastic)));
         h.State.DrainTailerEvents();
 
         AssertSortedAndOnTime(tab, "e1", "b2", "e3", "b4");
     }
+
+    [Fact]
+    public async Task ElasticReloadArrivingInSeveralPages_IsMergedOnceItsRangeIsLoaded()
+    {
+        await using var h = new Harness(elastic: EmptyElasticClient());
+        var (file, elastic, offset) = await OpenFileAndElastic(h);
+        Line Row(string time, string word) => Stamped(elastic, time, word, offset);
+        Assert.True(h.Tailers.Publish(ElasticPage(elastic, Row("10:00:05", "e5"))));
+        Assert.True(h.Tailers.Publish(ElasticLoaded(elastic)));
+        h.State.DrainTailerEvents();
+        var made = await h.State.CreateStreamAsync("Mixed", [file, elastic], Ct);
+        var tab = (await h.State.OpenStreamAsync(made.Id, Ct))!;
+        h.State.SetElasticTimeRange(elastic, "now-2h", "now-1h");
+        h.State.DrainTailerEvents();
+
+        // The first page is drained on its own and the stream is left to settle; the second page is
+        // older still and only the range-loaded event says the reload is complete.
+        Assert.True(h.Tailers.Publish(ElasticPage(elastic, Row("10:00:03", "e3"))));
+        h.State.DrainTailerEvents();
+        h.Now += TimeSpan.FromSeconds(6);
+        h.State.DrainTailerEvents();
+        Assert.True(h.Tailers.Publish(ElasticPage(elastic, Row("10:00:01", "e1"))));
+        Assert.True(h.Tailers.Publish(ElasticLoaded(elastic)));
+        h.State.DrainTailerEvents();
+
+        AssertSortedAndOnTime(tab, "e1", "b2", "e3", "b4");
+
+        // Consumed by the load: later rows merge incrementally again.
+        Assert.True(h.Tailers.Publish(ElasticPage(elastic, Row("10:00:20", "e20"))));
+        h.State.DrainTailerEvents();
+        Assert.False(tab.Stream!.NeedsRebuild);
+    }
+
+    private static FakeElasticApiClient EmptyElasticClient() =>
+        new() { SearchHandler = _ => Task.FromResult(new ElasticSearchPage("pit", [])) };
 
     [Fact]
     public async Task OpeningAnOpenStream_DoesNotReopenMembersTheUserClosed()
@@ -480,6 +542,9 @@ public sealed class AppStateStreamTests
         try
         {
             await restored.RestoreAsync(Ct);
+            // The restored members load and the stream settles before the selection is expected back.
+            await Until(restored, () => restored.SelectedFile!.Buffer.Count == 4);
+            await Until(restored, () => restored.SelectedFile!.SelectedLine == 2);
 
             Assert.Equal(2, restored.SelectedFile!.SelectedLine);
         }
@@ -912,5 +977,146 @@ public sealed class AppStateStreamTests
         await h.State.OpenStreamAsync(made.Id, Ct);
 
         Assert.False(h.State.DrainTailerEvents());
+    }
+
+    [Fact]
+    public async Task MemberReloadSplitAcrossDrains_StaysSortedWithNoLateRows()
+    {
+        await using var h = new Harness();
+        var a = await h.OpenLoaded(h.Write("a.log", FirstLines), 2);
+        var b = await h.OpenLoaded(h.Write("b.log", SecondLines), 2);
+        await a.Tailer.DisposeAsync();
+        await b.Tailer.DisposeAsync();
+        var made = await h.State.CreateStreamAsync("Both", [a, b], Ct);
+        var tab = (await h.State.OpenStreamAsync(made.Id, Ct))!;
+        var offset = b.Buffer[0].Timestamp!.Value.Offset;
+        Assert.True(h.Tailers.Publish(new SourceReset(a.Id)));
+        h.State.DrainTailerEvents();
+
+        // One line from B, then A's whole reload as one batch that does not fit into one drain.
+        Assert.True(
+            h.Tailers.Publish(new SourceLines(b.Id, [Stamped(b, "10:00:30", "b30", offset)]))
+        );
+        var reload = new Line[AppState.MaxLinesPerDrain];
+        for (var i = 0; i < reload.Length; i++)
+            reload[i] = new Line($"x {i:D5}")
+            {
+                Timestamp = new DateTimeOffset(
+                    new DateTime(2026, 1, 1, 10, 0, 5).AddTicks(i * 100),
+                    offset
+                ),
+                SourceId = a.Id,
+            };
+        Assert.True(h.Tailers.Publish(new SourceLines(a.Id, reload)));
+        h.State.DrainTailerEvents();
+        h.State.DrainTailerEvents();
+        h.Now += TimeSpan.FromSeconds(6);
+        h.State.DrainTailerEvents();
+
+        Assert.Equal(AppState.MaxLinesPerDrain + 3, tab.Buffer.Count);
+        Assert.DoesNotContain(tab.Buffer.Lines, line => tab.Stream!.IsLate(line));
+        Assert.Equal(
+            tab.Buffer.Lines.OrderBy(line => line.Timestamp).Select(line => line.Raw),
+            tab.Buffer.Lines.Select(line => line.Raw)
+        );
+    }
+
+    [Fact]
+    public async Task FirstLineOfAMemberThatWasQuiet_KeepsTheStreamsBookmarksAndSelection()
+    {
+        await using var h = new Harness();
+        var a = await h.OpenLoaded(h.Write("a.log", FirstLines), 2);
+        var c = await h.State.OpenFileAsync(h.Write("c.log"), cancellationToken: Ct);
+        // The quiet file's initial read is finished (it found nothing) before the stream is built.
+        await Until(h.State, () => !c.IsLoading);
+        await a.Tailer.DisposeAsync();
+        await c.Tailer.DisposeAsync();
+        var made = await h.State.CreateStreamAsync("Both", [a, c], Ct);
+        var tab = (await h.State.OpenStreamAsync(made.Id, Ct))!;
+        Assert.Equal(2, tab.Buffer.Count);
+        tab.ToggleBookmarkAt(0);
+        tab.SelectedLine = 1;
+        var offset = a.Buffer[0].Timestamp!.Value.Offset;
+
+        Assert.True(
+            h.Tailers.Publish(new SourceLines(c.Id, [Stamped(c, "10:00:09", "c9", offset)]))
+        );
+        h.State.DrainTailerEvents();
+
+        Assert.Single(tab.Bookmarks);
+        Assert.Equal(1, tab.SelectedLine);
+        Assert.False(tab.Stream!.NeedsRebuild);
+    }
+
+    [Fact]
+    public async Task AFileMemberThatIsStillLoading_RebuildsTheStreamOnceWhenItsFirstLinesArrive()
+    {
+        await using var h = new Harness();
+        var a = await h.OpenLoaded(h.Write("a.log", FirstLines), 2);
+        var c = await h.State.OpenFileAsync(h.Write("c.log"), cancellationToken: Ct);
+        await a.Tailer.DisposeAsync();
+        await c.Tailer.DisposeAsync();
+        // Drop whatever the real tailer already queued: the load is fed by hand below.
+        while (h.Tailers.Events.TryRead(out _)) { }
+        Assert.True(c.IsLoading);
+        var made = await h.State.CreateStreamAsync("Both", [a, c], Ct);
+        var tab = (await h.State.OpenStreamAsync(made.Id, Ct))!;
+        var offset = a.Buffer[0].Timestamp!.Value.Offset;
+
+        Assert.True(
+            h.Tailers.Publish(
+                new SourceLines(
+                    c.Id,
+                    [Stamped(c, "10:00:00", "c0", offset), Stamped(c, "10:00:02", "c2", offset)]
+                )
+            )
+        );
+        h.State.DrainTailerEvents();
+
+        AssertSortedAndOnTime(tab, "c0", "a1", "c2", "a3");
+        Assert.False(c.IsLoading);
+    }
+
+    [Fact]
+    public async Task AQuietFileMemberWhoseInitialReadFinishedEmpty_IsNoLongerLoading()
+    {
+        await using var h = new Harness();
+        var c = await h.State.OpenFileAsync(h.Write("c.log"), cancellationToken: Ct);
+
+        await Until(h.State, () => !c.IsLoading);
+
+        Assert.Empty(c.Buffer.Lines);
+    }
+
+    [Fact]
+    public async Task ARestoredSelection_IsAppliedOnceTheLoadingMembersHaveSettledTheStream()
+    {
+        await using var h = new Harness();
+        var a = await h.OpenLoaded(h.Write("a.log", FirstLines), 2);
+        var c = await h.State.OpenFileAsync(h.Write("c.log"), cancellationToken: Ct);
+        await a.Tailer.DisposeAsync();
+        await c.Tailer.DisposeAsync();
+        while (h.Tailers.Events.TryRead(out _)) { }
+        var made = await h.State.CreateStreamAsync("Both", [a, c], Ct);
+        var tab = (await h.State.OpenStreamAsync(made.Id, Ct))!;
+        // What restoring a saved session does: the row waits for the members to load.
+        tab.Stream!.PendingSelection = 2;
+        h.State.DrainTailerEvents();
+        Assert.Null(tab.SelectedLine);
+        var offset = a.Buffer[0].Timestamp!.Value.Offset;
+
+        Assert.True(
+            h.Tailers.Publish(
+                new SourceLines(
+                    c.Id,
+                    [Stamped(c, "10:00:00", "c0", offset), Stamped(c, "10:00:02", "c2", offset)]
+                )
+            )
+        );
+        h.State.DrainTailerEvents();
+
+        Assert.Equal(4, tab.Buffer.Count);
+        Assert.Equal(2, tab.SelectedLine);
+        Assert.Null(tab.Stream.PendingSelection);
     }
 }

@@ -226,7 +226,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<Unit, Unit> ApplyElasticTimeRangeCommand { get; }
     public ReactiveCommand<string, Unit> ApplyRangePresetCommand { get; }
 
-    /// <summary>Stream tabs only: back to Live, which removes the time filter from the stream's file rows.</summary>
+    /// <summary>Stream tabs only: Show all rows, which removes the time filter from the stream's file rows.</summary>
     public ReactiveCommand<Unit, Unit> ClearStreamRangeCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> CloseFileCommand { get; }
     public ReactiveCommand<LogViewViewModel, Unit> RemoveSearchCommand { get; }
@@ -376,7 +376,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public string ElasticRangePill =>
         SelectedFile?.Model is not { } tab ? string.Empty
         : tab.Stream is { } stream
-            ? stream.Live ? "Live · all rows"
+            ? stream.Live ? "All rows (no file filter)"
                 : $"{TimeRangeLabel.Describe(stream.RangeFrom, stream.RangeTo, DisplayZone)} · {(stream.OpenElasticMemberCount > 0 ? "all sources" : "files only")}"
         : !IsElasticSelected ? string.Empty
         : $"{TimeRangeLabel.Describe(tab.ElasticFrom, tab.ElasticTo, DisplayZone)} · {RangeState(tab)}";
@@ -413,7 +413,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             return "Filters rows from files; no Elastic sources in this stream";
         var sources = elastic == 1 ? "1 Elastic source" : $"{elastic} Elastic sources";
         return stream.Live
-            ? $"Live: file rows are not filtered. Applying a range sets it on {sources} and filters rows from files."
+            ? $"All rows: file rows are not filtered. Applying a range sets it on {sources} and filters rows from files."
             : $"Applied to {sources}; also filters rows from files by timestamp ({TimeRangeLabel.Describe(stream.RangeFrom, stream.RangeTo, DisplayZone)}).";
     }
 
@@ -883,12 +883,14 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             );
             if (file.Model.IsStructured)
             {
-                yield return new(
-                    "Toggle composed rows",
-                    "View",
-                    null,
-                    () => file.SelectedView.ColumnHeader.ToggleComposedAsync()
-                );
+                // A stream always renders columns, so it has no composed rows to toggle.
+                if (file.Model.Stream is null)
+                    yield return new(
+                        "Toggle composed rows",
+                        "View",
+                        null,
+                        () => file.SelectedView.ColumnHeader.ToggleComposedAsync()
+                    );
                 yield return new(
                     "Reset columns",
                     "View",

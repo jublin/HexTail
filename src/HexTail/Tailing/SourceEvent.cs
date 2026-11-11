@@ -33,6 +33,12 @@ public sealed record SourceError(string SourceId, string Message) : SourceEvent(
 
 public sealed record SourceRecovered(string SourceId) : SourceEvent(SourceId);
 
+/// <summary>
+/// A file's initial read (or its reload after a reset) is complete, whether or not it found any lines.
+/// Lets the consumer tell a source that is still loading from one that is simply quiet.
+/// </summary>
+public sealed record SourceLoaded(string SourceId) : SourceEvent(SourceId);
+
 public sealed record SourceRangeLoaded(
     string SourceId,
     DateTimeOffset From,

@@ -530,6 +530,20 @@ public sealed class AppState : IAsyncDisposable
         NotifyChanged();
     }
 
+    private bool RangeIsReadable(string? from, string? to)
+    {
+        try
+        {
+            var now = StreamClock();
+            return ElasticTailer.ParseTime(from?.Trim() ?? string.Empty, now)
+                <= ElasticTailer.ParseTime(to?.Trim() ?? string.Empty, now);
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
+        {
+            return false;
+        }
+    }
+
     private async ValueTask RestoreStreamTabAsync(
         PersistedStreamTab? persisted,
         CancellationToken cancellationToken
@@ -556,12 +570,22 @@ public sealed class AppState : IAsyncDisposable
         lock (_gate)
         {
             stream.SetHiddenKeys(persisted.HiddenSources ?? []);
-            stream.SetRange(persisted.From, persisted.To, persisted.Live);
+            // A saved range that cannot be read (or runs backwards) falls back to the default one.
+            if (RangeIsReadable(persisted.From, persisted.To))
+                stream.SetRange(persisted.From, persisted.To, persisted.Live);
+            else
+                stream.SetRange("now-15m", "now", live: true);
         }
         tab.FollowAll = persisted.FollowAll;
         tab.SetRules(NormalizeRules(persisted.Rules, RuleScope.Source));
         tab.Levels = NormalizeLevels(persisted.Levels);
-        tab.SelectedLine = persisted.SelectedLine;
+        // Selection of a stream is applied once its members have loaded and the stream has settled: every
+        // rebuild clears it, and the first ones run while the members are still loading.
+        lock (_gate)
+        {
+            stream.PendingSelection = persisted.SelectedLine;
+            ApplyPendingSelection(tab);
+        }
         tab.Columns = ColumnLayout.FromPersisted(
             persisted.Columns,
             persisted.ComposedRows,
@@ -765,9 +789,13 @@ public sealed class AppState : IAsyncDisposable
             throw new ArgumentException("The selected tab is not a stream.", nameof(stream));
         from = from.Trim();
         to = to.Trim();
-        var now = StreamClock();
-        if (ElasticTailer.ParseTime(from, now) > ElasticTailer.ParseTime(to, now))
-            throw new ArgumentException("From must be at or before To.");
+        // Showing all rows only drops the filter; the kept expressions are not validated again.
+        if (!live)
+        {
+            var now = StreamClock();
+            if (ElasticTailer.ParseTime(from, now) > ElasticTailer.ParseTime(to, now))
+                throw new ArgumentException("From must be at or before To.");
+        }
         FileTabState[] elastic;
         lock (_gate)
         {
@@ -1228,7 +1256,7 @@ public sealed class AppState : IAsyncDisposable
 
     /// <summary>
     /// A tab left the session. A stream tab is forgotten; a member is detached from its streams, where it
-    /// shows as missing (the lines already merged stay; the stream is not rebuilt). Under _gate.
+    /// shows as missing (the lines already merged stay until the stream's next rebuild; it is not rebuilt now). Under _gate.
     /// </summary>
     private void ForgetStreamLinks(FileTabState tab)
     {
@@ -1258,8 +1286,35 @@ public sealed class AppState : IAsyncDisposable
             foreach (var stream in streams)
             {
                 stream.NeedsRebuild = true;
-                stream.AwaitFirstLines(memberId);
+                stream.AwaitReload(memberId);
             }
+    }
+
+    /// <summary>
+    /// A member finished loading: a stream that merged its lines as they arrived re-merges once now, so
+    /// the whole load is sorted in. A member that loaded nothing needs no rebuild. Under _gate.
+    /// </summary>
+    private void NoteMemberLoaded(string memberId)
+    {
+        if (_memberStreams.TryGetValue(memberId, out var streams))
+            foreach (var stream in streams)
+                if (stream.NoteLoaded(memberId))
+                    stream.NeedsRebuild = true;
+    }
+
+    /// <summary>
+    /// Applies the selection saved with a restored stream once every member has loaded and the stream has
+    /// settled (each rebuild clears the selection, so applying it earlier would lose it). One shot: the
+    /// row is taken whether or not it still exists. Under _gate.
+    /// </summary>
+    private static void ApplyPendingSelection(FileTabState tab)
+    {
+        var state = tab.Stream!;
+        if (state.PendingSelection is not { } line || state.AnyMemberLoading || state.NeedsRebuild)
+            return;
+        state.PendingSelection = null;
+        if (line >= 0 && line < tab.Buffer.Count)
+            tab.SelectedLine = line;
     }
 
     /// <summary>Clears the stream's buffer and re-merges every open member's current lines in one pass. Under _gate.</summary>
@@ -1707,12 +1762,16 @@ public sealed class AppState : IAsyncDisposable
                 if (tab is null)
                     return;
                 tab.Buffer.Append(lines);
+                // A batch split at MaxLinesPerDrain still has pieces to come: the member is not loaded yet.
+                var moreComing = _pendingBatch is { } pending && pending.SourceId == sourceId;
+                if (tab.FileLoading && !moreComing)
+                    tab.FileLoading = false;
                 // Feed every open stream that merges this member (a stream awaiting a rebuild re-reads
                 // the member buffers instead, so it skips the incremental add).
                 if (_memberStreams.TryGetValue(sourceId, out var streams))
                     foreach (var stream in streams)
                     {
-                        if (stream.NoteDelivery(sourceId))
+                        if (stream.NoteDelivery(sourceId, moreComing))
                             stream.NeedsRebuild = true;
                         if (!stream.NeedsRebuild)
                             stream.Merger.Add(sourceId, lines);
@@ -1776,11 +1835,19 @@ public sealed class AppState : IAsyncDisposable
                         FlushLines(sourceEvent.SourceId);
                         tab.Error = null;
                         tab.Buffer.Clear();
+                        if (tab.Source.Kind == LogSourceKind.File)
+                            tab.FileLoading = true;
                         MarkStreamsForRebuild(sourceEvent.SourceId);
+                        break;
+                    case SourceLoaded:
+                        FlushLines(sourceEvent.SourceId);
+                        tab.FileLoading = false;
+                        NoteMemberLoaded(sourceEvent.SourceId);
                         break;
                     case SourceRangeLoaded loaded:
                         FlushLines(sourceEvent.SourceId);
                         tab.ElasticLoading = false;
+                        NoteMemberLoaded(sourceEvent.SourceId);
                         tab.Error = null;
                         if (loaded.Initial || tab.ElasticResolvedFrom is null)
                             tab.ElasticResolvedFrom = loaded.From;
@@ -1791,6 +1858,7 @@ public sealed class AppState : IAsyncDisposable
                     case SourceError error:
                         tab.ElasticLoading = false;
                         FlushLines(sourceEvent.SourceId);
+                        NoteMemberLoaded(sourceEvent.SourceId);
                         tab.Error = $"Source error: {error.Message}";
                         break;
                     case SourceRecovered:
@@ -1814,6 +1882,7 @@ public sealed class AppState : IAsyncDisposable
                 {
                     RebuildStream(streamTab);
                     changed = true;
+                    ApplyPendingSelection(streamTab);
                     continue;
                 }
                 var released = state.Merger.Release();
@@ -1822,6 +1891,7 @@ public sealed class AppState : IAsyncDisposable
                     streamTab.Buffer.Append(released);
                     changed = true;
                 }
+                ApplyPendingSelection(streamTab);
             }
 
             if (changed)

@@ -42,6 +42,7 @@ public sealed class FileTabState : IAsyncDisposable
         Parser = parser;
         Tailer = tailer;
         ElasticLoading = source.Kind == LogSourceKind.Elastic;
+        FileLoading = source.Kind == LogSourceKind.File;
         Buffer.Changed += OnBufferChanged;
     }
 
@@ -96,6 +97,15 @@ public sealed class FileTabState : IAsyncDisposable
     public string ElasticFrom { get; set; } = "now-5m";
     public string ElasticTo { get; set; } = "now";
     public bool ElasticLoading { get; internal set; }
+
+    /// <summary>
+    /// True for a file source until its initial read (or the reload after a reset) has delivered its lines
+    /// or found none. A stream merges a loading member's first lines by re-merging instead of adding them.
+    /// </summary>
+    internal bool FileLoading { get; set; }
+
+    /// <summary>The source is still loading: an Elastic range or a file's initial read or reload.</summary>
+    internal bool IsLoading => ElasticLoading || FileLoading;
     public int? ElasticInitialLimitReached { get; internal set; }
     public DateTimeOffset? ElasticResolvedFrom { get; internal set; }
     public DateTimeOffset? ElasticResolvedTo { get; internal set; }

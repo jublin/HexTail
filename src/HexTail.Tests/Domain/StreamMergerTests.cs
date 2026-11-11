@@ -95,6 +95,61 @@ public class StreamMergerTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void ALineBehindANotReadyHead_NeverWaitsLongerThanTheHoldFromItsOwnArrival()
+    {
+        var (m, clock) = Make("A", "B");
+        var released = new List<string>();
+        void Step()
+        {
+            // B keeps delivering at 50, so it stays active and pins the watermark there.
+            m.Add("B", Ls("b", 50));
+            released.AddRange(Raw(m.Release()).Where(raw => raw.StartsWith('a')));
+        }
+
+        m.Add("A", Ls("a", 100));
+        Step(); // t0: a100 is ahead of the watermark and waits
+        clock.Advance(TimeSpan.FromSeconds(3));
+        m.Add("A", Ls("a", 101)); // arrives behind a100, which is still held
+        Step();
+        Assert.Empty(released);
+
+        clock.Advance(TimeSpan.FromSeconds(2.001)); // a100 has waited more than the hold; a101 has not
+        Step();
+        Assert.Equal(["a100"], released);
+
+        clock.Advance(TimeSpan.FromSeconds(2)); // a101: 4.001 s since it arrived
+        Step();
+        Assert.Equal(["a100"], released);
+
+        clock.Advance(TimeSpan.FromSeconds(1)); // 5.001 s: its own hold has passed, nothing more is owed
+        Step();
+        Assert.Equal(["a100", "a101"], released);
+    }
+
+    [Fact]
+    public void AddingAfterAPartialDrain_CompactsTheQueueInPlace_WithoutLosingOrReorderingLines()
+    {
+        var (m, _) = Make("A", "B");
+        // 16 lines fill A's queue exactly (the first reservation is 16 entries).
+        m.Add("A", Ls("a", [.. Enumerable.Range(1, 16).Select(i => (double)i)]));
+        m.Add("B", Ls("b", 8));
+
+        // The watermark is 8: a1..a8 leave, so the head is half way along a full array.
+        Assert.Equal([.. Enumerable.Range(1, 8).Select(i => $"a{i}"), "b8"], Raw(m.Release()));
+
+        // Four more do not fit behind the tail but fit once the released half is reclaimed.
+        m.Add("A", Ls("a", 17, 18, 19, 20));
+        m.Add("B", Ls("b", 100));
+
+        Assert.Equal([.. Enumerable.Range(9, 12).Select(i => $"a{i}")], Raw(m.Release()));
+        Assert.Empty(m.Release());
+
+        // The reclaimed queue keeps working: the rest comes out once B has nothing to hold it back.
+        m.Add("A", Ls("a", 101));
+        Assert.Equal(["b100"], Raw(m.Release()));
+    }
+
+    [Fact]
     public void HoldBoundary_ExactlyEqual_StaysActiveAndPending()
     {
         var (m, clock) = Make("A", "B");

@@ -251,7 +251,7 @@ public sealed class StreamRangeTests
 
         Assert.True(h.Stream.Stream!.Live);
         Assert.Equal(4, h.Visible().Length);
-        Assert.StartsWith("Live", h.Workspace.ElasticRangePill);
+        Assert.Equal("All rows (no file filter)", h.Workspace.ElasticRangePill);
     }
 
     [AvaloniaFact]
@@ -305,6 +305,44 @@ public sealed class StreamRangeTests
         await UiWait.Until(() => !Has(restored.Visible(), "old") && restored.Visible().Length > 0);
         Assert.True(Has(restored.Visible(), "recent"));
         Assert.Equal("now-15m", restored.Workspace.RangeFromText);
+    }
+
+    [AvaloniaFact]
+    public async Task ShowAllRows_DoesNotParseTheRangeItKeeps()
+    {
+        await using var h = await Harness.CreateAsync(elastic: false);
+
+        h.State.SetStreamTimeRange(h.Stream, "not a time", "now", live: true);
+
+        Assert.True(h.Stream.Stream!.Live);
+        Assert.Equal(4, h.Visible().Length);
+    }
+
+    [AvaloniaFact]
+    public async Task ARestoredRangeThatCannotBeRead_FallsBackToTheDefaultRange_WithoutAnError()
+    {
+        var persistence = new TestPersistence();
+        await using var first = await Harness.CreateAsync(elastic: false, persistence);
+        await first.State.SaveAsync(Ct);
+        var saved = Assert.Single(persistence.Config!.OpenStreams);
+        persistence.Config.OpenStreams[0] = new PersistedStreamTab
+        {
+            StreamId = saved.StreamId,
+            From = "not a time",
+            To = "now",
+            Live = false,
+        };
+
+        await using var restored = await Harness.RestoreAsync(
+            elastic: false,
+            persistence,
+            first.Folder
+        );
+
+        var stream = restored.Stream.Stream!;
+        Assert.Equal(("now-15m", "now", true), (stream.RangeFrom, stream.RangeTo, stream.Live));
+        Assert.Null(restored.Workspace.RangeError);
+        await UiWait.Until(() => restored.Visible().Length == 4);
     }
 
     [AvaloniaFact]
