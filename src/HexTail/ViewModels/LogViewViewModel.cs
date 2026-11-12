@@ -38,10 +38,14 @@ internal sealed class LogViewViewModel : ReactiveObject
         SelectLineCommand = ReactiveCommand.Create<Line>(line => _file.SelectLine(line));
         JumpToLatestCommand = ReactiveCommand.Create(JumpToLatest, owner.Scheduler);
         ColumnHeader = new ColumnHeaderViewModel(this);
+        Overview = new LogOverviewViewModel(owner, this);
     }
 
     /// <summary>The header above the rows: column titles, resize thumbs and the Columns menu.</summary>
     public ColumnHeaderViewModel ColumnHeader { get; }
+
+    /// <summary>The timeline histogram and overview ruler data for this view.</summary>
+    internal LogOverviewViewModel Overview { get; }
 
     public Search? Search { get; }
     public MainWindowViewModel Workspace => _owner;
@@ -201,6 +205,24 @@ internal sealed class LogViewViewModel : ReactiveObject
         }
     }
 
+    /// <summary>Selects the displayed row at an index; out-of-range indices do nothing.</summary>
+    internal void SelectRowAt(int index)
+    {
+        if (index >= 0 && index < Lines.Count)
+            SelectRow(Lines[index]);
+    }
+
+    /// <summary>Selects the displayed row for a line; does nothing when that line is not displayed.</summary>
+    internal void SelectRowOf(Line line)
+    {
+        for (var index = 0; index < Lines.Count; index++)
+            if (ReferenceEquals(Lines[index].Line, line))
+            {
+                SelectRow(Lines[index]);
+                return;
+            }
+    }
+
     private void SelectRow(LogLineViewModel row)
     {
         _file.SelectLine(row.Line);
@@ -325,6 +347,7 @@ internal sealed class LogViewViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(InitialLimitMessage));
             this.RaisePropertyChanged(nameof(HasInitialLimitMessage));
         }
+        Overview.Refresh();
     }
 
     private static void InvalidateRows(AvaloniaList<LogLineViewModel> rows)
@@ -543,11 +566,20 @@ internal sealed class LogViewViewModel : ReactiveObject
         var filterSources = hidden is { Count: > 0 };
         // The stream's time range, resolved once for the pass (null for ordinary tabs and Live streams).
         var inRange = _file.Model.Stream?.CreateRangePredicate();
-        if (!rules.HasVisibilityRules && !filterLevels && !filterSources && inRange is null)
+        var inWindow = _file.Model.Stream is null ? _file.Model.CreateTimeWindowPredicate() : null;
+        if (
+            !rules.HasVisibilityRules
+            && !filterLevels
+            && !filterSources
+            && inRange is null
+            && inWindow is null
+        )
             return lines as IReadOnlyList<Line> ?? lines.ToList();
         var result = lines;
         if (inRange is not null)
             result = result.Where(inRange);
+        if (inWindow is not null)
+            result = result.Where(inWindow);
         if (filterSources)
             result = result.Where(line =>
                 line.SourceId is null || !hidden!.Contains(line.SourceId)

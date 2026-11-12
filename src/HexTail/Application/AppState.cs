@@ -771,6 +771,21 @@ public sealed class AppState : IAsyncDisposable
     }
 
     /// <summary>
+    /// Sets or clears a file tab's time window (from the timeline histogram). Elastic tabs and streams
+    /// have real ranges instead; they throw, as does a window whose From is after its To.
+    /// </summary>
+    internal void SetFileTimeWindow(FileTabState tab, TimeWindow? window)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        if (tab.Stream is not null || tab.Source.Kind == LogSourceKind.Elastic)
+            throw new ArgumentException("Only file tabs take a time window.", nameof(tab));
+        if (window is { } value && value.From > value.To)
+            throw new ArgumentException("From must be at or before To.", nameof(window));
+        tab.TimeWindow = window;
+        NotifyChanged();
+    }
+
+    /// <summary>
     /// Applies one time range to a whole stream: it is stored on the stream (and saved with the session),
     /// sent through <see cref="SetElasticTimeRange"/> to every open Elastic member, and filters the rows of
     /// file members by timestamp. <paramref name="live"/> removes the file filter and leaves the members'

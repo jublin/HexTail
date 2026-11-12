@@ -9,7 +9,9 @@ using Avalonia.Threading;
 using HexTail;
 using HexTail.Application;
 using HexTail.Domain;
+using HexTail.Elastic;
 using HexTail.Persistence;
+using HexTail.Tailing;
 using ReactiveUI;
 using ReactiveUI.Reactive;
 
@@ -56,6 +58,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     private string _rangeToText = "now";
     private string? _rangeError;
     private bool _sidebarOpen = true;
+    private bool _timelineOpen = true;
     private bool _narrowShell;
     private bool _narrowPaneOpen;
     private double _sidebarWidth = 240;
@@ -108,6 +111,13 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             _scheduler
         );
         ToggleInspectorCommand = ReactiveCommand.Create(() => Inspector.Toggle(), _scheduler);
+        ToggleTimelineCommand = ReactiveCommand.Create(
+            () =>
+            {
+                TimelineOpen = !TimelineOpen;
+            },
+            _scheduler
+        );
         TogglePauseCommand = ReactiveCommand.Create(
             () =>
             {
@@ -220,6 +230,14 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
     public ReactiveCommand<Unit, Unit> ToggleSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSidebarCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleInspectorCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleTimelineCommand { get; }
+
+    /// <summary>The timeline histogram is expanded (app-wide; false shows only its thin strip).</summary>
+    public bool TimelineOpen
+    {
+        get => _timelineOpen;
+        set => this.RaiseAndSetIfChanged(ref _timelineOpen, value);
+    }
     public ReactiveCommand<Unit, Unit> TogglePauseCommand { get; }
     public ReactiveCommand<Unit, Unit> SetUpElasticCommand { get; }
     public ReactiveCommand<FileTabViewModel, Unit> SelectFileCommand { get; }
@@ -576,6 +594,7 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             if (_state.Window.SidebarWidth > 0)
                 SidebarWidth = _state.Window.SidebarWidth;
             Inspector.IsOpen = _state.Window.InspectorOpen;
+            TimelineOpen = !_state.Window.HistogramCollapsed;
             Inspector.Width =
                 _state.Window.InspectorWidth > 0
                     ? _state.Window.InspectorWidth
@@ -862,6 +881,12 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
             "View",
             "Ctrl+I",
             async () => await ToggleInspectorCommand.Execute()
+        );
+        yield return new(
+            "Toggle timeline",
+            "View",
+            null,
+            async () => await ToggleTimelineCommand.Execute()
         );
         yield return new(
             IsPaused ? "Resume view updates" : "Pause view updates",
@@ -1352,6 +1377,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
                 _state.SetElasticTimeRange(SelectedFile.Model, from.Expression, to);
                 SelectedFile.Model.ElasticInputZone = DisplayZone;
             }
+            SelectedFile.Model.HistogramPrior = null;
+            ClearMemberPriors(SelectedFile.Model);
             ElasticRangeDirty = false;
             RangeError = null;
             SetFileError(null);
@@ -1362,6 +1389,146 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         }
     }
 
+    // A stream-wide range replaces whatever the members' own tabs had dragged: their baselines are stale.
+    private static void ClearMemberPriors(FileTabState tab)
+    {
+        if (tab.Stream is not { } stream)
+            return;
+        foreach (var member in stream.MemberTabs)
+            member.HistogramPrior = null;
+    }
+
+    private static IReadOnlyList<MemberRange> CaptureMembers(StreamState stream) =>
+        [
+            .. stream
+                .MemberTabs.Where(member =>
+                    member.Source.Kind == LogSourceKind.Elastic && member.Tailer is ElasticTailer
+                )
+                .Select(member => new MemberRange(
+                    member,
+                    member.ElasticFrom,
+                    member.ElasticTo,
+                    member.ElasticInputZone
+                )),
+        ];
+
+    private static string Iso(DateTimeOffset time) =>
+        time.ToString("O", CultureInfo.InvariantCulture);
+
+    private static DateTimeOffset ParseIso(string value) =>
+        DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+
+    /// <summary>
+    /// Applies a range dragged on the timeline histogram to the selected tab, routed by source: a stream
+    /// takes it as its range, an Elastic tab re-queries, a file tab hides rows outside it. The range in
+    /// place before the first drag is kept so <see cref="ResetHistogramRange"/> can return to it.
+    /// </summary>
+    internal void ApplyHistogramRange(DateTimeOffset from, DateTimeOffset to)
+    {
+        if (SelectedFile?.Model is not { } tab)
+            return;
+        var before = tab.HistogramPrior;
+        tab.HistogramPrior ??=
+            tab.Stream is { } stream
+                ? new HistogramPrior(
+                    stream.RangeFrom,
+                    stream.RangeTo,
+                    stream.Live,
+                    Members: CaptureMembers(stream)
+                )
+            : tab.Source.Kind == LogSourceKind.Elastic
+                ? new HistogramPrior(tab.ElasticFrom, tab.ElasticTo, false, tab.ElasticInputZone)
+            : tab.TimeWindow is { } window
+                ? new HistogramPrior(Iso(window.From), Iso(window.To), false)
+            : new HistogramPrior(string.Empty, string.Empty, true);
+        try
+        {
+            if (tab.Stream is not null)
+            {
+                _state.SetStreamTimeRange(tab, Iso(from), Iso(to), live: false, DisplayZone);
+                ClearMemberPriors(tab);
+            }
+            else if (tab.Source.Kind == LogSourceKind.Elastic)
+            {
+                _state.SetElasticTimeRange(tab, Iso(from), Iso(to));
+                tab.ElasticInputZone = DisplayZone;
+            }
+            else
+                _state.SetFileTimeWindow(tab, new TimeWindow(from, to));
+            if (tab.Stream is not null || tab.Source.Kind == LogSourceKind.Elastic)
+                LoadRangeInputs(tab);
+            RangeError = null;
+        }
+        catch (ArgumentException exception)
+        {
+            tab.HistogramPrior = before;
+            RangeError = exception.Message;
+        }
+    }
+
+    /// <summary>
+    /// Returns the selected tab to the range it had before the first histogram drag. With nothing to
+    /// return to, a file tab drops its window, a stream shows all rows, and an Elastic tab is left alone.
+    /// </summary>
+    internal void ResetHistogramRange()
+    {
+        if (SelectedFile?.Model is not { } tab)
+            return;
+        var prior = tab.HistogramPrior;
+        try
+        {
+            if (tab.Stream is { } stream)
+            {
+                if (prior is null)
+                    _state.SetStreamTimeRange(tab, stream.RangeFrom, stream.RangeTo, live: true);
+                else
+                {
+                    _state.SetStreamTimeRange(tab, prior.From, prior.To, prior.Live);
+                    RestoreMembers(stream, prior);
+                }
+                ClearMemberPriors(tab);
+            }
+            else if (tab.Source.Kind == LogSourceKind.Elastic)
+            {
+                if (prior is null)
+                    return;
+                _state.SetElasticTimeRange(tab, prior.From, prior.To);
+                if (prior.Zone is { } zone)
+                    tab.ElasticInputZone = zone;
+            }
+            else
+                _state.SetFileTimeWindow(
+                    tab,
+                    prior is null || prior.Live
+                        ? null
+                        : new TimeWindow(ParseIso(prior.From), ParseIso(prior.To))
+                );
+            tab.HistogramPrior = null;
+            LoadRangeInputs(tab);
+        }
+        catch (ArgumentException exception)
+        {
+            RangeError = exception.Message;
+        }
+    }
+
+    // The drag re-queried every Elastic member; put each one that is still open back on the range (and
+    // zone) it had. A non-live reset already re-queried them with the stream's range, so only members
+    // that differ from it are queried again.
+    private void RestoreMembers(StreamState stream, HistogramPrior prior)
+    {
+        if (prior.Members is not { } members)
+            return;
+        foreach (var saved in members)
+        {
+            if (!stream.MemberTabs.Contains(saved.Tab))
+                continue;
+            if (saved.Tab.ElasticFrom != saved.From || saved.Tab.ElasticTo != saved.To)
+                _state.SetElasticTimeRange(saved.Tab, saved.From, saved.To);
+            saved.Tab.ElasticInputZone = saved.Zone;
+        }
+    }
+
     private void ClearStreamRange()
     {
         if (SelectedFile?.Model is not { Stream: { } stream } tab)
@@ -1369,6 +1536,8 @@ internal sealed class MainWindowViewModel : ReactiveObject, IAsyncDisposable
         try
         {
             _state.SetStreamTimeRange(tab, stream.RangeFrom, stream.RangeTo, live: true);
+            tab.HistogramPrior = null;
+            ClearMemberPriors(tab);
             LoadRangeInputs(tab);
             RangeError = null;
         }

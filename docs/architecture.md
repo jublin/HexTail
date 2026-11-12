@@ -61,7 +61,7 @@ flowchart LR
 | Columns | `src/HexTail/Application/ColumnLayout.cs` | `ColumnLayout` (columns, widths, composed rows, time display), per-source defaults and `MessageField` |
 | Domain | `src/HexTail/Domain/` | Lines, bounded buffers, parsers, `TimestampDetector` and `TimestampingParser`, search compilation, highlight ranges |
 | Tailing | `src/HexTail/Tailing/` | Background file monitoring and resilient tail events |
-| Views | `src/HexTail/Views/` | Native Avalonia log rows, search tabs, inspector panel, `ColumnHeaderBar` (column titles, resize handles, Columns menu), settings controls (Appearance and Limits only), and `ElasticSetupPage`, the five-step Elastic setup page shown in the workspace area while the sidebar and status bar stay |
+| Views | `src/HexTail/Views/` | Native Avalonia log rows, `TimelineHistogram` and `OverviewRuler` (with `CoalescedRebuild`), search tabs, inspector panel, `ColumnHeaderBar` (column titles, resize handles, Columns menu), settings controls (Appearance and Limits only), and `ElasticSetupPage`, the five-step Elastic setup page shown in the workspace area while the sidebar and status bar stay |
 | View models | `src/HexTail/ViewModels/` | Window, settings and per-view state; `StreamEditorViewModel` is the sidebar's create/edit stream editor and `SourceChipViewModel` a per-source toggle in a stream's filter bar; `InspectorViewModel` owns the inspector (open state, width, fields, context list) and toggles bookmarks on the selected row; `ColumnHeaderViewModel` backs the column header and menu and `LogLineViewModel` builds a row's cells; `ElasticSetupViewModel` drives the Elastic setup flow (see below) |
 | Elastic | `src/HexTail/Elastic/` | Kibana and Elasticsearch clients (`IElasticApiClient`), tailer, health monitor, and the setup helpers `CloudId`, `Rison` and `DiscoverUrlImport` |
 | Persistence | `src/HexTail/Persistence/` | Atomic JSON session load/save and persisted configuration types |
@@ -121,6 +121,66 @@ flowchart LR
 - Stream definitions persist as `AppConfig.Streams`, open streams as
   `AppConfig.OpenStreams` (`PersistedStreamTab`: hidden sources and range) with
   `SelectedStreamId`; streams are restored after the files and Elastic sources.
+- The timeline histogram and overview ruler are drawn by two Avalonia controls
+  (`TimelineHistogram` above the column header, `OverviewRuler` in a 10 px column
+  beside the log list) from one `LogOverviewViewModel` per `LogViewViewModel`
+  (`LogViewViewModel.Overview`). The data is built by two pure functions in
+  `Domain`. `TimeHistogram.Build` buckets the displayed rows (rows with a
+  timestamp only) on the smallest "nice" interval of `TimeHistogram.Intervals`
+  that fits the bucket budget (whole weeks past 7 d), aligned in the display zone,
+  and records per-level counts and the first row of each bucket; it returns null
+  when no row has a time. `ScrollMarkers.Build` returns a `ScrollMarker` (row,
+  rule colour, error) for each row that matches a rule or is an error. Neither
+  touches Avalonia or the buffer, so both are tested directly.
+- `LogOverviewViewModel` adapts them to a view. `Invalidate` runs on every sync of
+  the view: it bumps `Version` and rescans the displayed rows for a timestamp to
+  set `HasTimeline` (which shows or hides the histogram panel); `HasRows` shows
+  the ruler. `BuildMarkers` resolves a row's rule colour from the tab's searches
+  (a search view skips its own) and then the first highlight rule of
+  `EffectiveRules`; colours looked up through the rules are cached per `Line`
+  and discarded when the `RuleSet` instance changes. It also holds bucket
+  descriptions and jumps (`JumpToBucket`, `JumpToFraction` select a row through
+  `LogViewViewModel.SelectRowOf`; a bucket click selects the row the histogram was
+  built for, by reference, so a build up to 250 ms old cannot jump to the wrong
+  row while tailing). The histogram's collapsed state is
+  `MainWindowViewModel.TimelineOpen`, saved as `AppWindowState.HistogramCollapsed`.
+  `LogViewViewModel.Sync` calls `LogOverviewViewModel.Refresh`, which bumps
+  `Version` only when something a build reads changed (the displayed rows, the
+  effective `RuleSet` instance, the searches' result counts and colours, the time
+  zone, `HistogramPrior`, `TimeWindow`, `ElasticLoading`), so a sync that changes
+  nothing does not make the controls rebuild. `HasTimeline` (the panel's
+  visibility) is true when a displayed row has a timestamp, while the tab has a
+  `HistogramPrior`, or while an Elastic tab loads, so a range with no rows still
+  leaves the panel up to double-click and reset.
+- Both controls watch `Version` and rebuild through `CoalescedRebuild`: a request
+  starts a 250 ms timer, and when it fires the rebuild runs only if the control
+  is visible and laid out (and, for the histogram, not mid-drag). A request that
+  arrives while it cannot run stays dirty; Avalonia 12 has no public change
+  notification for `IsEffectivelyVisible`, so each control calls
+  `CoalescedRebuild.Poke` after every layout pass (and at the end of a drag), and
+  the pending rebuild is scheduled once the control can draw. A collapsed
+  timeline or a view in a background tab costs no work while rows stream in, and
+  a detached control starts no timer.
+- A range chosen on the histogram goes through
+  `MainWindowViewModel.ApplyHistogramRange`, which routes it by source kind and
+  sends the bounds as round-trip ISO strings. A stream gets
+  `AppState.SetStreamTimeRange(..., live: false)`; an Elastic tab gets
+  `SetElasticTimeRange` (and its input zone is set to the display zone); a file
+  tab gets `AppState.SetFileTimeWindow`, which sets `FileTabState.TimeWindow`.
+  That window is session-only, and `CreateTimeWindowPredicate` makes
+  `LogViewViewModel` drop file rows whose timestamp falls outside it (rows without
+  a timestamp pass); the filter bar shows it as a chip with
+  `ClearTimeWindowCommand`. Before the first drag, the range in place is stored
+  once as `FileTabState.HistogramPrior` (from, to, live, and for Elastic the input
+  zone; for a stream, also each open Elastic member's own range and zone as
+  `MemberRange`, because a drag re-queries every member and a live stream does
+  not touch them on reset). `ResetHistogramRange` restores it (a file tab with no prior clears its
+  window, a stream goes live with all rows, an Elastic tab does nothing) and
+  clears it. Applying a range from the time pill, **Show all rows**, or the time
+  window chip's clear button also clears `HistogramPrior`, making the new range
+  the baseline; a stream-wide range (pill, drag, show all rows, reset) also
+  clears the member tabs' own priors. A drag whose buckets hold no rows is
+  ignored.
 - Search results are buffer-relative. When old lines roll out, result indices
   are rebased with the buffer.
 - Filter rules (`ViewRule`) have an action (highlight, show only, hide) and a

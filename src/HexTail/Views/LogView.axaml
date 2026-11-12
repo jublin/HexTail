@@ -3,6 +3,7 @@
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:vm="using:HexTail.ViewModels"
   xmlns:views="using:HexTail.Views"
+  xmlns:ic="https://github.com/projektanker/icons.avalonia"
   HorizontalAlignment="Stretch"
   HorizontalContentAlignment="Stretch"
   VerticalContentAlignment="Stretch"
@@ -12,39 +13,102 @@
 >
   <Grid
     x:Name="LogLayout"
-    RowDefinitions="Auto,*"
+    RowDefinitions="Auto,Auto,*"
     Background="{DynamicResource SurfaceBrush}"
   >
-    <views:ColumnHeaderBar x:Name="ColumnHeader" DataContext="{Binding ColumnHeader}" />
-    <ListBox
-      x:Name="LogList"
+    <Panel x:Name="TimelinePanel" IsVisible="{Binding Overview.HasTimeline}">
+      <Panel x:Name="TimelineExpanded" Height="40" IsVisible="{Binding Workspace.TimelineOpen}">
+        <views:TimelineHistogram
+          x:Name="Histogram"
+          View="{Binding}"
+          AutomationProperties.Name="Timeline histogram"
+        />
+        <Button
+          x:Name="CollapseTimelineButton"
+          Width="16"
+          Height="12"
+          Padding="0"
+          MinHeight="0"
+          MinWidth="0"
+          HorizontalAlignment="Right"
+          VerticalAlignment="Top"
+          Background="Transparent"
+          BorderThickness="0"
+          FontSize="10"
+          Foreground="{DynamicResource FaintTextBrush}"
+          Command="{Binding Workspace.ToggleTimelineCommand}"
+          AutomationProperties.Name="Collapse timeline"
+        >
+          <ic:Icon Value="mdi-chevron-up" />
+        </Button>
+      </Panel>
+      <Panel
+        x:Name="TimelineCollapsed"
+        Height="18"
+        Background="{DynamicResource SurfaceAltBrush}"
+        IsVisible="{Binding !Workspace.TimelineOpen}"
+      >
+        <Button
+          x:Name="ExpandTimelineButton"
+          HorizontalAlignment="Left"
+          VerticalAlignment="Stretch"
+          Padding="6,0"
+          MinHeight="0"
+          Background="Transparent"
+          BorderThickness="0"
+          FontSize="10"
+          Foreground="{DynamicResource FaintTextBrush}"
+          Command="{Binding Workspace.ToggleTimelineCommand}"
+          AutomationProperties.Name="Expand timeline"
+        >
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <ic:Icon Value="mdi-chevron-down" VerticalAlignment="Center" />
+            <TextBlock Text="Timeline" FontSize="10" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+      </Panel>
+    </Panel>
+    <views:ColumnHeaderBar
+      x:Name="ColumnHeader"
       Grid.Row="1"
-      Background="{DynamicResource SurfaceBrush}"
-      BorderThickness="0"
-      ItemsSource="{Binding Lines}"
-    >
-      <ListBox.ItemsPanel>
-        <ItemsPanelTemplate>
-          <VirtualizingStackPanel />
-        </ItemsPanelTemplate>
-      </ListBox.ItemsPanel>
-      <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="vm:LogLineViewModel">
-          <views:LogLineView />
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
-    <Button
-      x:Name="JumpToLatestButton"
-      Grid.Row="1"
-      Classes="primary"
-      HorizontalAlignment="Center"
-      VerticalAlignment="Bottom"
-      Margin="0,0,0,12"
-      IsVisible="{Binding HasUnseen}"
-      Content="{Binding UnseenLabel}"
-      Command="{Binding JumpToLatestCommand}"
-      AutomationProperties.Name="Jump to latest log lines"
+      DataContext="{Binding ColumnHeader}"
     />
+    <Grid x:Name="LogBody" Grid.Row="2" ColumnDefinitions="*,10">
+      <ListBox
+        x:Name="LogList"
+        Background="{DynamicResource SurfaceBrush}"
+        BorderThickness="0"
+        ItemsSource="{Binding Lines}"
+      >
+        <ListBox.ItemsPanel>
+          <ItemsPanelTemplate>
+            <VirtualizingStackPanel />
+          </ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:LogLineViewModel">
+            <views:LogLineView />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <Button
+        x:Name="JumpToLatestButton"
+        Classes="primary"
+        HorizontalAlignment="Center"
+        VerticalAlignment="Bottom"
+        Margin="0,0,0,12"
+        IsVisible="{Binding HasUnseen}"
+        Content="{Binding UnseenLabel}"
+        Command="{Binding JumpToLatestCommand}"
+        AutomationProperties.Name="Jump to latest log lines"
+      />
+      <views:OverviewRuler
+        x:Name="Ruler"
+        Grid.Column="1"
+        View="{Binding}"
+        IsVisible="{Binding Overview.HasRows}"
+        AutomationProperties.Name="Overview ruler"
+      />
+    </Grid>
   </Grid>
 </UserControl>

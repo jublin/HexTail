@@ -100,6 +100,15 @@ public sealed class RuleSet
         return ranges ?? [];
     }
 
+    /// <summary>The colour of the first Highlight rule that matches the line, or null.</summary>
+    public string? FirstHighlightColor(Line line)
+    {
+        foreach (var matcher in _highlight)
+            if (matcher.Query.IsMatch(line.Raw))
+                return matcher.Color;
+        return null;
+    }
+
     private static CompiledQuery? Compile(ViewRule rule)
     {
         var key = (rule.Pattern, rule.Mode, rule.CaseSensitive);

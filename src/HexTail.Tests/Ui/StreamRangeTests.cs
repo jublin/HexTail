@@ -202,6 +202,81 @@ public sealed class StreamRangeTests
         );
     }
 
+    private static DateTimeOffset Ago(TimeSpan span) => DateTimeOffset.UtcNow - span;
+
+    [AvaloniaFact]
+    public async Task ResetAfterADragOnALiveStream_RestoresTheElasticMembersOriginalRangeAndZone()
+    {
+        await using var h = await Harness.CreateAsync(elastic: true);
+        h.Elastic!.ElasticInputZone = AppTimeZoneMode.Local;
+        Assert.True(h.Stream.Stream!.Live);
+        Assert.Equal(("now-5m", "now"), (h.Elastic.ElasticFrom, h.Elastic.ElasticTo));
+
+        h.Workspace.ApplyHistogramRange(
+            Ago(TimeSpan.FromMinutes(40)),
+            Ago(TimeSpan.FromMinutes(10))
+        );
+
+        Assert.False(h.Stream.Stream.Live);
+        Assert.NotEqual("now-5m", h.Elastic.ElasticFrom);
+        Assert.Equal(AppTimeZoneMode.Utc, h.Elastic.ElasticInputZone);
+
+        h.Workspace.ResetHistogramRange();
+
+        Assert.True(h.Stream.Stream.Live);
+        Assert.Equal(("now-5m", "now"), (h.Elastic.ElasticFrom, h.Elastic.ElasticTo));
+        Assert.Equal(AppTimeZoneMode.Local, h.Elastic.ElasticInputZone);
+        Assert.Null(h.Stream.HistogramPrior);
+    }
+
+    [AvaloniaFact]
+    public async Task ResetAfterADragOnANonLiveStream_RestoresTheStreamRangeAndTheMembers()
+    {
+        await using var h = await Harness.CreateAsync(elastic: true);
+        await h.Workspace.ApplyRangePresetCommand.Execute("now-15m").FirstAsync();
+        Assert.False(h.Stream.Stream!.Live);
+
+        h.Workspace.ApplyHistogramRange(
+            Ago(TimeSpan.FromMinutes(40)),
+            Ago(TimeSpan.FromMinutes(10))
+        );
+        Assert.NotEqual("now-15m", h.Stream.Stream.RangeFrom);
+        Assert.NotEqual("now-15m", h.Elastic!.ElasticFrom);
+
+        h.Workspace.ResetHistogramRange();
+
+        Assert.False(h.Stream.Stream.Live);
+        Assert.Equal(("now-15m", "now"), (h.Stream.Stream.RangeFrom, h.Stream.Stream.RangeTo));
+        Assert.Equal(("now-15m", "now"), (h.Elastic.ElasticFrom, h.Elastic.ElasticTo));
+        Assert.Null(h.Stream.HistogramPrior);
+    }
+
+    [AvaloniaFact]
+    public async Task AStreamRange_ClearsTheMemberTabsOwnPrior()
+    {
+        await using var h = await Harness.CreateAsync(elastic: true);
+        var own = new HistogramPrior("now-1h", "now", false);
+
+        h.Elastic!.HistogramPrior = own;
+        h.Workspace.ApplyHistogramRange(
+            Ago(TimeSpan.FromMinutes(40)),
+            Ago(TimeSpan.FromMinutes(10))
+        );
+        Assert.Null(h.Elastic.HistogramPrior);
+
+        h.Elastic.HistogramPrior = own;
+        h.Workspace.ResetHistogramRange();
+        Assert.Null(h.Elastic.HistogramPrior);
+
+        h.Elastic.HistogramPrior = own;
+        await h.Workspace.ApplyRangePresetCommand.Execute("now-15m").FirstAsync();
+        Assert.Null(h.Elastic.HistogramPrior);
+
+        h.Elastic.HistogramPrior = own;
+        await h.Workspace.ClearStreamRangeCommand.Execute().FirstAsync();
+        Assert.Null(h.Elastic.HistogramPrior);
+    }
+
     [AvaloniaFact]
     public async Task ApplyingARange_FiltersFileRowsByTimestamp_AndKeepsRowsWithoutOne()
     {

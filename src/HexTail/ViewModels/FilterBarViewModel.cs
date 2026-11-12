@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Reactive;
 using System.Reactive.Concurrency;
 using HexTail.Application;
@@ -37,6 +38,20 @@ internal sealed class FilterBarViewModel : ReactiveObject
             new LevelToggleViewModel(this, LogLevels.Error, "E", "Error"),
         ];
         SaveFilterCommand = ReactiveCommand.CreateFromTask(SaveFilterAsync, owner.Scheduler);
+        ClearTimeWindowCommand = ReactiveCommand.Create(
+            () =>
+            {
+                if (_owner.SelectedFile?.Model is not { } tab)
+                    return;
+                try
+                {
+                    _owner.State.SetFileTimeWindow(tab, null);
+                    tab.HistogramPrior = null;
+                }
+                catch (ArgumentException) { }
+            },
+            owner.Scheduler
+        );
         CancelSaveFilterCommand = ReactiveCommand.Create(
             () =>
             {
@@ -51,6 +66,16 @@ internal sealed class FilterBarViewModel : ReactiveObject
 
     /// <summary>One toggle per member of the selected stream tab; empty on every other tab.</summary>
     public ObservableCollection<SourceChipViewModel> SourceChips { get; } = [];
+
+    /// <summary>The selected file tab's histogram time window, shown as a chip before the source chips.</summary>
+    public bool HasTimeWindow => _owner.SelectedFile?.Model.TimeWindow is not null;
+
+    public string TimeWindowLabel =>
+        _owner.SelectedFile?.Model.TimeWindow is { } window
+            ? $"Time {TimeRangeLabel.Describe(window.From.ToString("O", CultureInfo.InvariantCulture), window.To.ToString("O", CultureInfo.InvariantCulture), _owner.State.Settings.TimeZoneMode)}"
+            : string.Empty;
+
+    public ReactiveCommand<Unit, Unit> ClearTimeWindowCommand { get; }
     public bool HasSourceChips => SourceChips.Count > 0;
     public bool HasChips => Chips.Count > 0;
     public IReadOnlyList<LevelToggleViewModel> LevelToggles { get; }
@@ -286,6 +311,8 @@ internal sealed class FilterBarViewModel : ReactiveObject
             toggle.Refresh();
         this.RaisePropertyChanged(nameof(HasLevelFilter));
         this.RaisePropertyChanged(nameof(CanSaveFilter));
+        this.RaisePropertyChanged(nameof(HasTimeWindow));
+        this.RaisePropertyChanged(nameof(TimeWindowLabel));
         SyncChips();
         SyncSourceChips();
     }

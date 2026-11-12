@@ -4,6 +4,26 @@ using HexTail.Tailing;
 
 namespace HexTail.Application;
 
+/// <summary>A file tab's histogram time window: rows outside it are hidden (session only, never saved).</summary>
+public readonly record struct TimeWindow(DateTimeOffset From, DateTimeOffset To);
+
+/// <summary>An open Elastic member's own range (and the zone it was typed in) before a stream-wide drag.</summary>
+public sealed record MemberRange(FileTabState Tab, string From, string To, AppTimeZoneMode Zone);
+
+/// <summary>
+/// The range in place before the first histogram drag, restored by a double-click. <paramref name="Zone"/>
+/// is the zone an Elastic tab's absolute bounds were typed in (null for other sources).
+/// <paramref name="Members"/> is, for a stream, each open Elastic member's own range at that time: a drag
+/// re-queries every member, and a live stream does not touch them again on reset.
+/// </summary>
+public sealed record HistogramPrior(
+    string From,
+    string To,
+    bool Live,
+    AppTimeZoneMode? Zone = null,
+    IReadOnlyList<MemberRange>? Members = null
+);
+
 public sealed class FileTabState : IAsyncDisposable
 {
     private IReadOnlyList<ViewRule>? _effectiveGlobal;
@@ -91,6 +111,18 @@ public sealed class FileTabState : IAsyncDisposable
                 Bookmarks.Add(index);
             BookmarksVersion++;
         }
+    }
+
+    public TimeWindow? TimeWindow { get; internal set; }
+    internal HistogramPrior? HistogramPrior { get; set; }
+
+    /// <summary>The time-window test for one filter pass, or null when no window is set.</summary>
+    internal Func<Line, bool>? CreateTimeWindowPredicate()
+    {
+        if (TimeWindow is not { } window)
+            return null;
+        var (from, to) = (window.From, window.To);
+        return line => line.Timestamp is not { } time || (time >= from && time <= to);
     }
 
     public AppTimeZoneMode ElasticInputZone { get; set; } = AppTimeZoneMode.Utc;

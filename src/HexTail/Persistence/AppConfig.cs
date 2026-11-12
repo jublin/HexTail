@@ -186,6 +186,7 @@ public sealed class AppWindowState
     public double SidebarWidth { get; init; }
     public bool InspectorOpen { get; init; }
     public double InspectorWidth { get; init; } = 360;
+    public bool HistogramCollapsed { get; init; }
     public double Width { get; init; } = 1280;
     public double Height { get; init; } = 800;
     public int? X { get; init; }
